@@ -1,0 +1,1040 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paper Front v2</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
+  canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+/* ================================================================
+   PAPER FRONT — an origami toy-battlefield FPS screensaver
+   One full day (sunrise → sunset → night) every 60 seconds.
+   Click: fullscreen · H: toggle HUD
+   ================================================================ */
+
+const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
+let W = 0, H = 0, F = 0, DPR = 1, H0 = 0;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  W = innerWidth; H = innerHeight;
+  cvs.width = Math.round(W * DPR); cvs.height = Math.round(H * DPR);
+  F = Math.min(H * 1.0, W * 0.75);
+}
+addEventListener('resize', resize); resize();
+
+/* ---------- helpers ---------- */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const mul = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+const hx = s => [parseInt(s.slice(1, 3), 16) / 255, parseInt(s.slice(3, 5), 16) / 255, parseInt(s.slice(5, 7), 16) / 255];
+const c255 = v => v <= 0 ? 0 : v >= 1 ? 255 : (v * 255) | 0;
+const css = (c, a) => a === undefined ? `rgb(${c255(c[0])},${c255(c[1])},${c255(c[2])})` : `rgba(${c255(c[0])},${c255(c[1])},${c255(c[2])},${a})`;
+const rnd = (a = 1, b) => b === undefined ? Math.random() * a : a + Math.random() * (b - a);
+const pick = a => a[(Math.random() * a.length) | 0];
+const norm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+function hash(x, z) { const h = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return h - Math.floor(h); }
+
+const P = {
+  tan: hx('#c9a56c'), green: hx('#5f8d3e'), red: hx('#e0574a'), yel: hx('#f2c24f'), blue: hx('#4c7fc4'),
+  mint: hx('#6cc08b'), pink: hx('#f29bb5'), white: hx('#f3eee3'), brown: hx('#8a5a3a'), gray: hx('#80848b'),
+  dark: hx('#3c3f45'), orange: hx('#ff7b22'), navy: hx('#2f4d86'), beige: hx('#e8c9a2'), purple: hx('#9a7fd1'),
+  leaf1: hx('#4f9a4a'), leaf2: hx('#3d7f45'), leaf3: hx('#7bb35a'), sakura: hx('#f6b3c8')
+};
+
+/* ---------- mesh builders (convex parts, auto-oriented outward) ---------- */
+function convex(verts, faces, col, dbl) {
+  let cx = 0, cy = 0, cz = 0;
+  for (const v of verts) { cx += v[0]; cy += v[1]; cz += v[2]; }
+  cx /= verts.length; cy /= verts.length; cz /= verts.length;
+  const out = [];
+  for (const f of faces) for (let i = 1; i < f.length - 1; i++) {
+    let a = verts[f[0]], b = verts[f[i]], c = verts[f[i + 1]];
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const mx = (a[0] + b[0] + c[0]) / 3 - cx, my = (a[1] + b[1] + c[1]) / 3 - cy, mz = (a[2] + b[2] + c[2]) / 3 - cz;
+    if (nx * mx + ny * my + nz * mz < 0) { const t = b; b = c; c = t; }
+    out.push({ v: [a, b, c], col, jit: 0.92 + Math.random() * 0.13, dbl: !!dbl });
+  }
+  return out;
+}
+function box(w, h, d, col, x = 0, y = 0, z = 0) {
+  const v = [];
+  for (let i = 0; i < 8; i++) v.push([x + (i & 1 ? w / 2 : -w / 2), y + (i & 2 ? h : 0), z + (i & 4 ? d / 2 : -d / 2)]);
+  return convex(v, [[0, 2, 6, 4], [1, 3, 7, 5], [0, 1, 5, 4], [2, 3, 7, 6], [0, 1, 3, 2], [4, 5, 7, 6]], col);
+}
+function frustum(n, r0, r1, h, col, x = 0, y = 0, z = 0, rot = 0) {
+  const v = [], f = [];
+  for (let i = 0; i < n; i++) { const a = rot + i * 2 * Math.PI / n; v.push([x + Math.cos(a) * r0, y, z + Math.sin(a) * r0]); }
+  const ring = [...Array(n).keys()];
+  if (r1 > 0) {
+    for (let i = 0; i < n; i++) { const a = rot + i * 2 * Math.PI / n; v.push([x + Math.cos(a) * r1, y + h, z + Math.sin(a) * r1]); }
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; f.push([i, j, n + j, n + i]); }
+    f.push(ring.map(i => n + i));
+  } else {
+    v.push([x, y + h, z]);
+    for (let i = 0; i < n; i++) f.push([i, (i + 1) % n, n]);
+  }
+  f.push(ring);
+  return convex(v, f, col);
+}
+function octa(r, col, x, y, z) {
+  const v = [[x + r, y, z], [x - r, y, z], [x, y + r * 1.15, z], [x, y - r * 1.15, z], [x, y, z + r], [x, y, z - r]];
+  return convex(v, [[0, 2, 4], [4, 2, 1], [1, 2, 5], [5, 2, 0], [0, 4, 3], [4, 1, 3], [1, 5, 3], [5, 0, 3]], col);
+}
+const flat = (a, b, c, col) => ({ v: [a, b, c], col, jit: 0.92 + Math.random() * 0.13, dbl: true });
+
+/* ---------- toy models (local space, y up from ground, facing +z) ---------- */
+function mSoldier(c) {
+  const d = mul(c, .8), l = mix3(c, [1, 1, 1], .14);
+  return [
+    ...frustum(4, .2, .34, .85, d, 0, 0, 0, Math.PI / 4),
+    ...frustum(4, .38, .27, .62, c, 0, .85, 0, Math.PI / 4),
+    ...octa(.2, l, 0, 1.68, 0),
+    ...frustum(4, .34, 0, .34, d, 0, 1.79, 0, 0),
+    ...box(.13, .13, .42, c, .27, 1.05, .12),
+    ...box(.13, .13, .42, c, -.25, 1.05, .1),
+    ...box(.08, .08, 1.05, mul(c, .58), .3, 1.16, .34)
+  ];
+}
+function mTank(c) {
+  const d = mul(c, .55);
+  return [
+    ...box(.55, .62, 3.4, d, -1.15, 0, 0), ...box(.55, .62, 3.4, d, 1.15, 0, 0),
+    ...box(1.9, .62, 3.0, c, 0, .42, 0),
+    ...frustum(6, .9, .66, .52, mul(c, .92), 0, 1.04, -.2, Math.PI / 6),
+    ...box(.2, .2, 1.9, mul(c, .7), 0, 1.2, 1.25),
+    ...box(.3, .3, .25, mul(c, .6), 0, 1.15, 2.2)
+  ];
+}
+function mTree() {
+  const sak = Math.random() < .22;
+  const g = sak ? [P.sakura, hx('#ee9db7'), hx('#fbd0dc')] : [pick([P.leaf1, P.leaf3]), P.leaf2, pick([P.leaf3, P.leaf1])];
+  const s = rnd(.8, 1.35);
+  return [
+    ...box(.3 * s, 1.1 * s, .3 * s, P.brown, 0, 0, 0),
+    ...frustum(6, 1.45 * s, 0, 1.6 * s, g[0], 0, .8 * s, 0, rnd(6)),
+    ...frustum(6, 1.1 * s, 0, 1.4 * s, g[1], 0, 1.65 * s, 0, rnd(6)),
+    ...frustum(6, .72 * s, 0, 1.15 * s, g[2], 0, 2.45 * s, 0, rnd(6))
+  ];
+}
+function mBlocks() {
+  const cols = [P.red, P.yel, P.blue, P.mint, P.purple, P.orange], s = 1.15, out = [];
+  const k = Math.random();
+  const cube = (x, y, z) => out.push(...box(s, s, s, pick(cols), x, y, z));
+  if (k < .33) cube(0, 0, 0);
+  else if (k < .7) { cube(-s, 0, 0); cube(0, 0, 0); cube(s, 0, 0); cube(-s / 2, s, 0); cube(s / 2, s, 0); if (Math.random() < .5) cube(0, 2 * s, 0); }
+  else { cube(0, 0, 0); cube(.12, s, .08); cube(-.06, 2 * s, -.05); }
+  return out;
+}
+function mTent(c) {
+  return [...frustum(4, 1.9, 0, 1.9, c, 0, 0, 0, 0), ...frustum(4, .5, 0, .5, mul(c, .6), 0, 1.75, 0, 0)];
+}
+function mFlag(c) {
+  return [...box(.08, 3.3, .08, P.gray, 0, 0, 0),
+    flat([0, 3.2, 0], [0, 2.4, 0], [1.25, 2.8, .12], c), ...octa(.09, P.yel, 0, 3.35, 0)];
+}
+function mPlane(c) {
+  const N = [0, 0, 1.2], L = [-.8, .06, -.6], R = [.8, .06, -.6], C = [0, 0, -.6], K = [0, -.32, -.6];
+  return [flat(N, L, C, c), flat(N, C, R, mul(c, .94)), flat(N, C, K, mul(c, .8))];
+}
+function mGun() {
+  const body = hx('#3d6fb6'), dk = hx('#2a4f88'), skin = P.beige, sleeve = hx('#56743a');
+  return [
+    ...box(.13, .16, .55, body, 0, -.05, .05),
+    ...box(.07, .045, .42, dk, 0, .11, .06),
+    ...box(.075, .075, .46, P.gray, 0, .0, .5),
+    ...box(.095, .095, .08, P.orange, 0, -.01, .76),
+    ...frustum(4, .035, 0, .07, P.orange, 0, .155, .27, Math.PI / 4),
+    ...box(.09, .24, .11, dk, 0, -.27, -.12),
+    ...box(.075, .21, .09, P.yel, 0, -.24, .16),
+    ...box(.16, .13, .17, skin, 0, -.25, -.12),
+    ...box(.21, .21, .42, sleeve, .015, -.34, -.42),
+    ...box(.12, .1, .14, skin, -.01, -.06, .34)
+  ];
+}
+
+/* ---------- fold layout: map every triangle of a model onto a flat paper sheet ---------- */
+function prepFold(tris, sheetCol) {
+  const n = tris.length, cells = Math.ceil(n / 2), cols = Math.ceil(Math.sqrt(cells)), rows = Math.ceil(cells / cols);
+  const S = 2.1, cw = S / cols, ch = S / rows, cl = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cl.push({ c, r, d: Math.hypot(c + .5 - cols / 2, r + .5 - rows / 2) + Math.random() * .3 });
+  cl.sort((a, b) => a.d - b.d);
+  const ys = tris.map(t => (t.v[0][1] + t.v[1][1] + t.v[2][1]) / 3);
+  const idx = tris.map((_, i) => i).sort((a, b) => ys[a] - ys[b]);
+  const paper = mix3(sheetCol, [1, .99, .96], .62);
+  idx.forEach((ti, k) => {
+    const t = tris[ti], cell = cl[k >> 1], x0 = -S / 2 + cell.c * cw, z0 = -S / 2 + cell.r * ch, y = .03;
+    const p00 = [x0, y, z0], p10 = [x0 + cw, y, z0], p11 = [x0 + cw, y, z0 + ch], p01 = [x0, y, z0 + ch];
+    t.flat = k & 1 ? [p00, p11, p01] : [p00, p10, p11];
+    t.ord = k / Math.max(1, n - 1); // bottom pieces fold first, hat last
+    t.paper = paper;
+  });
+}
+
+/* ---------- terrain ---------- */
+const G = 5, HALF = 17, ROWS = 22;
+function th(ix, iz) {
+  const x = ix * G, z = iz * G;
+  return .9 * Math.sin(x * .07 + 1.3) * Math.cos(z * .05) + .6 * Math.sin(z * .11 + x * .03) + (hash(ix, iz) - .5) * .8;
+}
+function groundH(x, z) {
+  const gx = x / G, gz = z / G, ix = Math.floor(gx), iz = Math.floor(gz), fx = gx - ix, fz = gz - iz;
+  const h00 = th(ix, iz), h10 = th(ix + 1, iz), h01 = th(ix, iz + 1), h11 = th(ix + 1, iz + 1);
+  return fx > fz ? h00 + fx * (h10 - h00) + fz * (h11 - h10) : h00 + fz * (h01 - h00) + fx * (h11 - h01);
+}
+const pathX = z => 3 * Math.sin(z * .0192);
+
+/* ---------- camera / projection ---------- */
+const NEAR = 0.08;
+const cam = { x: 0, y: 2, z: 0, yaw: 0, c: 1, s: 0 };
+function toCam(x, y, z) { const dx = x - cam.x, dz = z - cam.z; return [dx * cam.c - dz * cam.s, y - cam.y, dx * cam.s + dz * cam.c]; }
+function proj(q) { return q[2] < NEAR ? null : [W / 2 + F * q[0] / q[2], H0 - F * q[1] / q[2]]; }
+
+const SX = new Float64Array(8), SY = new Float64Array(8);
+function poly(pts, color) {
+  const n = pts.length; let m = 0;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n], ai = a[2] >= NEAR, bi = b[2] >= NEAR;
+    if (ai) { SX[m] = W / 2 + F * a[0] / a[2]; SY[m] = H0 - F * a[1] / a[2]; m++; }
+    if (ai !== bi) {
+      const t = (NEAR - a[2]) / (b[2] - a[2]), x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+      SX[m] = W / 2 + F * x / NEAR; SY[m] = H0 - F * y / NEAR; m++;
+    }
+  }
+  if (m < 3) return;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let i = 0; i < m; i++) { if (SX[i] < x0) x0 = SX[i]; if (SX[i] > x1) x1 = SX[i]; if (SY[i] < y0) y0 = SY[i]; if (SY[i] > y1) y1 = SY[i]; }
+  if (x1 < -20 || x0 > W + 20 || y1 < -20 || y0 > H + 20) return;
+  ctx.beginPath(); ctx.moveTo(SX[0], SY[0]);
+  for (let i = 1; i < m; i++) ctx.lineTo(SX[i], SY[i]);
+  ctx.closePath(); ctx.fillStyle = color; ctx.strokeStyle = color; ctx.fill(); ctx.stroke();
+}
+
+/* ---------- environment / lighting ---------- */
+const E = {};
+const WX = { cloud: .1, rain: 0, storm: 0, snow: 0, fog: 0, wind: .3 };
+const WSTATES = {
+  clear: { cloud: .12, label: 'Clear', icon: '☀' }, cloudy: { cloud: .7, label: 'Overcast', icon: '☁' },
+  rain: { cloud: .88, rain: 1, label: 'Rain', icon: '☂' }, storm: { cloud: 1, rain: 1, storm: 1, label: 'Thunderstorm', icon: 'ϟ' },
+  snow: { cloud: .72, snow: 1, label: 'Paper Snow', icon: '❄' }, fog: { cloud: .38, fog: 1, label: 'Fog', icon: '≋' }
+};
+let weather = new URLSearchParams(location.search).get('w') || 'clear', weatherT = 22, windT = .3, snowCover = 0, wet = 0;
+if (WSTATES[weather] && weather !== 'clear') for (const k of ['cloud', 'rain', 'storm', 'snow', 'fog']) WX[k] = WSTATES[weather][k] || 0;
+
+function computeEnv(p) {
+  const a = 2 * Math.PI * (p - .25), el = Math.sin(a);
+  E.el = el;
+  E.L = norm([-Math.cos(a) * .9, el, .55]);
+  E.M = norm([Math.cos(a) * .9, -el, .55]);
+  const day = smooth(-.12, .35, el); E.day = day;
+  const cl = WX.cloud, stm = WX.storm;
+  E.sunI = smooth(-.06, .25, el) * (1 - .7 * cl);
+  E.warm = smooth(.02, .45, el);
+  E.sunC = mix3([1, .55, .32], [1, .96, .88], E.warm);
+  E.moonI = smooth(-.02, -.3, el) * .6 * (1 - .6 * cl);
+  E.moonC = [.62, .72, 1];
+  const twi = 1 - clamp(Math.abs(el) / .28, 0, 1);
+  E.amb = mix3(mix3([.42, .5, .9], [.8, .86, .98], day), [1, .72, .66], twi * .45);
+  E.ambI = (.3 + .42 * day) * (1 - .28 * stm);
+  // sky keyframes
+  const N = [[.03, .05, .14], [.1, .14, .28]], T = [[.18, .2, .42], [.98, .52, .33]],
+        Gd = [[.32, .52, .85], [1, .8, .62]], D = [[.24, .53, .9], [.74, .87, .98]];
+  let k0, k1, t;
+  if (el < -.2) { k0 = N; k1 = N; t = 0; }
+  else if (el < 0) { k0 = N; k1 = T; t = smooth(-.2, 0, el); }
+  else if (el < .15) { k0 = T; k1 = Gd; t = smooth(0, .15, el); }
+  else { k0 = Gd; k1 = D; t = smooth(.15, .45, el); }
+  let top = mix3(k0[0], k1[0], t), hor = mix3(k0[1], k1[1], t);
+  const gray = c => { const l = (c[0] + c[1] + c[2]) / 3; return [l * .96, l * .98, l * 1.03]; };
+  top = mix3(top, gray(top), cl * .78); hor = mix3(hor, gray(hor), cl * .7);
+  top = mul(top, 1 - .5 * stm); hor = mul(hor, 1 - .4 * stm);
+  E.top = top; E.hor = hor;
+  E.fog = mix3(hor, gray(hor), .25 + WX.fog * .4);
+  E.fogD = .011 + WX.fog * .05 + WX.rain * .01 + WX.snow * .012;
+}
+
+function shade(col, nx, ny, nz, jit, depth) {
+  let d = nx * E.L[0] + ny * E.L[1] + nz * E.L[2]; d = d > 0 ? d * E.sunI : 0;
+  let m = nx * E.M[0] + ny * E.M[1] + nz * E.M[2]; m = m > 0 ? m * E.moonI : 0;
+  const a = E.ambI * (.6 + .4 * ny) + E.flash;
+  const f = 1 - Math.exp(-depth * E.fogD);
+  const r = lerp(col[0] * (E.amb[0] * a + E.sunC[0] * d + E.moonC[0] * m + E.flashC[0]) * jit, E.fog[0], f);
+  const g = lerp(col[1] * (E.amb[1] * a + E.sunC[1] * d + E.moonC[1] * m + E.flashC[1]) * jit, E.fog[1], f);
+  const b = lerp(col[2] * (E.amb[2] * a + E.sunC[2] * d + E.moonC[2] * m + E.flashC[2]) * jit, E.fog[2], f);
+  return `rgb(${c255(r)},${c255(g)},${c255(b)})`;
+}
+
+/* prepare a world-space triangle → camera space + colour, with back-face culling */
+function prep(a, b, c, col, jit, dbl, out) {
+  const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+  let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+  const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+  const mx = (a[0] + b[0] + c[0]) / 3 - cam.x, my = (a[1] + b[1] + c[1]) / 3 - cam.y, mz = (a[2] + b[2] + c[2]) / 3 - cam.z;
+  if (nx * mx + ny * my + nz * mz > 0) { if (!dbl) return; nx = -nx; ny = -ny; nz = -nz; }
+  const A = toCam(a[0], a[1], a[2]), B = toCam(b[0], b[1], b[2]), C = toCam(c[0], c[1], c[2]);
+  if (A[2] < NEAR && B[2] < NEAR && C[2] < NEAR) return;
+  const d = (A[2] + B[2] + C[2]) / 3;
+  out.push({ p: [A, B, C], d, color: shade(col, nx, ny, nz, jit, Math.max(d, 0)) });
+}
+
+/* ---------- world objects ---------- */
+const NAMES_E = ['Pvt. Crease', 'Cpl. Fold', 'Sgt. Pleat', 'Lt. Valley', 'Pvt. Crinkle', 'Cpt. Kami', 'Pvt. Tuck', 'Maj. Mountainfold', 'Pvt. Squash', 'Cpl. Petal', 'Sgt. Sink', 'Pvt. Waterbomb', 'Pvt. Dogear', 'Lt. Reverse'];
+const NAMES_A = ['Pvt. Nori', 'Sgt. Washi', 'Cpl. Tissue', 'Pvt. Cardstock', 'Lt. Vellum', 'Pvt. Glossy'];
+
+function xf(o, v) {
+  let x = v[0] * o.s, y = v[1] * o.s, z = v[2] * o.s;
+  if (o.roll) { const c = Math.cos(o.roll), s = Math.sin(o.roll), nx = x * c - y * s; y = x * s + y * c; x = nx; }
+  if (o.tilt) { const c = Math.cos(o.tilt), s = Math.sin(o.tilt), ny = y * c - z * s; z = y * s + z * c; y = ny; }
+  return [x * o.cy + z * o.sy + o.x, y + o.y, -x * o.sy + z * o.cy + o.z];
+}
+
+const objs = [], planes = [];
+function build(o) {
+  switch (o.type) {
+    case 'tree': o.tris = mTree(); break;
+    case 'blocks': o.tris = mBlocks(); break;
+    case 'enemy': if (!o.tris) { o.tris = mSoldier(P.tan); prepFold(o.tris, P.tan); } break;
+    case 'ally': o.tris = o.tris || mSoldier(P.green); break;
+    case 'tank': o.tris = o.tris || mTank(o.team === 'e' ? P.tan : P.green); break;
+    case 'tent': o.tris = mTent(pick([P.tan, P.green, P.white, P.pink])); break;
+    case 'flag': o.tris = mFlag(pick([P.red, P.blue, P.yel])); break;
+  }
+}
+const SPREAD = { tree: [6, 60], blocks: [5, 40], enemy: [3, 26], ally: [3.5, 12], tank: [9, 34], tent: [12, 46], flag: [7, 30] };
+function place(o, init) {
+  const z0 = init ? cam.z + (o.type === 'enemy' ? 14 : o.type === 'ally' ? -2 : 4) : cam.z + 96;
+  const z1 = init ? cam.z + (o.type === 'ally' ? 50 : 122) : cam.z + 124;
+  o.z = rnd(z0, z1);
+  const sp = SPREAD[o.type], side = Math.random() < .5 ? -1 : 1;
+  o.x = pathX(o.z) + side * (sp[0] + Math.pow(Math.random(), 1.3) * (sp[1] - sp[0]));
+  o.y = groundH(o.x, o.z); o.s = 1; o.tilt = 0; o.roll = 0;
+  o.yaw = o.type === 'ally' ? rnd(-.3, .3) : o.team === 'e' || o.type === 'enemy' ? Math.PI + rnd(-.4, .4) : rnd(6.28);
+  o.alive = true; o.dieT = 0; o.hp = 1 + ((Math.random() * 3) | 0); o.walk = rnd(6);
+  o.name = o.type === 'enemy' ? pick(NAMES_E) : pick(NAMES_A);
+  if (o.type === 'enemy') {
+    if (!init) { // reinforcements arrive as sheets of paper, closer in so you can watch them fold
+      o.z = cam.z + rnd(18, 60); o.x = pathX(o.z) + side * (sp[0] + Math.pow(Math.random(), 1.3) * (sp[1] - sp[0])); o.y = groundH(o.x, o.z);
+    }
+    o.bx = o.x; o.gy = o.y; o.side = side; o.done = false;
+    if (init && Math.random() > .3) { o.st = 'alive'; o.fold = 1; }
+    else { o.st = 'drop'; o.ft = init ? -rnd(0, 5) : -rnd(0, 1.5); o.fold = 0; o.alive = false; }
+  }
+  build(o);
+  return o;
+}
+function addObjs(type, n, team) { for (let i = 0; i < n; i++) objs.push(place({ type, team }, true)); }
+addObjs('tree', 26); addObjs('blocks', 14); addObjs('enemy', 16); addObjs('ally', 6);
+addObjs('tank', 2, 'e'); addObjs('tank', 1, 'a'); addObjs('tent', 4); addObjs('flag', 3);
+
+function placePlane(pl, init) {
+  const dir = Math.random() < .5 ? 1 : -1;
+  pl.z = cam.z + rnd(30, 120); pl.x = cam.x + (init ? rnd(-70, 70) : -dir * 95);
+  pl.y = rnd(9, 19); pl.yaw = dir * Math.PI / 2 + rnd(-.35, .35); pl.v = rnd(5, 9);
+  pl.s = rnd(2, 3); pl.ph = rnd(6); pl.tilt = 0; pl.roll = 0;
+  pl.tris = mPlane(pick([P.white, P.pink, P.yel, hx('#9ed0f0'), P.white]));
+}
+for (let i = 0; i < 5; i++) { const pl = {}; placePlane(pl, true); planes.push(pl); }
+
+/* ---------- sky dressing ---------- */
+const stars = [...Array(170)].map(() => ({ az: rnd(-1.35, 1.35), el: rnd(.02, .95), b: rnd(.3, 1), tw: rnd(6) }));
+const mountains = [0, 1].map(layer => [...Array(layer ? 22 : 28)].map((_, i, arr) => ({
+  az: -1.35 + (i + rnd(.2, .8)) * 2.7 / arr.length, h: layer ? rnd(.025, .06) : rnd(.045, .11), w: layer ? rnd(.1, .2) : rnd(.13, .26)
+})));
+const clouds = [...Array(16)].map((_, i) => ({
+  az: rnd(-1.35, 1.35), el: rnd(.06, .32), s: rnd(.6, 1.3), ord: i / 16,
+  puffs: [...Array(3 + ((Math.random() * 4) | 0))].map((_, k, a) => ({ dx: (k - (a.length - 1) / 2) * .045 + rnd(-.01, .01), dy: rnd(-.012, .012), r: rnd(.03, .055) }))
+}));
+const rain = [...Array(380)].map(() => ({ x: rnd(), y: rnd(), d: rnd(.35, 1) }));
+const snow = [...Array(240)].map(() => ({ x: rnd(), y: rnd(), d: rnd(.35, 1), r: rnd(6), vr: rnd(-3, 3), ph: rnd(6) }));
+
+/* ---------- combat state ---------- */
+const S = {
+  target: null, seekT: 0, fireT: 1.2, burst: 0, ammo: 30, reload: 0, recoil: 0, flash: 0, flashRot: 0,
+  health: 100, hurt: 0, hurtT: 9, feed: [], kills: 0, shake: 0, lightFlash: 0, bolt: null, lightning: 0
+};
+const debris = [], smoke = [], tracers = [], ptracers = [], mflashes = [], pending = [];
+
+function feed(a, b, sym) { S.feed.unshift({ a, b, sym, t: 0 }); if (S.feed.length > 5) S.feed.pop(); }
+function burst(x, y, z, cols, n, power) {
+  for (let i = 0; i < n && debris.length < 450; i++) {
+    const a = rnd(6.28), up = rnd(.3, 1);
+    debris.push({
+      x, y, z, vx: Math.cos(a) * rnd(1, 4) * power, vy: up * rnd(3, 7) * power, vz: Math.sin(a) * rnd(1, 4) * power,
+      rx: rnd(6), ry: rnd(6), wr: rnd(-9, 9), sz: rnd(.08, .22) * (power > 1 ? 1.4 : 1), col: pick(cols), life: rnd(2.5, 4.5), rest: false
+    });
+  }
+}
+function puff(x, y, z, n, col, big) {
+  for (let i = 0; i < n; i++) smoke.push({ x: x + rnd(-.6, .6), y: y + rnd(0, .6), z: z + rnd(-.6, .6), r: rnd(.4, .9) * (big ? 1.6 : 1), g: rnd(.4, 1.2), life: 0, max: rnd(1.6, 3), col, rot: rnd(6) });
+}
+function explode(x, z, big) {
+  const y = groundH(x, z);
+  burst(x, y + .2, z, [P.tan, P.green, P.brown, P.yel, P.white, P.red, hx('#6f8a4a')], big ? 34 : 18, big ? 1.5 : 1);
+  puff(x, y, z, big ? 7 : 4, [.55, .55, .56], big);
+  const dist = Math.hypot(x - cam.x, z - cam.z);
+  S.shake = Math.min(1.4, S.shake + Math.max(0, (32 - dist) / 32) * (big ? 1 : .5));
+  S.lightFlash = Math.min(1, S.lightFlash + Math.max(.15, (60 - dist) / 60) * .8);
+  mflashes.push({ wp: [x, y + .8, z], t: 0, dur: .22, r: big ? 2.6 : 1.6 });
+}
+function kill(o, by) {
+  o.alive = false; o.dieT = 0; o.st = 'unfold'; o.ft = 0;
+  burst(o.x, o.y + 1.2, o.z, [P.tan, mul(P.tan, .8), P.white, P.yel, P.pink, P.blue], 22, .8);
+  if (by === 'you') { S.kills++; feed('You', o.name, '✂'); } else feed(by, o.name, '➶');
+}
+
+/* ---------- paper grain ---------- */
+const grain = (() => {
+  const g = document.createElement('canvas'); g.width = g.height = 220;
+  const gx = g.getContext('2d'), id = gx.createImageData(220, 220);
+  for (let i = 0; i < id.data.length; i += 4) { const v = 215 + Math.random() * 40; id.data[i] = v; id.data[i + 1] = v * .99; id.data[i + 2] = v * .96; id.data[i + 3] = 255; }
+  gx.putImageData(id, 0, 0);
+  gx.strokeStyle = 'rgba(150,140,120,.18)'; gx.lineWidth = .6;
+  for (let i = 0; i < 70; i++) { gx.beginPath(); const x = rnd(220), y = rnd(220), a = rnd(6.28), l = rnd(6, 20); gx.moveTo(x, y); gx.quadraticCurveTo(x + rnd(-4, 4), y + rnd(-4, 4), x + Math.cos(a) * l, y + Math.sin(a) * l); gx.stroke(); }
+  return g;
+})();
+let grainPat = null;
+
+/* ---------- main loop ---------- */
+let T = 0, last = performance.now(), hud = true, hintT = 0;
+const DAY_LEN = 60, START_P = .21 + (parseFloat(new URLSearchParams(location.search).get('t')) || 0) / 60;
+const gunTris = mGun(), GS = .3;
+
+function update(dt) {
+  T += dt; hintT += dt;
+  // --- weather schedule
+  weatherT -= dt;
+  if (weatherT <= 0) {
+    const keys = Object.keys(WSTATES).filter(k => k !== weather);
+    weather = pick(keys); weatherT = rnd(16, 24); windT = rnd(-1, 1);
+  }
+  const tgt = WSTATES[weather], k = 1 - Math.exp(-dt * .45);
+  for (const key of ['cloud', 'rain', 'storm', 'snow', 'fog']) WX[key] += ((tgt[key] || 0) - WX[key]) * k;
+  WX.wind += (windT - WX.wind) * k;
+  snowCover = clamp(snowCover + (WX.snow > .5 ? dt * .06 : -dt * .035), 0, 1);
+  wet = clamp(wet + (WX.rain > .5 ? dt * .15 : -dt * .05), 0, 1);
+
+  // --- camera walk
+  cam.z += 2.6 * dt; cam.x = pathX(cam.z);
+  const gy = groundH(cam.x, cam.z) + 1.75;
+  cam.y += (gy - cam.y) * (1 - Math.exp(-dt * 4));
+  const walk = T * 5.4;
+
+  // --- targeting
+  S.seekT -= dt;
+  if (S.target && (!S.target.alive || S.target.z - cam.z < 6)) { S.target = null; S.seekT = .8; }
+  if (!S.target && S.seekT <= 0) {
+    const cands = objs.filter(o => o.type === 'enemy' && o.alive && o.z - cam.z > 9 && o.z - cam.z < 48 && Math.abs(Math.atan2(o.x - cam.x, o.z - cam.z)) < .38);
+    if (cands.length) { S.target = pick(cands); S.burst = 0; S.fireT = rnd(.4, .9); } else S.seekT = .5;
+  }
+  let want = Math.sin(T * .11) * .18 + Math.sin(T * .037) * .08;
+  if (S.target) want = clamp(Math.atan2(S.target.x - cam.x, S.target.z - cam.z), -.38, .38);
+  cam.yaw += (want - cam.yaw) * (1 - Math.exp(-dt * 2.6));
+  cam.c = Math.cos(cam.yaw); cam.s = Math.sin(cam.yaw);
+
+  // --- player firing
+  S.recoil = Math.max(0, S.recoil - dt * 7); S.flash = Math.max(0, S.flash - dt * 14);
+  if (S.reload > 0) { S.reload -= dt; if (S.reload <= 0) { S.reload = 0; S.ammo = 30; } }
+  else if (S.target) {
+    const err = Math.abs(Math.atan2(S.target.x - cam.x, S.target.z - cam.z) - cam.yaw);
+    S.fireT -= dt;
+    if (S.fireT <= 0 && err < .05) {
+      if (S.burst <= 0) S.burst = 3 + ((Math.random() * 4) | 0);
+      S.burst--; S.ammo--; S.recoil = 1; S.flash = 1; S.flashRot = rnd(6);
+      S.lightFlash = Math.min(1, S.lightFlash + .35);
+      const tg = S.target;
+      ptracers.push({ wp: [tg.x + rnd(-.25, .25), tg.y + rnd(.9, 1.7), tg.z], t: 0 });
+      if (Math.random() < .38) {
+        burst(tg.x, tg.y + 1.3, tg.z, [P.white, P.yel, P.tan], 5, .5);
+        if (--tg.hp <= 0) kill(tg, 'you');
+      }
+      S.fireT = S.burst > 0 ? .1 : rnd(.45, 1.1);
+      if (S.ammo <= 0) S.reload = 1.7;
+    }
+  }
+
+  // --- objects
+  for (const o of objs) {
+    if (o.type === 'ally') { o.z += 2.35 * dt; o.y = groundH(o.x, o.z); o.walk += dt * 5; }
+    if (o.type === 'enemy') {
+      o.ft += dt; o.hidden = o.st === 'drop' && o.ft < 0;
+      const face = Math.atan2(cam.x - o.x, cam.z - o.z);
+      switch (o.st) {
+        case 'drop': { // a loose sheet flutters down and lands flat
+          const k = clamp(o.ft / 1.8, 0, 1), w = 1 - k;
+          o.y = o.gy + 7.5 * w * w; o.x = o.bx + Math.sin(o.ft * 2.1 + o.walk) * 1.4 * w;
+          o.roll = Math.sin(o.ft * 4.2 + o.walk) * .6 * w; o.tilt = Math.cos(o.ft * 3.1 + o.walk) * .45 * w;
+          o.yaw = face + w * 2.5; o.fold = 0;
+          if (k >= 1) { o.st = 'fold'; o.ft = 0; o.roll = o.tilt = 0; o.x = o.bx; o.y = o.gy; }
+          break;
+        }
+        case 'fold': o.yaw = face; o.fold = smooth(0, 1, o.ft / 2.4); if (o.ft >= 2.4) { o.st = 'alive'; o.alive = true; o.fold = 1; } break;
+        case 'alive': o.yaw = face + Math.sin(T + o.walk) * .1; break;
+        case 'unfold': o.fold = 1 - smooth(0, 1, o.ft / 1.7); if (o.ft >= 1.7) { o.st = 'flat'; o.ft = 0; o.fold = 0; } break;
+        case 'flat': if (o.ft >= 1.3) { o.st = 'blow'; o.ft = 0; } break;
+        case 'blow': { // the empty sheet catches the wind and tumbles away
+          const k = o.ft;
+          o.y = o.gy + k * k * 1.3 + k * .4; o.x += (WX.wind * 3 + 1.6 * o.side) * dt * k; o.z += dt * k * 1.2;
+          o.roll += dt * (1.5 + k) * o.side; o.tilt = Math.sin(k * 2.6) * .9;
+          if (k > 3.2) o.done = true;
+          break;
+        }
+      }
+    }
+    if (o.z < cam.z - 8 || (o.type === 'enemy' && o.done)) { place(o, false); }
+    o.cy = Math.cos(o.yaw); o.sy = Math.sin(o.yaw);
+  }
+  // enemy & tank & ally fire
+  for (const o of objs) {
+    const rz = o.z - cam.z; if (rz < 4 || rz > 70) continue;
+    if (o.type === 'enemy' && o.alive && Math.random() < dt * .13) {
+      const tip = xf(o, [.3, 1.2, .9]);
+      mflashes.push({ wp: tip, t: 0, dur: .09, r: .45 });
+      tracers.push({ a: tip, b: [cam.x + rnd(-1.5, 1.5), cam.y + rnd(-.8, .5), cam.z + rnd(0, 1)], t: 0, dur: rz / 45 + .1, col: '255,190,90' });
+      if (Math.random() < .22) { S.health = Math.max(8, S.health - rnd(4, 11)); S.hurt = 1; S.hurtT = 0; }
+    }
+    if (o.type === 'ally' && Math.random() < dt * .14) {
+      const tg = objs.filter(e => e.type === 'enemy' && e.alive && e !== S.target && e.z - cam.z > 8 && e.z - cam.z < 60);
+      if (tg.length) {
+        const e = pick(tg), tip = xf(o, [.3, 1.2, .9]);
+        mflashes.push({ wp: tip, t: 0, dur: .09, r: .45 });
+        tracers.push({ a: tip, b: [e.x, e.y + 1.2, e.z], t: 0, dur: .35, col: '170,255,140' });
+        if (Math.random() < .3) kill(e, o.name);
+      }
+    }
+    if (o.type === 'tank' && Math.random() < dt * .07) {
+      const tip = xf(o, [0, 1.3, 2.4]);
+      mflashes.push({ wp: tip, t: 0, dur: .18, r: 1.4 }); puff(tip[0], tip[1] - .5, tip[2], 2, [.6, .6, .6]);
+      const tx = o.team === 'e' ? cam.x + rnd(-14, 14) : cam.x + rnd(-25, 25), tz = cam.z + (o.team === 'e' ? rnd(7, 26) : rnd(40, 70));
+      pending.push({ t: .7, fn: () => explode(tx, tz, true) });
+    }
+  }
+  if (Math.random() < dt * .25) { const tx = cam.x + rnd(-40, 40), tz = cam.z + rnd(30, 90); explode(tx, tz, Math.random() < .5); }
+  for (let i = pending.length - 1; i >= 0; i--) { pending[i].t -= dt; if (pending[i].t <= 0) { pending[i].fn(); pending.splice(i, 1); } }
+
+  // health regen
+  S.hurt = Math.max(0, S.hurt - dt * 1.6); S.hurtT += dt;
+  if (S.hurtT > 2.5) S.health = Math.min(100, S.health + dt * 9);
+
+  // planes
+  for (const pl of planes) {
+    pl.x += Math.sin(pl.yaw) * pl.v * dt; pl.z += Math.cos(pl.yaw) * pl.v * dt;
+    pl.roll = Math.sin(T * 1.3 + pl.ph) * .35; pl.tilt = Math.sin(T * .9 + pl.ph) * .12;
+    pl.y += Math.sin(T * .7 + pl.ph) * dt * .6;
+    pl.cy = Math.cos(pl.yaw); pl.sy = Math.sin(pl.yaw);
+    if (pl.z - cam.z < 8 || pl.z - cam.z > 160 || Math.abs(pl.x - cam.x) > 110) placePlane(pl, false);
+  }
+  // debris
+  for (let i = debris.length - 1; i >= 0; i--) {
+    const d = debris[i]; d.life -= dt;
+    if (d.life <= 0 || d.z < cam.z - 6) { debris.splice(i, 1); continue; }
+    if (!d.rest) {
+      d.vy -= 9.8 * dt; d.vx *= 1 - dt * .6; d.vz *= 1 - dt * .6;
+      d.vx += WX.wind * dt * 1.5;
+      d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt; d.rx += d.wr * dt; d.ry += d.wr * .7 * dt;
+      const g = groundH(d.x, d.z) + .03;
+      if (d.y < g) { d.y = g; if (Math.abs(d.vy) < 1.5) { d.rest = true; d.rx = Math.PI / 2; } d.vy *= -.3; d.vx *= .5; d.vz *= .5; }
+    }
+  }
+  for (let i = smoke.length - 1; i >= 0; i--) { const s = smoke[i]; s.life += dt; s.y += dt * .9; s.x += WX.wind * dt * .8; s.r += s.g * dt; if (s.life > s.max) smoke.splice(i, 1); }
+  for (let i = tracers.length - 1; i >= 0; i--) { tracers[i].t += dt; if (tracers[i].t > tracers[i].dur) tracers.splice(i, 1); }
+  for (let i = ptracers.length - 1; i >= 0; i--) { ptracers[i].t += dt; if (ptracers[i].t > .09) ptracers.splice(i, 1); }
+  for (let i = mflashes.length - 1; i >= 0; i--) { mflashes[i].t += dt; if (mflashes[i].t > mflashes[i].dur) mflashes.splice(i, 1); }
+  for (const f of S.feed) f.t += dt;
+  while (S.feed.length && S.feed[S.feed.length - 1].t > 6) S.feed.pop();
+
+  // lightning
+  S.lightning = Math.max(0, S.lightning - dt * 4);
+  if (S.bolt) { S.bolt.t -= dt; if (S.bolt.t <= 0) S.bolt = null; }
+  if (WX.storm > .5 && Math.random() < dt * .3) {
+    const pts = []; let x = rnd(.1, .9) * W, y = 0;
+    while (y < H * .45) { pts.push([x, y]); x += rnd(-30, 30); y += rnd(15, 40); }
+    S.bolt = { pts, t: .22 }; S.lightning = 1; S.shake = Math.min(1.4, S.shake + .25);
+  }
+  S.lightFlash = Math.max(0, S.lightFlash - dt * 3.5);
+  S.shake = Math.max(0, S.shake - dt * 2.2);
+
+  // horizon / bob
+  H0 = H * .47 + Math.sin(walk * 2) * H * .004 - S.recoil * H * .012;
+  return walk;
+}
+
+/* ---------- drawing ---------- */
+function drawSky(p) {
+  const g = ctx.createLinearGradient(0, 0, 0, H0);
+  g.addColorStop(0, css(E.top)); g.addColorStop(1, css(E.hor));
+  ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H0 + 22);
+  const night = 1 - smooth(-.2, .05, E.el);
+  // stars
+  if (night > .01) {
+    const vis = night * (1 - WX.cloud * .9);
+    ctx.fillStyle = '#fff8e8';
+    for (const s of stars) {
+      const a = s.az - cam.yaw; if (Math.abs(a) > 1.4) continue;
+      const x = W / 2 + F * Math.tan(a), y = H0 - F * Math.tan(s.el) / Math.cos(a);
+      if (y < 0 || y > H0) continue;
+      ctx.globalAlpha = vis * s.b * (.6 + .4 * Math.sin(T * 3 + s.tw));
+      const r = 1 + s.b; ctx.fillRect(x - r / 2, y - r / 2, r, r);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // sun & moon
+  const body = (dir, R, c1, c2, n, glowCol, glowA) => {
+    const q = [dir[0] * cam.c - dir[2] * cam.s, dir[1], dir[0] * cam.s + dir[2] * cam.c];
+    if (q[2] < .05) return;
+    const x = W / 2 + F * q[0] / q[2], y = H0 - F * q[1] / q[2];
+    if (glowA > 0) {
+      const rg = ctx.createRadialGradient(x, y, 0, x, y, H * .7);
+      rg.addColorStop(0, css(glowCol, glowA)); rg.addColorStop(1, css(glowCol, 0));
+      ctx.fillStyle = rg; ctx.fillRect(-20, -20, W + 40, H0 + 22);
+    }
+    if (y > H0 + R) return;
+    const vis = 1 - WX.cloud * .75;
+    ctx.globalAlpha = vis;
+    for (let i = 0; i < n; i++) {
+      const a0 = i / n * 6.283 + T * .05, a1 = (i + 1) / n * 6.283 + T * .05;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a0) * R, y + Math.sin(a0) * R); ctx.lineTo(x + Math.cos(a1) * R, y + Math.sin(a1) * R); ctx.closePath();
+      ctx.fillStyle = ctx.strokeStyle = css(i % 2 ? c1 : c2); ctx.fill(); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  };
+  const sunCore = mix3([1, .45, .25], [1, .9, .55], E.warm);
+  body(E.L, H * .048, sunCore, mul(sunCore, .86), 12, mix3([1, .5, .3], [1, .95, .8], E.warm), (.55 - .3 * E.warm) * (1 - WX.cloud * .6) * smooth(-.25, 0, E.el));
+  if (E.M[1] > -.1) body(E.M, H * .032, [.96, .95, .88], [.8, .82, .86], 8, [.6, .7, 1], .12 * night * (1 - WX.cloud));
+  // lightning bolt
+  if (S.bolt) {
+    ctx.strokeStyle = `rgba(255,255,240,${S.bolt.t / .22})`; ctx.lineWidth = 3; ctx.shadowColor = '#cfe0ff'; ctx.shadowBlur = 18;
+    ctx.beginPath(); S.bolt.pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.lineWidth = 1;
+  }
+  // clouds (origami hexagon puffs)
+  const lsx = E.L[0] * cam.c - E.L[2] * cam.s, lsy = -E.L[1];
+  const ll = Math.hypot(lsx, lsy) || 1;
+  const bright = .28 + .72 * E.day + S.lightning * .5;
+  const baseC = mix3(mix3([.98, .97, .96], E.hor, .3), [.38, .4, .46], WX.storm * .85);
+  for (const c of clouds) {
+    const vis = smooth(c.ord - .05, c.ord + .1, WX.cloud * 1.05);
+    if (vis <= .01) continue;
+    c.az += WX.wind * .004 * (1 / 60);
+    if (c.az > 1.4) c.az -= 2.8; if (c.az < -1.4) c.az += 2.8;
+    const a = c.az - cam.yaw; if (Math.abs(a) > 1.3) continue;
+    const cx = W / 2 + F * Math.tan(a), cy = H0 - F * Math.tan(c.el) / Math.cos(a);
+    ctx.globalAlpha = vis * (.85 + WX.storm * .15);
+    for (const pf of c.puffs) {
+      const px = cx + pf.dx * F * c.s, py = cy + pf.dy * F * c.s, R = pf.r * F * c.s;
+      for (let k = 0; k < 6; k++) {
+        const a0 = k * Math.PI / 3, a1 = a0 + Math.PI / 3, am = a0 + Math.PI / 6;
+        const nl = (Math.cos(am) * lsx / ll + Math.sin(am) * lsy / ll);
+        const up = -Math.sin(am);
+        const sh = (.8 + .14 * nl * (E.sunI + .2) + .1 * up) * bright;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(a0) * R, py + Math.sin(a0) * R * .8); ctx.lineTo(px + Math.cos(a1) * R, py + Math.sin(a1) * R * .8); ctx.closePath();
+        ctx.fillStyle = ctx.strokeStyle = css(mul(baseC, sh)); ctx.fill(); ctx.stroke();
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawMountains() {
+  const cols = [[.55, .6, .76], [.42, .56, .42]];
+  const fogs = [.62, .38];
+  const lx = E.L[0] * cam.c - E.L[2] * cam.s;
+  for (let layer = 0; layer < 2; layer++) {
+    const col = mix3(cols[layer], [.92, .93, .97], snowCover * .6);
+    for (const m of mountains[layer]) {
+      const a = m.az - cam.yaw; if (Math.abs(a) > 1.35) continue;
+      const x = W / 2 + F * Math.tan(a), xl = W / 2 + F * Math.tan(a - m.w), xr = W / 2 + F * Math.tan(a + m.w);
+      const py = H0 - F * m.h, by = H0 + 2;
+      const face = (side) => {
+        const lit = E.ambI * (.85) + Math.max(0, side * lx) * E.sunI * .8 + E.moonI * .3 + S.lightning * .4;
+        const c = mix3([col[0] * E.amb[0] * lit + col[0] * E.sunC[0] * .0, col[1] * E.amb[1] * lit, col[2] * E.amb[2] * lit], E.fog, clamp(fogs[layer] + WX.fog * .35, 0, .95));
+        return css(c);
+      };
+      ctx.beginPath(); ctx.moveTo(xl, by); ctx.lineTo(x, py); ctx.lineTo(x, by); ctx.closePath();
+      ctx.fillStyle = ctx.strokeStyle = face(-1); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, by); ctx.lineTo(x, py); ctx.lineTo(xr, by); ctx.closePath();
+      ctx.fillStyle = ctx.strokeStyle = face(1); ctx.fill(); ctx.stroke();
+      if (layer === 0) { // paper snow caps
+        const t = .3, cy = py + (by - py) * t, cl = x + (xl - x) * t, cr = x + (xr - x) * t;
+        const sc = mix3([.95, .95, .97], E.fog, .45);
+        ctx.beginPath(); ctx.moveTo(cl, cy); ctx.lineTo(x, py); ctx.lineTo(x, cy + (by - py) * .06); ctx.closePath();
+        ctx.fillStyle = ctx.strokeStyle = css(mul(sc, (E.ambI + Math.max(0, -lx) * E.sunI) * .95)); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, cy + (by - py) * .06); ctx.lineTo(x, py); ctx.lineTo(cr, cy); ctx.closePath();
+        ctx.fillStyle = ctx.strokeStyle = css(mul(sc, (E.ambI + Math.max(0, lx) * E.sunI) * .95)); ctx.fill(); ctx.stroke();
+      }
+    }
+  }
+}
+
+const groundBase = [.5, .62, .36], dirt = [.72, .62, .43], groundAlt = [.58, .68, .4], groundAlt2 = [.47, .58, .37];
+function tileCol(ix, iz) {
+  const h = hash(ix * 3.1, iz * 1.7), x = ix * G, z = iz * G;
+  let c = Math.abs(x + G / 2 - pathX(z)) < 3 ? dirt : h < .33 ? groundBase : h < .66 ? groundAlt : groundAlt2;
+  c = mix3(c, [.94, .95, .98], snowCover * (.75 + .2 * h));
+  return wet > 0 ? mul(c, 1 - wet * .18) : c;
+}
+
+const meshBuf = [];
+function drawMesh(o) {
+  meshBuf.length = 0;
+  if (o.fold !== undefined && o.fold < 1) { // mid-fold: each piece hinges up from its spot on the sheet
+    const f = o.fold, v = [[], [], []];
+    for (const t of o.tris) {
+      const base = (f - t.ord * .68) / .32; let em = 0;
+      for (let j = 0; j < 3; j++) {
+        const e = smooth(0, 1, base * 1.1 - j * .05); em += e;
+        const a = t.flat[j], b = t.v[j], lift = Math.sin(Math.PI * e) * (.12 + t.ord * .35);
+        v[j] = xf(o, [lerp(a[0], b[0], e), lerp(a[1], b[1], e) + lift, lerp(a[2], b[2], e)]);
+      }
+      prep(v[0], v[1], v[2], mix3(t.paper, t.col, smooth(.35, 1, em / 3)), t.jit, true, meshBuf);
+    }
+    meshBuf.sort((a, b) => b.d - a.d);
+    for (const m of meshBuf) poly(m.p, m.color);
+    return;
+  }
+  for (const t of o.tris) prep(xf(o, t.v[0]), xf(o, t.v[1]), xf(o, t.v[2]), t.col, t.jit, t.dbl, meshBuf);
+  meshBuf.sort((a, b) => b.d - a.d);
+  for (const m of meshBuf) poly(m.p, m.color);
+}
+function visible(x, z, pad) {
+  const q = toCam(x, 0, z);
+  return q[2] > -pad && q[2] < 140 && Math.abs(q[0]) < q[2] * 1.35 + pad;
+}
+
+function drawWorld() {
+  // ground base (beyond terrain)
+  const gb = mix3(mul(groundBase, E.ambI + E.sunI * .5), E.fog, .8);
+  const gg = ctx.createLinearGradient(0, H0, 0, H);
+  gg.addColorStop(0, css(E.fog)); gg.addColorStop(.06, css(gb)); gg.addColorStop(1, css(mul(groundBase, E.ambI + E.sunI * .6)));
+  ctx.fillStyle = gg; ctx.fillRect(-20, H0, W + 40, H - H0 + 20);
+  drawMountains();
+
+  // planes
+  for (const pl of planes) if (visible(pl.x, pl.z, 10)) drawMesh(pl);
+
+  // terrain grid
+  const bx = Math.round(cam.x / G), bz = Math.floor(cam.z / G) - 1;
+  const NC = HALF * 2 + 2, NR = ROWS + 1;
+  const wp = [], cp = [];
+  for (let r = 0; r < NR; r++) for (let c = 0; c < NC; c++) {
+    const ix = bx - HALF + c, iz = bz + r, x = ix * G, z = iz * G, y = th(ix, iz);
+    wp.push([x, y, z]); cp.push(toCam(x, y, z));
+  }
+  // bucket objects by row
+  const rows = [...Array(ROWS)].map(() => []), far = [], near = [];
+  for (const o of objs) {
+    if (o.hidden || !visible(o.x, o.z, 6)) continue;
+    o.dcam = toCam(o.x, o.y, o.z)[2];
+    const r = Math.floor(o.z / G) - bz;
+    (r >= ROWS ? far : r < 0 ? near : rows[r]).push(o);
+  }
+  const byDepth = (a, b) => b.dcam - a.dcam;
+  far.sort(byDepth).forEach(drawMesh);
+  const tmp = [];
+  for (let r = ROWS - 1; r >= 0; r--) {
+    tmp.length = 0;
+    for (let c = 0; c < NC - 1; c++) {
+      const i00 = r * NC + c, i10 = i00 + 1, i01 = i00 + NC, i11 = i01 + 1;
+      const q00 = cp[i00], q10 = cp[i10], q01 = cp[i01], q11 = cp[i11];
+      if (q00[2] < NEAR && q10[2] < NEAR && q01[2] < NEAR && q11[2] < NEAR) continue;
+      // horizontal cull
+      let allL = true, allR = true;
+      for (const q of [q00, q10, q01, q11]) { if (q[2] < 1) { allL = allR = false; break; } const sx = q[0] / q[2]; if (sx > -W / 2 / F - .05) allL = false; if (sx < W / 2 / F + .05) allR = false; }
+      if (allL || allR) continue;
+      const ix = bx - HALF + c, iz = bz + r, col = tileCol(ix, iz);
+      for (const [A, B, C, qa, qb, qc, s] of [[wp[i00], wp[i10], wp[i11], q00, q10, q11, 1], [wp[i00], wp[i11], wp[i01], q00, q11, q01, 2]]) {
+        const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2];
+        let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        const d = Math.max(0, (qa[2] + qb[2] + qc[2]) / 3);
+        tmp.push({ p: [qa, qb, qc], color: shade(col, nx, ny, nz, .94 + hash(ix + s * .37, iz) * .1, d), ax: Math.abs(c - HALF) });
+      }
+    }
+    tmp.sort((a, b) => b.ax - a.ax);
+    for (const t of tmp) poly(t.p, t.color);
+    rows[r].sort(byDepth).forEach(drawMesh);
+  }
+  near.sort(byDepth).forEach(drawMesh);
+
+  // debris (paper scraps)
+  const dbuf = [];
+  for (const d of debris) {
+    if (!visible(d.x, d.z, 3)) continue;
+    const cr = Math.cos(d.rx), sr = Math.sin(d.rx), cy = Math.cos(d.ry), sy = Math.sin(d.ry), s = d.sz;
+    const v = [[0, s, 0], [-s * .9, -s * .5, 0], [s * .9, -s * .5, 0]].map(([x, y, z]) => {
+      let y2 = y * cr - z * sr, z2 = y * sr + z * cr;
+      return [x * cy + z2 * sy + d.x, y2 + d.y, -x * sy + z2 * cy + d.z];
+    });
+    prep(v[0], v[1], v[2], d.col, 1, true, dbuf);
+  }
+  dbuf.sort((a, b) => b.d - a.d); for (const m of dbuf) poly(m.p, m.color);
+
+  // smoke puffs (folded hexagons)
+  smoke.sort((a, b) => (b.z - a.z));
+  for (const s of smoke) {
+    const q = toCam(s.x, s.y, s.z); if (q[2] < .5) continue;
+    const x = W / 2 + F * q[0] / q[2], y = H0 - F * q[1] / q[2], R = F * s.r / q[2];
+    const a = (1 - s.life / s.max) * .75;
+    const lit = E.ambI + E.sunI * .6 + E.flash;
+    for (let k = 0; k < 6; k++) {
+      const a0 = s.rot + k * Math.PI / 3, a1 = a0 + Math.PI / 3;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a0) * R, y + Math.sin(a0) * R); ctx.lineTo(x + Math.cos(a1) * R, y + Math.sin(a1) * R); ctx.closePath();
+      ctx.fillStyle = css(mix3(mul(s.col, lit * (k % 2 ? 1 : .86)), E.fog, 1 - Math.exp(-q[2] * E.fogD)), a); ctx.fill();
+    }
+  }
+
+  // tracers
+  ctx.lineCap = 'round';
+  for (const t of tracers) {
+    const k = t.t / t.dur, k0 = Math.max(0, k - .25);
+    const pa = [lerp(t.a[0], t.b[0], k0), lerp(t.a[1], t.b[1], k0), lerp(t.a[2], t.b[2], k0)], pb = [lerp(t.a[0], t.b[0], k), lerp(t.a[1], t.b[1], k), lerp(t.a[2], t.b[2], k)];
+    const A = proj(toCam(...pa)), B = proj(toCam(...pb)); if (!A || !B) continue;
+    ctx.strokeStyle = `rgba(${t.col},${.85 - .3 * E.day})`; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
+  }
+  // muzzle / explosion flashes in world
+  for (const f of mflashes) {
+    const q = toCam(...f.wp); const p = proj(q); if (!p || q[2] < .5) continue;
+    const R = F * f.r / q[2] * (1 - f.t / f.dur * .5);
+    star(p[0], p[1], R, R * .45, 8, f.t * 20, '#fff3b0', '#ff9a2e', 1 - f.t / f.dur);
+  }
+  ctx.lineWidth = 1;
+}
+
+function star(x, y, R, r, n, rot, c1, c2, a) {
+  ctx.globalAlpha = clamp(a, 0, 1);
+  for (let i = 0; i < n * 2; i++) {
+    const a0 = rot + i / (n * 2) * 6.283, a1 = rot + (i + 1) / (n * 2) * 6.283;
+    const r0 = i % 2 ? r : R, r1 = i % 2 ? R : r;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a0) * r0, y + Math.sin(a0) * r0); ctx.lineTo(x + Math.cos(a1) * r1, y + Math.sin(a1) * r1); ctx.closePath();
+    ctx.fillStyle = i % 2 ? c1 : c2; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawWeather(dt) {
+  const r = WX.rain;
+  if (r > .02) {
+    const sl = WX.wind * .35, nightDim = .45 + .55 * E.day;
+    for (let layer = 0; layer < 3; layer++) {
+      ctx.strokeStyle = `rgba(210,225,255,${r * (.18 + layer * .12) * nightDim + S.lightning * .3})`;
+      ctx.lineWidth = .8 + layer * .5; ctx.beginPath();
+      for (let i = layer; i < rain.length; i += 3) {
+        const d = rain[i];
+        if (i / rain.length > r) continue;
+        d.y += dt * (1.4 + d.d * 1.6); d.x += dt * sl * (1 + d.d);
+        if (d.y > 1) { d.y -= 1.05; d.x = rnd(-.1, 1.1); }
+        if (d.x > 1.1) d.x -= 1.2; if (d.x < -.1) d.x += 1.2;
+        const x = d.x * W, y = d.y * H, L = H * .035 * d.d;
+        ctx.moveTo(x, y); ctx.lineTo(x - sl * L, y - L);
+      }
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+  }
+  const s = WX.snow;
+  if (s > .02) {
+    ctx.fillStyle = css(mix3([1, 1, 1], E.amb, .3), Math.min(1, s * 1.2) * (.55 + .45 * E.day));
+    ctx.beginPath();
+    for (let i = 0; i < snow.length; i++) {
+      const f = snow[i]; if (i / snow.length > s) continue;
+      f.y += dt * (.05 + f.d * .09); f.x += dt * (WX.wind * .05 + Math.sin(T * 1.5 + f.ph) * .02); f.r += f.vr * dt;
+      if (f.y > 1.02) { f.y = -.02; f.x = rnd(); } if (f.x > 1.02) f.x -= 1.04; if (f.x < -.02) f.x += 1.04;
+      const x = f.x * W, y = f.y * H, R = (2 + f.d * 4) * H / 900, c = Math.cos(f.r) * R, sn = Math.sin(f.r) * R;
+      ctx.moveTo(x + c, y + sn); ctx.lineTo(x - sn, y + c * .5); ctx.lineTo(x - c, y - sn); ctx.lineTo(x + sn, y - c * .5); ctx.closePath();
+    }
+    ctx.fill();
+  }
+  if (WX.fog > .02) {
+    const g = ctx.createLinearGradient(0, H0 - H * .2, 0, H);
+    g.addColorStop(0, css(E.fog, 0)); g.addColorStop(.3, css(E.fog, WX.fog * .45)); g.addColorStop(1, css(E.fog, WX.fog * .2));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawGun(walk) {
+  const bobX = Math.sin(walk) * .012, bobY = -Math.abs(Math.cos(walk)) * .014;
+  const rl = S.reload > 0 ? Math.sin(Math.PI * (1 - S.reload / 1.7)) : 0;
+  const px = .135 + bobX, py = -.125 + bobY - rl * .16 - S.recoil * .006, pz = .42 - S.recoil * .025;
+  const pitch = S.recoil * .1 - rl * .5, gyaw = -.1 + rl * .3, roll = rl * .5;
+  const cp = Math.cos(pitch), sp = Math.sin(pitch), cyw = Math.cos(gyaw), syw = Math.sin(gyaw), cr = Math.cos(roll), sr = Math.sin(roll);
+  const toView = v => {
+    let x = v[0] * GS, y = v[1] * GS, z = v[2] * GS;
+    let x1 = x * cr - y * sr, y1 = x * sr + y * cr; x = x1; y = y1;
+    let y2 = y * cp + z * sp, z2 = -y * sp + z * cp; y = y2; z = z2;
+    let x3 = x * cyw + z * syw, z3 = -x * syw + z * cyw;
+    return [x3 + px, y + py, z3 + pz];
+  };
+  const toWorld = q => [cam.x + q[0] * cam.c + q[2] * cam.s, cam.y + q[1], cam.z - q[0] * cam.s + q[2] * cam.c];
+  const buf = [];
+  const savedFog = E.fogD; E.fogD = 0;
+  for (const t of gunTris) prep(toWorld(toView(t.v[0])), toWorld(toView(t.v[1])), toWorld(toView(t.v[2])), t.col, t.jit, false, buf);
+  E.fogD = savedFog;
+  buf.sort((a, b) => b.d - a.d); for (const m of buf) poly(m.p, m.color);
+  const tip = toView([0, .03, .84]), tp = proj(tip);
+  // player tracers
+  for (const t of ptracers) {
+    const q = proj(toCam(...t.wp)); if (!q || !tp) continue;
+    const k = t.t / .09;
+    ctx.strokeStyle = `rgba(255,220,130,${1 - k})`; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(lerp(tp[0], q[0], k * .6), lerp(tp[1], q[1], k * .6)); ctx.lineTo(lerp(tp[0], q[0], .3 + k * .7), lerp(tp[1], q[1], .3 + k * .7)); ctx.stroke();
+  }
+  ctx.lineWidth = 1;
+  if (S.flash > 0 && tp) {
+    const R = F * .11 / tip[2] * (.6 + S.flash * .5);
+    star(tp[0], tp[1], R, R * .4, 7, S.flashRot, '#fff6c2', '#ff8a1e', S.flash);
+  }
+}
+
+/* ---------- HUD ---------- */
+function card(x, y, w, h, rot, fill = '#f5f0e4') {
+  ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rot);
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(-w / 2 + 3, -h / 2 + 4, w, h);
+  ctx.fillStyle = fill; ctx.fillRect(-w / 2, -h / 2, w, h);
+  const f = Math.min(w, h) * .32;
+  ctx.fillStyle = 'rgba(0,0,0,.12)';
+  ctx.beginPath(); ctx.moveTo(w / 2 - f, -h / 2); ctx.lineTo(w / 2, -h / 2 + f); ctx.lineTo(w / 2 - f, -h / 2 + f); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(-w / 2, -h / 2, w, h * .45);
+  ctx.restore();
+}
+const FONT = '"Avenir Next","Trebuchet MS","Segoe UI",system-ui,sans-serif';
+function txt(s, x, y, size, col = '#3a342c', align = 'left', weight = 700) {
+  ctx.font = `${weight} ${size}px ${FONT}`; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(s, x, y);
+}
+function drawHUD(p, day) {
+  const u = Math.min(H, W * .6) / 100;
+  // crosshair
+  const cx = W / 2, cy = H0, g = u * (1.1 + S.recoil * 1.6);
+  ctx.fillStyle = '#fffaf0'; ctx.strokeStyle = 'rgba(40,30,20,.7)'; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(a);
+    ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g + u * 1.6, -u * .45); ctx.lineTo(g + u * 1.6, u * .45); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(cx, cy, u * .22, 0, 7); ctx.fill();
+  if (!hud) return;
+
+  // time / weather card
+  const mins = Math.floor(p * 1440), hh = String(Math.floor(mins / 60)).padStart(2, '0'), mm = String(mins % 60).padStart(2, '0');
+  const isNight = E.el < -.05;
+  const ws = WSTATES[weather];
+  const icon = weather === 'clear' && isNight ? '☾' : ws.icon;
+  card(u * 2.5, u * 2.5, u * 33, u * 10.5, -.02);
+  txt('PAPER FRONT · DAY ' + day, u * 4, u * 5.2, u * 1.7, '#8a7c66', 'left', 800);
+  txt(hh + ':' + mm, u * 4, u * 9, u * 4.4, '#2f2a24', 'left', 800);
+  txt(icon + ' ' + ws.label, u * 16.5, u * 9.2, u * 1.75, '#5a4f40', 'left', 700);
+  // day progress strip (sun → moon)
+  const bx = u * 4, by = u * 11.7, bw = u * 30;
+  ctx.fillStyle = 'rgba(60,50,40,.18)'; ctx.fillRect(bx, by, bw, u * .5);
+  ctx.fillStyle = '#e8a33c'; ctx.fillRect(bx, by, bw * p, u * .5);
+
+  // compass
+  const cw = u * 34, cxx = W / 2 - cw / 2, cyy = u * 2.6;
+  card(cxx, cyy, cw, u * 4.4, .005);
+  ctx.save(); ctx.beginPath(); ctx.rect(cxx, cyy, cw, u * 4.4); ctx.clip();
+  const hd = cam.yaw * 180 / Math.PI;
+  for (let d = -180; d <= 180; d += 15) {
+    let rel = d - hd; const x = W / 2 + rel * u * .55; if (x < cxx - 20 || x > cxx + cw + 20) continue;
+    const lab = { 0: 'N', 90: 'E', '-90': 'W', 180: 'S', '-180': 'S', 45: 'NE', '-45': 'NW', 135: 'SE', '-135': 'SW' }[d];
+    if (lab) txt(lab, x, cyy + u * 2.3, u * 1.8, lab.length === 1 ? '#c0392b' : '#5a4f40', 'center', 800);
+    else { ctx.fillStyle = '#7a6d5a'; ctx.fillRect(x - .75, cyy + u * 1.5, 1.5, u * 1.6); }
+  }
+  ctx.restore();
+  ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(W / 2, cyy + u * 4.4); ctx.lineTo(W / 2 - u * .7, cyy + u * 5.4); ctx.lineTo(W / 2 + u * .7, cyy + u * 5.4); ctx.fill();
+
+  // kill feed
+  let fy = u * 2.6;
+  for (const f of S.feed) {
+    const a = 1 - smooth(4.8, 6, f.t), slide = (1 - smooth(0, .25, f.t)) * u * 6;
+    ctx.globalAlpha = a;
+    ctx.font = `700 ${u * 1.8}px ${FONT}`;
+    const s = `${f.a}  ${f.sym}  ${f.b}`, w = ctx.measureText(s).width + u * 3;
+    card(W - u * 2.5 - w + slide, fy, w, u * 3.6, .01, f.a === 'You' ? '#fff3c9' : '#f5f0e4');
+    txt(f.a, W - u * 2.5 - w + slide + u * 1.5, fy + u * 1.85, u * 1.8, f.a === 'You' ? '#b5651d' : '#4f7a32');
+    ctx.font = `700 ${u * 1.8}px ${FONT}`;
+    const wa = ctx.measureText(f.a + '  ').width;
+    txt(f.sym + '  ' + f.b, W - u * 2.5 - w + slide + u * 1.5 + wa, fy + u * 1.85, u * 1.8, '#3a342c');
+    ctx.globalAlpha = 1; fy += u * 4.4;
+  }
+
+  // health
+  const hy = H - u * 9.5;
+  card(u * 2.5, hy, u * 26, u * 7, .015);
+  txt('✚', u * 4.5, hy + u * 3.6, u * 3.2, S.health < 35 ? '#c0392b' : '#4f7a32', 'left', 900);
+  txt(String(Math.round(S.health)), u * 9, hy + u * 3.6, u * 3.6, '#2f2a24', 'left', 800);
+  ctx.fillStyle = 'rgba(60,50,40,.18)'; ctx.fillRect(u * 16.5, hy + u * 3, u * 10, u * 1.2);
+  ctx.fillStyle = S.health < 35 ? '#d9534f' : '#6aa84f'; ctx.fillRect(u * 16.5, hy + u * 3, u * 10 * S.health / 100, u * 1.2);
+  // kills
+  card(u * 2.5, hy - u * 5.2, u * 12, u * 4, -.02, '#fff3c9');
+  txt('✂ ' + S.kills + ' folded', u * 3.8, hy - u * 3.1, u * 1.8, '#8a5a20');
+
+  // ammo
+  const aw = u * 19, ax = W - aw - u * 2.5, ay = H - u * 9.5;
+  card(ax, ay, aw, u * 7, -.015);
+  if (S.reload > 0) txt('REFOLDING…', ax + aw / 2, ay + u * 3.6, u * 2.2, '#b5651d', 'center', 800);
+  else {
+    txt(String(S.ammo), ax + u * 1.8, ay + u * 3.6, u * 3.8, '#2f2a24', 'left', 800);
+    txt('/ 30', ax + u * 8.2, ay + u * 4.1, u * 1.8, '#8a7c66', 'left', 700);
+    for (let i = 0; i < 10; i++) { ctx.fillStyle = i < Math.ceil(S.ammo / 3) ? '#e8a33c' : 'rgba(60,50,40,.18)'; ctx.fillRect(ax + u * 12.5 + (i % 5) * u * 1.15, ay + u * (i < 5 ? 2.1 : 3.9), u * .8, u * 1.3); }
+  }
+
+  if (hintT < 7) {
+    ctx.globalAlpha = 1 - smooth(5, 7, hintT);
+    txt('click for fullscreen · H toggles HUD', W / 2, H - u * 3, u * 1.8, 'rgba(255,250,240,.9)', 'center', 600);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function frame(now) {
+  let dt = (now - last) / 1000; last = now; dt = Math.min(dt, .05);
+  const walk = update(dt);
+  const total = T / DAY_LEN + START_P, p = total % 1, day = Math.floor(total) + 1;
+  computeEnv(p);
+  E.flash = S.lightFlash * (.35 + .6 * (1 - E.day)) * .5 + S.lightning * .7;
+  E.flashC = [S.lightFlash * .45 * (1 - E.day * .7), S.lightFlash * .3 * (1 - E.day * .7), S.lightFlash * .1 * (1 - E.day * .7)];
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.lineJoin = 'round'; ctx.lineWidth = 1;
+  const sh = S.shake * H * .008;
+  ctx.translate(rnd(-sh, sh), rnd(-sh, sh));
+  drawSky(p);
+  drawWorld();
+  drawWeather(dt);
+  drawGun(walk);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  // lightning / hurt / vignette / grain
+  if (S.lightning > 0) { ctx.fillStyle = `rgba(230,238,255,${S.lightning * .35})`; ctx.fillRect(0, 0, W, H); }
+  if (S.hurt > 0 || S.health < 35) {
+    const a = Math.max(S.hurt * .55, (35 - S.health) / 35 * .35);
+    const g = ctx.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * .95);
+    g.addColorStop(0, 'rgba(200,30,30,0)'); g.addColorStop(1, `rgba(200,30,30,${a})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, Math.hypot(W, H) * .6);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,8,20,.42)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  if (!grainPat) grainPat = ctx.createPattern(grain, 'repeat');
+  ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = .55;
+  ctx.fillStyle = grainPat; ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+
+  drawHUD(p, day);
+  requestAnimationFrame(frame);
+}
+
+addEventListener('click', () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.(); });
+addEventListener('keydown', e => { if (e.key === 'h' || e.key === 'H') hud = !hud; });
+requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
+</script>
+</body>
+</html>
