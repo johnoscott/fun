@@ -5,6 +5,21 @@ origami toy battlefield, with a full day/night cycle every 60 seconds.
 Open any version directly in a browser. Click for fullscreen, **H** toggles the HUD.
 URL params for previewing: `?t=<seconds into the day>` and `?w=<clear|cloudy|rain|storm|snow|fog>`.
 
+## v6: stages
+- Each new day is a themed stage built ahead of you at dawn. Its cast arrives as paper sheets that fold up in their hiding places. Title cards announce each stage and "Stage Clear" shows the tally.
+- Six rotating themes, each with its own origami block buildings and starting weather:
+  - **Toy Block Fort:** block walls with battlements, towers and a fort gate.
+  - **Paper Village:** houses, fences and barrels.
+  - **Pagoda Garden:** pagodas, stone walls, lanterns and torii gates.
+  - **Cardboard City:** tower blocks, bunkers and crates.
+  - **Snowfold Outpost:** igloos and snow walls.
+  - **Thunder Ridge:** a stone fort in a storm.
+- Cover and hiding:
+  - Soldiers hide behind walls and step out to shoot. They can only be targeted while exposed.
+  - Foxes and frogs wait in ambush.
+  - Cranes perch on rooftops until you get close.
+- Each stage brings more hostiles. The HUD shows the stage name and how many hostiles are left.
+
 ## v5: high-contrast day and night
 - The light now comes from slightly behind you, so the faces you see are lit rather than silhouetted. The sun and moon are still drawn in front of you.
 - Bright full moon with a blue halo and strong blue-white moonlight. Its light comes up just after sunset. The night sky is a richer blue, the stars are brighter and the clouds look moonlit.
