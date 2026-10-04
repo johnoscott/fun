@@ -5,6 +5,13 @@ origami toy battlefield, with a full day/night cycle every 60 seconds.
 Open any version directly in a browser. Click for fullscreen, **H** toggles the HUD.
 URL params for previewing: `?t=<seconds into the day>` and `?w=<clear|cloudy|rain|storm|snow|fog>`.
 
+## v5: high-contrast day and night
+- The light now comes from slightly behind you, so the faces you see are lit rather than silhouetted. The sun and moon are still drawn in front of you.
+- Bright full moon with a blue halo and strong blue-white moonlight. Its light comes up just after sunset. The night sky is a richer blue, the stars are brighter and the clouds look moonlit.
+- Brightness adjusts automatically to the available light, plus a contrast curve, so moonlit nights, storms and fog stay readable.
+- Lighter weather: clouds, rain, storms and fog dim the scene much less.
+- The muzzle, explosion and lightning flash is added after the brightness adjustment, so it stays dramatic, and slightly stronger at night.
+
 ## v4: origami menagerie
 - New enemy types:
   - **Fox:** charges at you in a zig-zag and nips as it passes.
