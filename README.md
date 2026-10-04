@@ -12,7 +12,7 @@ Self-contained single-file HTML toys — open any `.html` file directly in a bro
 | mandelbrot-screensaver | [mandelbrot-screensaver.html](html-screensaver/mandelbrot-screensaver/mandelbrot-screensaver.html) |
 | northern-lights | [northern-lights.html](html-screensaver/northern-lights/northern-lights.html) |
 | origami-drive | [origami-drive.html](html-screensaver/origami-drive/origami-drive.html) |
-| origami-fps | [origami-fps-v1.html](html-screensaver/origami-fps/origami-fps-v1.html), [origami-fps-v2.html](html-screensaver/origami-fps/origami-fps-v2.html), [origami-fps-v3.html](html-screensaver/origami-fps/origami-fps-v3.html) |
+| origami-fps | [origami-fps-v1.html](html-screensaver/origami-fps/origami-fps-v1.html), [origami-fps-v2.html](html-screensaver/origami-fps/origami-fps-v2.html), [origami-fps-v3.html](html-screensaver/origami-fps/origami-fps-v3.html), [origami-fps-v4.html](html-screensaver/origami-fps/origami-fps-v4.html) ([changelog](html-screensaver/origami-fps/CHANGELOG.md)) |
 | retro-80s-video-games-screensaver | [retro-80s-video-games-screensaver.html](html-screensaver/retro-80s-video-games-screensaver/retro-80s-video-games-screensaver.html) |
 | space-news-billboards | [space-news-billboards.html](html-screensaver/space-news-billboards/space-news-billboards.html) |
 | spirograph | [spirograph-v1.html](html-screensaver/spirograph/spirograph-v1.html), [spirograph-v2.html](html-screensaver/spirograph/spirograph-v2.html) |
