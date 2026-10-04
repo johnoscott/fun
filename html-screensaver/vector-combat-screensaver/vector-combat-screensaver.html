@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VECTOR COMBAT — attract mode</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none;}
+  #stage{position:fixed;inset:0;background:#000;}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  /* CRT dressing */
+  #scan{position:absolute;inset:0;pointer-events:none;
+        background:repeating-linear-gradient(to bottom,
+          rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+          rgba(0,0,0,.30) 3px, rgba(0,0,0,.30) 4px);}
+  #vig{position:absolute;inset:0;pointer-events:none;
+       background:radial-gradient(ellipse 78% 78% at 50% 50%,
+         rgba(0,0,0,0) 40%, rgba(0,0,0,.55) 78%, rgba(0,0,0,.95) 100%);}
+  #flick{position:absolute;inset:0;pointer-events:none;background:#9ffcbe;
+         mix-blend-mode:overlay;opacity:.012;animation:fl 5.7s steps(2) infinite;}
+  @keyframes fl{0%,97%{opacity:.010}98%{opacity:.030}99%{opacity:.006}100%{opacity:.014}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="scan"></div>
+  <div id="vig"></div>
+  <div id="flick"></div>
+</div>
+<script>
+(() => {
+"use strict";
+
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const lerp  = (a,b,t) => a + (b-a)*t;
+const rnd   = (a,b) => a + Math.random()*(b-a);
+const rndi  = n => (Math.random()*n)|0;
+// shortest signed angle a->b
+const angDiff = (a,b) => { let d = (b-a) % TAU; if (d >  Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+
+// deterministic RNG for the terrain silhouette
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+/* ------------------------------------------------------------------ *
+ *  STROKE FONT — 4x6 cell, y down.  Pure line segments, like the era. *
+ * ------------------------------------------------------------------ */
+const FONT = {
+ 'A':[[0,6,0,1],[0,1,2,0],[2,0,4,1],[4,1,4,6],[0,3,4,3]],
+ 'B':[[0,0,0,6],[0,0,3,0],[3,0,4,1],[4,1,4,2],[4,2,3,3],[0,3,3,3],[3,3,4,4],[4,4,4,5],[4,5,3,6],[0,6,3,6]],
+ 'C':[[4,1,3,0],[3,0,1,0],[1,0,0,1],[0,1,0,5],[0,5,1,6],[1,6,3,6],[3,6,4,5]],
+ 'D':[[0,0,0,6],[0,0,3,0],[3,0,4,1],[4,1,4,5],[4,5,3,6],[3,6,0,6]],
+ 'E':[[4,0,0,0],[0,0,0,6],[0,6,4,6],[0,3,3,3]],
+ 'F':[[4,0,0,0],[0,0,0,6],[0,3,3,3]],
+ 'G':[[4,1,3,0],[3,0,1,0],[1,0,0,1],[0,1,0,5],[0,5,1,6],[1,6,3,6],[3,6,4,5],[4,5,4,3],[4,3,2,3]],
+ 'H':[[0,0,0,6],[4,0,4,6],[0,3,4,3]],
+ 'I':[[1,0,3,0],[2,0,2,6],[1,6,3,6]],
+ 'J':[[3,0,3,5],[3,5,2,6],[2,6,1,6],[1,6,0,5]],
+ 'K':[[0,0,0,6],[4,0,0,3],[0,3,4,6]],
+ 'L':[[0,0,0,6],[0,6,4,6]],
+ 'M':[[0,6,0,0],[0,0,2,2],[2,2,4,0],[4,0,4,6]],
+ 'N':[[0,6,0,0],[0,0,4,6],[4,6,4,0]],
+ 'O':[[1,0,3,0],[3,0,4,1],[4,1,4,5],[4,5,3,6],[3,6,1,6],[1,6,0,5],[0,5,0,1],[0,1,1,0]],
+ 'P':[[0,6,0,0],[0,0,3,0],[3,0,4,1],[4,1,4,2],[4,2,3,3],[3,3,0,3]],
+ 'Q':[[1,0,3,0],[3,0,4,1],[4,1,4,5],[4,5,3,6],[3,6,1,6],[1,6,0,5],[0,5,0,1],[0,1,1,0],[2,4,4,6]],
+ 'R':[[0,6,0,0],[0,0,3,0],[3,0,4,1],[4,1,4,2],[4,2,3,3],[3,3,0,3],[2,3,4,6]],
+ 'S':[[4,1,3,0],[3,0,1,0],[1,0,0,1],[0,1,0,2],[0,2,1,3],[1,3,3,3],[3,3,4,4],[4,4,4,5],[4,5,3,6],[3,6,1,6],[1,6,0,5]],
+ 'T':[[0,0,4,0],[2,0,2,6]],
+ 'U':[[0,0,0,5],[0,5,1,6],[1,6,3,6],[3,6,4,5],[4,5,4,0]],
+ 'V':[[0,0,2,6],[2,6,4,0]],
+ 'W':[[0,0,1,6],[1,6,2,3],[2,3,3,6],[3,6,4,0]],
+ 'X':[[0,0,4,6],[4,0,0,6]],
+ 'Y':[[0,0,2,3],[4,0,2,3],[2,3,2,6]],
+ 'Z':[[0,0,4,0],[4,0,0,6],[0,6,4,6]],
+ '0':[[1,0,3,0],[3,0,4,1],[4,1,4,5],[4,5,3,6],[3,6,1,6],[1,6,0,5],[0,5,0,1],[0,1,1,0],[0,5,4,1]],
+ '1':[[1,1,2,0],[2,0,2,6],[1,6,3,6]],
+ '2':[[0,1,1,0],[1,0,3,0],[3,0,4,1],[4,1,4,2],[4,2,0,6],[0,6,4,6]],
+ '3':[[0,0,4,0],[4,0,2,3],[2,3,4,4],[4,4,4,5],[4,5,3,6],[3,6,1,6],[1,6,0,5]],
+ '4':[[3,6,3,0],[3,0,0,4],[0,4,4,4]],
+ '5':[[4,0,0,0],[0,0,0,3],[0,3,3,3],[3,3,4,4],[4,4,4,5],[4,5,3,6],[3,6,1,6],[1,6,0,5]],
+ '6':[[4,1,3,0],[3,0,1,0],[1,0,0,1],[0,1,0,5],[0,5,1,6],[1,6,3,6],[3,6,4,5],[4,5,4,4],[4,4,3,3],[3,3,0,3]],
+ '7':[[0,0,4,0],[4,0,1,6]],
+ '8':[[1,0,3,0],[3,0,4,1],[4,1,4,2],[4,2,3,3],[3,3,1,3],[1,3,0,2],[0,2,0,1],[0,1,1,0],[1,3,0,4],[0,4,0,5],[0,5,1,6],[1,6,3,6],[3,6,4,5],[4,5,4,4],[4,4,3,3]],
+ '9':[[3,3,1,3],[1,3,0,2],[0,2,0,1],[0,1,1,0],[1,0,3,0],[3,0,4,1],[4,1,4,5],[4,5,3,6],[3,6,1,6],[1,6,0,5]],
+ ' ':[], '.':[[2,5,2,6]], '-':[[1,3,3,3]], '/':[[4,0,0,6]],
+ ':':[[2,2,2,2.6],[2,4,2,4.6]], '*':[[2,1,2,5],[0,2,4,4],[4,2,0,4]],
+};
+
+/* ------------------------------------------------------------------ *
+ *  LINE BATCHING — everything is a vector stroke, drawn twice for the *
+ *  phosphor bloom.  Two colours only, like the real cabinet overlay.  *
+ * ------------------------------------------------------------------ */
+const NB = 4;                                    // intensity buckets
+const layers = { g: [], r: [] };
+for (const k in layers) for (let i=0;i<NB;i++) layers[k].push([]);
+const BUCKET_A = [0.26, 0.50, 0.76, 1.0];
+const GREEN = [ 78, 255, 128];
+const RED   = [255,  72,  56];
+
+function pl(layer, x1, y1, x2, y2, inten){
+  if (!(x1===x1 && y1===y1 && x2===x2 && y2===y2)) return;   // NaN guard
+  const b = clamp(Math.round(inten*(NB-1)), 0, NB-1);
+  layers[layer][b].push(x1,y1,x2,y2);
+}
+function clearLayers(){ for (const k in layers) for (const a of layers[k]) a.length = 0; }
+
+function strokeLayer(buckets, rgb, glowScale){
+  const [r,g,b] = rgb;
+  for (let i=0;i<NB;i++){
+    const arr = buckets[i];
+    if (!arr.length) continue;
+    const p = new Path2D();
+    for (let j=0;j<arr.length;j+=4){ p.moveTo(arr[j],arr[j+1]); p.lineTo(arr[j+2],arr[j+3]); }
+    const a = BUCKET_A[i];
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    // outer halo
+    ctx.strokeStyle = `rgba(${r},${g},${b},${a*0.070*glowScale})`;
+    ctx.lineWidth = 7.0; ctx.stroke(p);
+    // inner halo
+    ctx.strokeStyle = `rgba(${r},${g},${b},${a*0.19*glowScale})`;
+    ctx.lineWidth = 3.2; ctx.stroke(p);
+    // hot core
+    ctx.strokeStyle = `rgba(${Math.min(255,r+140)},${Math.min(255,g+40)},${Math.min(255,b+120)},${a})`;
+    ctx.lineWidth = 1.35; ctx.stroke(p);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  MODELS                                                            *
+ * ------------------------------------------------------------------ */
+function box(w,h,d,ox=0,oy=0,oz=0){
+  const x=w/2,y=h/2,z=d/2;
+  const v=[[-x,-y,-z],[x,-y,-z],[x,y,-z],[-x,y,-z],[-x,-y,z],[x,-y,z],[x,y,z],[-x,y,z]]
+          .map(p=>[p[0]+ox,p[1]+oy,p[2]+oz]);
+  const e=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  return {v,e};
+}
+function merge(parts){
+  const v=[],e=[];
+  for(const p of parts){ const o=v.length; for(const q of p.v) v.push(q); for(const q of p.e) e.push([q[0]+o,q[1]+o]); }
+  return {v,e};
+}
+function scaleModel(m,s){ return {v:m.v.map(p=>[p[0]*s,p[1]*s,p[2]*s]), e:m.e}; }
+
+const M_TANK = merge([
+  box(0.62,0.58,3.5, -1.06,0.30,0),          // left tread
+  box(0.62,0.58,3.5,  1.06,0.30,0),          // right tread
+  box(1.85,0.66,2.9,  0,   0.88,0.10),       // hull
+  box(1.20,0.56,1.25, 0,   1.48,-0.15),      // turret
+  box(0.18,0.18,2.10, 0,   1.52, 1.20),      // main gun
+  {v:[[0,1.76,-0.6],[0,2.25,-0.6],[-0.45,2.35,-0.6],[0.45,2.35,-0.6]],
+   e:[[0,1],[2,3],[1,2],[1,3]]},             // radar mast
+]);
+const M_SUPER = merge([
+  scaleModel(M_TANK,1.28),
+  box(2.4,0.16,0.16, 0,1.95,0.9),
+  box(0.16,0.16,2.4, 1.2,1.95,0.9),
+  box(0.16,0.16,2.4,-1.2,1.95,0.9),
+]);
+const M_MISSILE = merge([
+  box(0.34,0.34,3.0, 0,0.95,0),
+  {v:[[0,0.95,2.35],[-0.17,0.78,1.5],[0.17,0.78,1.5],[0.17,1.12,1.5],[-0.17,1.12,1.5]],
+   e:[[0,1],[0,2],[0,3],[0,4],[1,2],[2,3],[3,4],[4,1]]},
+  {v:[[0,0.95,-1.4],[0,1.85,-1.95],[0,0.95,-1.95],[0,0.05,-1.95]],
+   e:[[0,1],[1,2],[2,0],[0,3],[3,2]]},
+  {v:[[0,0.95,-1.4],[0.9,0.95,-1.95],[0,0.95,-1.95],[-0.9,0.95,-1.95]],
+   e:[[0,1],[1,2],[2,0],[0,3],[3,2]]},
+]);
+const M_SAUCER = (() => {
+  const v=[],e=[],n=11,r=1.7;
+  for(let i=0;i<n;i++) v.push([Math.cos(i/n*TAU)*r, 0, Math.sin(i/n*TAU)*r]);
+  v.push([0,0.85,0]); v.push([0,-0.6,0]);
+  const top=n, bot=n+1;
+  for(let i=0;i<n;i++){ e.push([i,(i+1)%n]); e.push([i,top]); e.push([i,bot]); }
+  return {v,e};
+})();
+function pyramid(s,h){
+  return {v:[[-s,0,-s],[s,0,-s],[s,0,s],[-s,0,s],[0,h,0]],
+          e:[[0,1],[1,2],[2,3],[3,0],[0,4],[1,4],[2,4],[3,4]]};
+}
+const OBSTACLES = [
+  {m: pyramid(2.6, 5.4), r: 3.2},
+  {m: pyramid(3.6, 3.4), r: 4.2},
+  {m: box(3.6,3.6,3.6, 0,1.8,0), r: 2.9},
+  {m: box(2.4,7.0,2.4, 0,3.5,0), r: 2.0},
+  {m: merge([box(4.4,1.2,4.4,0,0.6,0), pyramid(1.8,3.2)]), r: 3.4},
+];
+
+/* ------------------------------------------------------------------ *
+ *  CANVAS / VIEW                                                     *
+ * ------------------------------------------------------------------ */
+const cvs = document.getElementById("c");
+const ctx = cvs.getContext("2d", { alpha: false });
+let W=0,H=0,DPR=1, bandH=0, VY=0,VH=0, cx=0,cy=0, focal=600, fscale=2;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = cvs.clientWidth; H = cvs.clientHeight;
+  cvs.width = Math.max(1, Math.round(W*DPR));
+  cvs.height= Math.max(1, Math.round(H*DPR));
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  bandH = clamp(H*0.155, 62, 150);
+  VY = bandH; VH = H - bandH;
+  cx = W/2;
+  cy = VY + VH*0.44;                       // horizon sits above centre
+  focal = Math.min(VH*1.15, W*0.82);
+  fscale = clamp(bandH*0.062, 1.6, 4.2);
+}
+window.addEventListener("resize", resize);
+
+let shakeX=0, shakeY=0;
+
+/* ---- camera / projection ---- */
+const cam = { x: 0, z: 0, yaw: 0, eye: 1.75, bob: 0 };
+const ZN = 0.75;
+
+function toCam(wx,wy,wz){
+  const dx=wx-cam.x, dy=wy-(cam.eye+cam.bob), dz=wz-cam.z;
+  const s=Math.sin(cam.yaw), c=Math.cos(cam.yaw);
+  return { x: dx*c - dz*s, y: dy, z: dx*s + dz*c };
+}
+function projX(p){ return cx + (p.x/p.z)*focal + shakeX; }
+function projY(p){ return cy - (p.y/p.z)*focal + shakeY; }
+
+function segment(a, b, inten){
+  let A=a, B=b;
+  const ina = A.z > ZN, inb = B.z > ZN;
+  if (!ina && !inb) return;
+  if (ina !== inb){
+    const t = (ZN - A.z)/(B.z - A.z);
+    const P = { x: A.x+(B.x-A.x)*t, y: A.y+(B.y-A.y)*t, z: ZN };
+    if (ina) B = P; else A = P;
+  }
+  pl("g", projX(A), projY(A), projX(B), projY(B), inten);
+}
+function depthFade(z){ return clamp(1.18 - z/135, 0.22, 1); }
+
+function drawModel(m, x, z, yaw, scale, boost){
+  const s=Math.sin(yaw), c=Math.cos(yaw);
+  const cv = new Array(m.v.length);
+  let minZ = 1e9, any=false;
+  for (let i=0;i<m.v.length;i++){
+    const p=m.v[i];
+    const lx=p[0]*scale, ly=p[1]*scale, lz=p[2]*scale;
+    const wx = x + lx*c + lz*s;
+    const wz = z - lx*s + lz*c;
+    const q = toCam(wx, ly, wz);
+    cv[i]=q; if (q.z<minZ) minZ=q.z; if (q.z>ZN) any=true;
+  }
+  if (!any) return;
+  const inten = clamp(depthFade(Math.max(minZ, 1))*(boost||1), 0.16, 1);
+  for (const e of m.e) segment(cv[e[0]], cv[e[1]], inten);
+}
+
+/* ------------------------------------------------------------------ *
+ *  DISTANT SILHOUETTE — mountains, volcano, moon.  Bearing-only.     *
+ * ------------------------------------------------------------------ */
+const RG = mulberry32(0x5150C0DE);
+const RIDGE_N = 900;
+const ridge = new Float32Array(RIDGE_N);
+(() => {
+  let h = 0.35;
+  for (let i=0;i<RIDGE_N;i++){ h += (RG()-0.5)*0.16; h = clamp(h, 0.06, 1); ridge[i]=h; }
+  // a handful of proper peaks
+  for (let k=0;k<11;k++){
+    const c = (RG()*RIDGE_N)|0, w = 12+((RG()*38)|0), pk = 0.55+RG()*0.45;
+    for (let i=-w;i<=w;i++){
+      const idx=((c+i)%RIDGE_N+RIDGE_N)%RIDGE_N;
+      ridge[idx] = Math.max(ridge[idx], pk*(1 - Math.abs(i)/w));
+    }
+  }
+  // smooth
+  for (let pass=0;pass<3;pass++){
+    const cp = ridge.slice();
+    for (let i=0;i<RIDGE_N;i++){
+      const a=cp[(i-1+RIDGE_N)%RIDGE_N], b=cp[i], d=cp[(i+1)%RIDGE_N];
+      ridge[i]=(a+b*2+d)/4;
+    }
+  }
+})();
+
+const VOLC_BEARING = 2.30;
+const MOON_BEARING = 4.05;
+const volcParts = [];
+
+function bearingToX(theta){                 // theta = world bearing
+  const d = angDiff(cam.yaw, theta);
+  if (Math.abs(d) > 1.30) return null;      // ~74deg half-FOV cut
+  return cx + Math.tan(d)*focal + shakeX;
+}
+
+function drawHorizon(){
+  const hy = cy + shakeY;
+  // the ground/sky boundary
+  pl("g", 0, hy, W, hy, 0.72);
+
+  const scale = VH*0.24;
+  // ridge line, sampled across the visible arc
+  let px=null, py=null;
+  const STEP = 0.006;
+  for (let d=-1.30; d<=1.30; d+=STEP){
+    const th = cam.yaw + d;
+    const idx = (((th/TAU)*RIDGE_N)|0 % RIDGE_N + RIDGE_N) % RIDGE_N;
+    const X = cx + Math.tan(d)*focal + shakeX;
+    const Y = hy - ridge[idx]*scale;
+    if (px !== null && X>=-W && X<=W*2){
+      const inten = 0.42 + 0.18*Math.cos(d);
+      pl("g", px, py, X, Y, inten);
+    }
+    px=X; py=Y;
+  }
+
+  // volcano
+  const vx = bearingToX(VOLC_BEARING);
+  if (vx !== null){
+    const wsc = focal*0.16, hh = VH*0.40;
+    pl("g", vx-wsc*1.5, hy, vx-wsc*0.30, hy-hh, 0.85);
+    pl("g", vx+wsc*1.5, hy, vx+wsc*0.30, hy-hh, 0.85);
+    pl("g", vx-wsc*0.30, hy-hh, vx-wsc*0.10, hy-hh*0.90, 0.85);
+    pl("g", vx+wsc*0.30, hy-hh, vx+wsc*0.10, hy-hh*0.90, 0.85);
+    pl("g", vx-wsc*0.10, hy-hh*0.90, vx+wsc*0.10, hy-hh*0.90, 0.6);
+    for (const p of volcParts){
+      const X = vx + p.x*wsc, Y = hy - hh - p.y*hh*0.55;
+      pl("g", X, Y, X+p.vx*3, Y+p.vy*3, clamp(p.life,0,1)*0.95);
+    }
+  }
+
+  // crescent moon
+  const mx = bearingToX(MOON_BEARING);
+  if (mx !== null){
+    const my = hy - VH*0.58, r = VH*0.055;
+    let lx=null, ly=null;
+    for (let a=-1.15; a<=1.15; a+=0.10){
+      const X=mx+Math.cos(a)*r, Y=my+Math.sin(a)*r;
+      if(lx!==null) pl("g",lx,ly,X,Y,0.8); lx=X; ly=Y;
+    }
+    lx=null;
+    for (let a=-1.15; a<=1.15; a+=0.10){
+      const X=mx+Math.cos(a)*r*0.42, Y=my+Math.sin(a)*r*1.02;
+      if(lx!==null) pl("g",lx,ly,X,Y,0.8); lx=X; ly=Y;
+    }
+  }
+}
+function updateVolcano(dt){
+  for (let i=volcParts.length-1;i>=0;i--){
+    const p=volcParts[i];
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy-=1.5*dt; p.life-=dt*0.42;
+    if (p.life<=0 || p.y<-0.2) volcParts.splice(i,1);
+  }
+  if (Math.random() < dt*7 && volcParts.length < 90)
+    volcParts.push({x:rnd(-0.08,0.08), y:0, vx:rnd(-0.45,0.45), vy:rnd(0.55,1.3), life:1});
+}
+
+/* ------------------------------------------------------------------ *
+ *  WORLD                                                             *
+ * ------------------------------------------------------------------ */
+const FIELD = 150;
+const obstacles = [];
+function spawnObstacle(near){
+  const t = OBSTACLES[rndi(OBSTACLES.length)];
+  let a, d;
+  if (near){ a = rnd(0,TAU); d = rnd(14, FIELD); }
+  else { a = cam.yaw + rnd(-1.7,1.7); d = rnd(FIELD*0.72, FIELD); }
+  return { def:t, x: cam.x + Math.sin(a)*d, z: cam.z + Math.cos(a)*d, yaw: rnd(0,TAU) };
+}
+for (let i=0;i<58;i++) obstacles.push(spawnObstacle(true));
+
+const enemies = [], shots = [], shards = [];
+let saucer = null, saucerTimer = rnd(14, 30);
+
+let score = 0, hiscore = 24500, kills = 0, lives = 3;
+let deadTimer = 0;
+const cracks = [];
+let crackAlpha = 0;
+
+function losClear(ax,az,bx,bz){
+  const dx=bx-ax, dz=bz-az, len2=dx*dx+dz*dz;
+  if (len2 < 1e-4) return true;
+  for (const o of obstacles){
+    const t = clamp(((o.x-ax)*dx + (o.z-az)*dz)/len2, 0, 1);
+    const px=ax+dx*t, pz=az+dz*t;
+    const r=o.def.r+0.7;
+    if ((px-o.x)**2 + (pz-o.z)**2 < r*r) return false;
+  }
+  return true;
+}
+function pushOut(ent, rad){
+  for (const o of obstacles){
+    const dx=ent.x-o.x, dz=ent.z-o.z;
+    const r=o.def.r+rad, d2=dx*dx+dz*dz;
+    if (d2 < r*r && d2 > 1e-5){
+      const d=Math.sqrt(d2), k=(r-d)/d;
+      ent.x += dx*k; ent.z += dz*k;
+    }
+  }
+}
+
+function spawnEnemy(){
+  const roll = Math.random();
+  const kind = roll < 0.14 ? "missile" : roll < 0.32 ? "super" : "tank";
+  const a = cam.yaw + rnd(-Math.PI, Math.PI), d = rnd(70, 118);
+  return {
+    kind,
+    x: cam.x + Math.sin(a)*d, z: cam.z + Math.cos(a)*d,
+    yaw: a + Math.PI + rnd(-0.5,0.5),
+    speed: kind==="missile" ? 17 : kind==="super" ? 9.5 : 7.0,
+    turn:  kind==="missile" ? 0.55 : kind==="super" ? 0.95 : 0.80,
+    standoff: kind==="missile" ? 0 : kind==="super" ? 30 : 40,
+    cool: rnd(1.4, 3.2),
+    strafe: Math.random()<0.5 ? 1 : -1,
+    strafeT: rnd(1.5,3.5),
+    value: kind==="missile" ? 2000 : kind==="super" ? 3000 : 1000,
+    r: kind==="missile" ? 1.7 : 2.7,
+  };
+}
+
+function explode(x,y,z,n,spread,big){
+  for (let i=0;i<n;i++){
+    const a=rnd(0,TAU), e=rnd(-0.35,1.15), sp=rnd(spread*0.35, spread);
+    shards.push({
+      x, y: y+rnd(-0.3,1.1), z,
+      vx: Math.sin(a)*Math.cos(e)*sp, vy: Math.sin(e)*sp, vz: Math.cos(a)*Math.cos(e)*sp,
+      dx: rnd(-1,1), dy: rnd(-1,1), dz: rnd(-1,1),
+      len: rnd(0.5,1.9)*(big?1.6:1), life: 1, decay: rnd(0.5,0.95),
+    });
+  }
+}
+
+function fire(from, dirYaw, owner, muzzleY){
+  shots.push({
+    x: from.x + Math.sin(dirYaw)*2.4, y: muzzleY,
+    z: from.z + Math.cos(dirYaw)*2.4,
+    vx: Math.sin(dirYaw)*(owner==="p"?62:44),
+    vz: Math.cos(dirYaw)*(owner==="p"?62:44),
+    owner, life: 3.2,
+  });
+}
+
+/* ---- the driver: an AI plays, forever ---- */
+const P = { yawVel: 0, speed: 0, cool: 0, patrol: rnd(0,TAU), patrolT: 0, wob: 0, muzzle: 0 };
+
+function nearestEnemy(){
+  let best=null, bd=1e9;
+  for (const e of enemies){
+    const d=(e.x-cam.x)**2 + (e.z-cam.z)**2;
+    if (d<bd){ bd=d; best=e; }
+  }
+  return best;
+}
+
+function drivePlayer(dt, t){
+  if (deadTimer > 0) return;
+  const tgt = nearestEnemy();
+  let wantYaw, wantSpd;
+
+  if (tgt){
+    const dx=tgt.x-cam.x, dz=tgt.z-cam.z, d=Math.hypot(dx,dz);
+    const bearing = Math.atan2(dx,dz);
+    P.wob = lerp(P.wob, Math.sin(t*1.7)*0.05 + Math.sin(t*0.73)*0.035, dt*2);
+    wantYaw = bearing + P.wob;
+    wantSpd = d > 55 ? 11 : d > 30 ? 6 : d > 18 ? 1.5 : -7;
+    const ad = Math.abs(angDiff(cam.yaw, bearing));
+    if (ad > 0.7) wantSpd *= 0.35;
+    if (P.cool <= 0 && ad < 0.055 && d < 105 && losClear(cam.x,cam.z,tgt.x,tgt.z)){
+      fire(cam, cam.yaw, "p", 1.35);
+      P.cool = rnd(0.85, 1.5); P.muzzle = 0.07;
+    }
+  } else {
+    P.patrolT -= dt;
+    if (P.patrolT <= 0){ P.patrol = cam.yaw + rnd(-2.2,2.2); P.patrolT = rnd(2.5,6); }
+    wantYaw = P.patrol; wantSpd = 9;
+  }
+
+  // steer around scenery
+  let avoid = 0;
+  const fx=Math.sin(cam.yaw), fz=Math.cos(cam.yaw);
+  for (const o of obstacles){
+    const dx=o.x-cam.x, dz=o.z-cam.z, d=Math.hypot(dx,dz);
+    if (d > 22 || d < 0.1) continue;
+    const fwd=(dx*fx+dz*fz)/d;
+    if (fwd < 0.55) continue;
+    const side=(dx*fz - dz*fx)/d;
+    avoid += -Math.sign(side||1) * (1 - d/22) * 2.6;
+  }
+
+  let steer = angDiff(cam.yaw, wantYaw)*2.6 + avoid;
+  steer = clamp(steer, -1.5, 1.5);
+  P.yawVel = lerp(P.yawVel, steer, dt*5);
+  cam.yaw += P.yawVel*dt;
+
+  P.speed = lerp(P.speed, wantSpd, dt*1.6);
+  cam.x += Math.sin(cam.yaw)*P.speed*dt;
+  cam.z += Math.cos(cam.yaw)*P.speed*dt;
+  pushOut(cam, 2.4);
+
+  cam.bob = Math.sin(t*7.3)*0.035*clamp(Math.abs(P.speed)/10,0,1)
+          + Math.sin(t*3.1)*0.018;
+  P.cool -= dt; P.muzzle -= dt;
+}
+
+function driveEnemy(e, dt){
+  const dx=cam.x-e.x, dz=cam.z-e.z, d=Math.hypot(dx,dz);
+  const bearing = Math.atan2(dx,dz);
+  e.strafeT -= dt;
+  if (e.strafeT <= 0){ e.strafe = -e.strafe; e.strafeT = rnd(1.5,4); }
+
+  let want = bearing;
+  let spd = e.speed;
+  if (e.kind !== "missile"){
+    if (d > e.standoff + 8)      { want = bearing + e.strafe*0.25; }
+    else if (d < e.standoff*0.65){ want = bearing; spd = -e.speed*0.7; }
+    else                          { want = bearing + e.strafe*0.85; spd = e.speed*0.55; }
+  }
+  const st = clamp(angDiff(e.yaw, want)*2.0, -e.turn, e.turn);
+  e.yaw += st*dt;
+  e.x += Math.sin(e.yaw)*spd*dt;
+  e.z += Math.cos(e.yaw)*spd*dt;
+  if (e.kind !== "missile") pushOut(e, 2.2);
+
+  e.cool -= dt;
+  if (e.kind === "missile"){
+    if (d < 3.2) { hitPlayer(); e.dead = true; explode(e.x,1,e.z,26,9,false); }
+  } else if (e.cool <= 0 && d < 95 && Math.abs(angDiff(e.yaw, bearing)) < 0.09
+             && losClear(e.x,e.z,cam.x,cam.z) && deadTimer<=0){
+    fire(e, e.yaw, "e", 1.45);
+    e.cool = rnd(2.0, 4.2);
+  }
+}
+
+function hitPlayer(){
+  if (deadTimer > 0) return;
+  const px = cx + rnd(-0.28,0.28)*W, py = cy + rnd(-0.15,0.35)*VH;
+  buildCracks(px,py);
+  crackAlpha = 1;
+  shakeAmp = 22;
+  deadTimer = 2.6;
+}
+function buildCracks(px,py){
+  cracks.length = 0;
+  const n = 8 + rndi(5);
+  for (let k=0;k<n;k++){
+    let a = rnd(0,TAU), x=px, y=py;
+    const segs = 3 + rndi(4);
+    for (let s=0;s<segs;s++){
+      const len = rnd(20, 90);
+      const nx = x + Math.cos(a)*len, ny = y + Math.sin(a)*len;
+      cracks.push([x,y,nx,ny]);
+      if (Math.random() < 0.4){
+        const ba = a + rnd(-1.1,1.1), bl = rnd(14,52);
+        cracks.push([x,y,x+Math.cos(ba)*bl, y+Math.sin(ba)*bl]);
+      }
+      x=nx; y=ny; a += rnd(-0.5,0.5);
+    }
+  }
+}
+let shakeAmp = 0;
+
+/* ------------------------------------------------------------------ *
+ *  HUD                                                               *
+ * ------------------------------------------------------------------ */
+function drawText(str, x, y, sc, inten, layer, align){
+  const adv = 5.6*sc;
+  const w = str.length*adv - 1.6*sc;
+  let ox = align === "c" ? x - w/2 : align === "r" ? x - w : x;
+  for (const chRaw of str.toUpperCase()){
+    const segs = FONT[chRaw];
+    if (segs) for (const s of segs)
+      pl(layer, ox+s[0]*sc, y+s[1]*sc, ox+s[2]*sc, y+s[3]*sc, inten);
+    ox += adv;
+  }
+}
+const pad = n => String(n).padStart(6,"0");
+
+let sweep = 0;
+function drawBand(dt){
+  const bcy = bandH*0.5, r = bandH*0.34;
+  // radar dish outline
+  let lx=null, ly=null;
+  for (let a=0;a<=TAU+0.01;a+=TAU/48){
+    const X=cx+Math.cos(a)*r, Y=bcy+Math.sin(a)*r*0.94;
+    if(lx!==null) pl("r",lx,ly,X,Y,0.62); lx=X; ly=Y;
+  }
+  // forward FOV wedge
+  for (const s of [-1,1]){
+    const a = s*0.52;
+    pl("r", cx, bcy, cx+Math.sin(a)*r, bcy-Math.cos(a)*r*0.94, 0.42);
+  }
+  // sweep
+  sweep = (sweep + dt*2.4) % TAU;
+  pl("r", cx, bcy, cx+Math.sin(sweep)*r, bcy-Math.cos(sweep)*r*0.94, 1);
+  pl("r", cx, bcy, cx+Math.sin(sweep-0.13)*r*0.92, bcy-Math.cos(sweep-0.13)*r*0.88, 0.5);
+  pl("r", cx, bcy, cx+Math.sin(sweep-0.26)*r*0.80, bcy-Math.cos(sweep-0.26)*r*0.76, 0.28);
+
+  // blips
+  for (const e of enemies){
+    const dx=e.x-cam.x, dz=e.z-cam.z, d=Math.hypot(dx,dz);
+    if (d > 125) continue;
+    const rel = angDiff(cam.yaw, Math.atan2(dx,dz));
+    const k = d/125;
+    const X = cx + Math.sin(rel)*r*k, Y = bcy - Math.cos(rel)*r*0.94*k;
+    const near = Math.abs(angDiff(sweep, rel)) < 0.5 ? 1 : 0.55;
+    const s = bandH*0.045;
+    pl("r", X-s, Y-s, X+s, Y+s, near);
+    pl("r", X+s, Y-s, X-s, Y+s, near);
+  }
+
+  drawText("SCORE", W*0.035, bcy - fscale*7.5, fscale, 0.7, "r", "l");
+  drawText(pad(score), W*0.035, bcy + fscale*1.0, fscale*1.25, 1, "r", "l");
+  drawText("HIGH SCORE", W*0.965, bcy - fscale*7.5, fscale, 0.7, "r", "r");
+  drawText(pad(Math.max(hiscore,score)), W*0.965, bcy + fscale*1.0, fscale*1.25, 0.85, "r", "r");
+
+  // remaining tanks, as little plan-view icons
+  const iw = fscale*3.4, ih = fscale*2.2;
+  for (let k=0;k<lives-1;k++){
+    const X = W*0.035 + k*iw*1.7, Y = bcy + fscale*10;
+    pl("r", X,      Y,      X+iw,   Y,      0.8);
+    pl("r", X+iw,   Y,      X+iw,   Y+ih,   0.8);
+    pl("r", X+iw,   Y+ih,   X,      Y+ih,   0.8);
+    pl("r", X,      Y+ih,   X,      Y,      0.8);
+    pl("r", X+iw/2, Y,      X+iw/2, Y-ih*0.8, 0.8);   // barrel
+  }
+
+  pl("r", 0, bandH-1, W, bandH-1, 0.5);
+}
+
+function drawReticle(){
+  const y = cy + shakeY;
+  const g = VH*0.055, arm = VH*0.16, tick = VH*0.022;
+  const i = 0.9;
+  // horizontal gunsight bars with range ticks
+  for (const s of [-1,1]){
+    pl("g", cx + s*g, y, cx + s*(g+arm), y, i);
+    for (let k=1;k<=3;k++){
+      const X = cx + s*(g + arm*k/3);
+      pl("g", X, y-tick*(k===3?1.4:1), X, y+tick*(k===3?1.4:1), i*0.8);
+    }
+  }
+  // centre cross
+  const c2 = VH*0.018;
+  pl("g", cx-c2, y, cx+c2, y, 1);
+  pl("g", cx, y-c2, cx, y+c2, 1);
+  // vertical guide notches
+  pl("g", cx, y-VH*0.075, cx, y-VH*0.052, 0.7);
+  pl("g", cx, y+VH*0.052, cx, y+VH*0.075, 0.7);
+
+  // viewport frame corners
+  const m = VH*0.03, L = VH*0.07;
+  const x0=m, x1=W-m, y0=VY+m, y1=H-m;
+  for (const [X,Y,sx,sy] of [[x0,y0,1,1],[x1,y0,-1,1],[x0,y1,1,-1],[x1,y1,-1,-1]]){
+    pl("g", X, Y, X+sx*L, Y, 0.55);
+    pl("g", X, Y, X, Y+sy*L, 0.55);
+  }
+}
+
+function drawTargetBracket(){
+  const tgt = nearestEnemy();
+  if (!tgt || deadTimer>0) return;
+  const dx=tgt.x-cam.x, dz=tgt.z-cam.z, d=Math.hypot(dx,dz);
+  const bearing = Math.atan2(dx,dz);
+  const rel = angDiff(cam.yaw, bearing);
+
+  if (Math.abs(rel) > 0.62){
+    // off-screen indicator, chevrons at the edge
+    const s = rel > 0 ? 1 : -1;
+    const X = cx + s*(W*0.40), Y = cy + shakeY;
+    const w = VH*0.028;
+    for (let k=0;k<3;k++){
+      const ox = X + s*k*w*1.5;
+      pl("g", ox, Y-w, ox+s*w, Y, 0.85 - k*0.22);
+      pl("g", ox+s*w, Y, ox, Y+w, 0.85 - k*0.22);
+    }
+    return;
+  }
+  if (Math.abs(rel) > 0.16 || d > 110) return;
+  const q = toCam(tgt.x, 1.4, tgt.z);
+  if (q.z <= ZN) return;
+  const X = projX(q), Y = projY(q);
+  const s = clamp(focal*2.6/q.z, 8, VH*0.45);
+  const L = s*0.32;
+  for (const [sx,sy] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+    pl("g", X+sx*s, Y+sy*s, X+sx*s-sx*L, Y+sy*s, 1);
+    pl("g", X+sx*s, Y+sy*s, X+sx*s, Y+sy*s-sy*L, 1);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  MAIN LOOP                                                         *
+ * ------------------------------------------------------------------ */
+let last = 0, tAcc = 0;
+
+function step(dt, t){
+  updateVolcano(dt);
+  drivePlayer(dt, t);
+
+  // keep the scenery field wrapped around the camera — endless plain
+  for (let i=0;i<obstacles.length;i++){
+    const o=obstacles[i];
+    if ((o.x-cam.x)**2 + (o.z-cam.z)**2 > FIELD*FIELD) obstacles[i]=spawnObstacle(false);
+  }
+
+  // enemy population
+  if (deadTimer<=0 && enemies.length < (kills > 6 ? 3 : 2) && Math.random() < dt*0.42)
+    enemies.push(spawnEnemy());
+
+  for (const e of enemies) driveEnemy(e, dt);
+
+  // shots
+  for (let i=shots.length-1;i>=0;i--){
+    const s=shots[i];
+    s.x += s.vx*dt; s.z += s.vz*dt; s.life -= dt;
+    let gone = s.life <= 0;
+    if (!gone) for (const o of obstacles){
+      if ((s.x-o.x)**2 + (s.z-o.z)**2 < (o.def.r*0.8)**2){
+        explode(s.x, 1.2, s.z, 7, 4, false); gone = true; break;
+      }
+    }
+    if (!gone && s.owner === "p"){
+      for (const e of enemies){
+        if ((s.x-e.x)**2 + (s.z-e.z)**2 < e.r*e.r){
+          e.dead = true; gone = true;
+          explode(e.x, 1.0, e.z, e.kind==="super"?46:34, e.kind==="super"?13:10, e.kind==="super");
+          score += e.value; kills++;
+          break;
+        }
+      }
+    } else if (!gone && s.owner === "e"){
+      if ((s.x-cam.x)**2 + (s.z-cam.z)**2 < 6.0){ hitPlayer(); gone = true; }
+    }
+    if (gone) shots.splice(i,1);
+  }
+  for (let i=enemies.length-1;i>=0;i--) if (enemies[i].dead) enemies.splice(i,1);
+
+  // shards
+  for (let i=shards.length-1;i>=0;i--){
+    const s=shards[i];
+    s.x+=s.vx*dt; s.y+=s.vy*dt; s.z+=s.vz*dt;
+    s.vy -= 13*dt;
+    if (s.y < 0.05){ s.y=0.05; s.vy*=-0.32; s.vx*=0.72; s.vz*=0.72; }
+    s.life -= dt*s.decay;
+    if (s.life <= 0) shards.splice(i,1);
+  }
+
+  // saucer
+  saucerTimer -= dt;
+  if (!saucer && saucerTimer <= 0){
+    const a = cam.yaw + rnd(-1.0,1.0), d = rnd(45,80);
+    saucer = { x: cam.x+Math.sin(a)*d, z: cam.z+Math.cos(a)*d, yaw: rnd(0,TAU), life: 22 };
+  }
+  if (saucer){
+    saucer.x += Math.sin(saucer.yaw)*10*dt;
+    saucer.z += Math.cos(saucer.yaw)*10*dt;
+    saucer.yaw += Math.sin(t*0.5)*0.25*dt;
+    saucer.life -= dt;
+    if (saucer.life <= 0){ saucer = null; saucerTimer = rnd(22,50); }
+  }
+
+  // death / respawn
+  if (deadTimer > 0){
+    deadTimer -= dt;
+    P.speed = lerp(P.speed, 0, dt*4);
+    cam.x += Math.sin(cam.yaw)*P.speed*dt;
+    cam.z += Math.cos(cam.yaw)*P.speed*dt;
+    if (deadTimer <= 0){
+      // fresh position, clear the field
+      cam.x += rnd(-40,40); cam.z += rnd(-40,40);
+      cam.yaw = rnd(0,TAU);
+      enemies.length = 0; shots.length = 0;
+      obstacles.length = 0;
+      for (let i=0;i<58;i++) obstacles.push(spawnObstacle(true));
+      pushOut(cam, 3);
+      kills = 0;
+      lives--;
+      if (lives <= 0){                       // game over — attract mode starts again
+        if (score > hiscore) hiscore = score;
+        score = 0; lives = 3;
+      }
+      P.cool = 1.2;
+    }
+  }
+  crackAlpha = Math.max(0, crackAlpha - dt*0.36);
+  shakeAmp *= Math.pow(0.02, dt);
+  shakeX = (Math.random()-0.5)*shakeAmp;
+  shakeY = (Math.random()-0.5)*shakeAmp;
+}
+
+function render(dt){
+  clearLayers();
+
+  drawHorizon();
+
+  for (const o of obstacles) drawModel(o.def.m, o.x, o.z, o.yaw, 1, 1);
+
+  for (const e of enemies){
+    const m = e.kind==="missile" ? M_MISSILE : e.kind==="super" ? M_SUPER : M_TANK;
+    drawModel(m, e.x, e.z, e.yaw, 1, 1.12);
+  }
+  if (saucer) drawModel(M_SAUCER, saucer.x, saucer.z, saucer.yaw, 1, 0.85);
+
+  // shots as short bright streaks
+  for (const s of shots){
+    const a = toCam(s.x, s.y, s.z);
+    const b = toCam(s.x - s.vx*0.02, s.y, s.z - s.vz*0.02);
+    segment(a, b, 1);
+    const q = toCam(s.x, s.y, s.z);
+    if (q.z > ZN){
+      const X=projX(q), Y=projY(q), r=clamp(focal*0.11/q.z, 1.2, 9);
+      pl("g", X-r, Y, X+r, Y, 1); pl("g", X, Y-r, X, Y+r, 1);
+    }
+  }
+
+  // debris
+  for (const s of shards){
+    const a = toCam(s.x, s.y, s.z);
+    const b = toCam(s.x+s.dx*s.len, s.y+s.dy*s.len, s.z+s.dz*s.len);
+    segment(a, b, clamp(s.life,0,1));
+  }
+
+  // muzzle flash
+  if (P.muzzle > 0){
+    const y = cy + shakeY, s = VH*0.05;
+    for (let k=0;k<6;k++){
+      const a = k/6*TAU + 0.3;
+      pl("g", cx, y, cx+Math.cos(a)*s, y+Math.sin(a)*s, 1);
+    }
+  }
+
+  drawTargetBracket();
+  drawReticle();
+
+  // cracked screen
+  if (crackAlpha > 0.001){
+    const i = clamp(crackAlpha,0,1);
+    for (const c of cracks) pl("g", c[0], c[1], c[2], c[3], i);
+  }
+
+  drawBand(dt);
+
+  // ---- paint ----
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, VY, W, VH); ctx.clip();
+  strokeLayer(layers.g, GREEN, 1);
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, bandH); ctx.clip();
+  strokeLayer(layers.r, RED, 1.25);
+  ctx.restore();
+}
+
+function frame(ts){
+  if (!last) last = ts;
+  let dt = (ts - last)/1000; last = ts;
+  dt = clamp(dt, 0, 0.05);
+  tAcc += dt;
+  step(dt, tAcc);
+  render(dt);
+  requestAnimationFrame(frame);
+}
+
+resize();
+// nudge the camera off any scenery it started inside
+pushOut(cam, 3);
+requestAnimationFrame(frame);
+
+// click anywhere for fullscreen — the only interaction there is
+document.getElementById("stage").addEventListener("click", () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+  else document.exitFullscreen?.();
+});
+})();
+</script>
+</body>
+</html>

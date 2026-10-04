@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tear-Off Calendar</title>
+<style>
+  :root {
+    --paper: #fdfaf3;
+    --paper-shadow: #e8e2d0;
+    --ink: #1a1a1a;
+    --accent: #c8342f;
+    --binding: #2a2a2a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: radial-gradient(circle at 50% 30%, #3a3532 0%, #1b1815 100%);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stand {
+    position: relative;
+    width: 340px;
+    height: 420px;
+    perspective: 1400px;
+  }
+
+  .binding {
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 26px;
+    background: linear-gradient(180deg, #444 0%, #1a1a1a 100%);
+    border-radius: 4px 4px 2px 2px;
+    z-index: 20;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+  }
+
+  .binding::before,
+  .binding::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    width: 10px;
+    height: 18px;
+    background: linear-gradient(180deg, #666 0%, #222 100%);
+    border-radius: 2px;
+  }
+  .binding::before { left: 20px; }
+  .binding::after { right: 20px; }
+
+  .ring {
+    position: absolute;
+    top: -6px;
+    width: 6px;
+    height: 44px;
+    background: linear-gradient(180deg, #999 0%, #444 100%);
+    border-radius: 3px;
+    z-index: 22;
+    box-shadow: inset -1px 0 2px rgba(0,0,0,0.4);
+  }
+  .ring.left { left: calc(50% - 42px); }
+  .ring.right { right: calc(50% - 42px); }
+
+  .pad {
+    position: absolute;
+    inset: 0;
+    background: var(--paper);
+    border-radius: 4px;
+    box-shadow:
+      0 20px 40px rgba(0,0,0,0.6),
+      0 2px 0 var(--paper-shadow),
+      0 4px 0 #d8d1bf,
+      0 6px 0 #cec7b5,
+      0 8px 0 #c4bdaa;
+  }
+
+  .page-stack {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+  }
+
+  .page {
+    position: absolute;
+    inset: 0;
+    background: var(--paper);
+    border-radius: 4px;
+    padding: 30px 24px 20px;
+    transform-origin: top center;
+    backface-visibility: hidden;
+    background-image:
+      linear-gradient(180deg, rgba(0,0,0,0.04) 0%, transparent 8%),
+      radial-gradient(ellipse at top, rgba(0,0,0,0.05), transparent 40%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.8),
+      0 0 0 1px rgba(0,0,0,0.05);
+  }
+
+  .perforation {
+    position: absolute;
+    top: 14px;
+    left: 8px;
+    right: 8px;
+    height: 1px;
+    background-image: linear-gradient(90deg, #b8b0a0 50%, transparent 50%);
+    background-size: 6px 1px;
+    opacity: 0.6;
+  }
+
+  .holes {
+    position: absolute;
+    top: 4px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 68px;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .hole {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, #0a0a0a, #2a2a2a);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.4);
+  }
+
+  .month-header {
+    text-align: center;
+    margin-top: 8px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .month-name {
+    font-size: 20px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    font-weight: bold;
+    color: var(--ink);
+  }
+
+  .year {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #888;
+    margin-top: 2px;
+  }
+
+  .day-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: calc(100% - 90px);
+    padding-top: 10px;
+  }
+
+  .weekday {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: var(--accent);
+    font-weight: bold;
+  }
+
+  .date-number {
+    font-size: 148px;
+    line-height: 0.9;
+    font-weight: 900;
+    color: var(--ink);
+    font-family: 'Georgia', serif;
+    margin: 4px 0;
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.08);
+  }
+
+  .quote {
+    font-size: 11px;
+    font-style: italic;
+    color: #666;
+    text-align: center;
+    padding: 0 20px;
+    letter-spacing: 0.5px;
+  }
+
+  .footer-note {
+    position: absolute;
+    bottom: 12px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10px;
+    color: #999;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Tear animation */
+  @keyframes tearOff {
+    0% {
+      transform: rotateX(0deg) translateY(0);
+      opacity: 1;
+    }
+    30% {
+      transform: rotateX(-15deg) translateY(-2px);
+      opacity: 1;
+    }
+    60% {
+      transform: rotateX(-95deg) translateY(20px);
+      opacity: 0.9;
+    }
+    100% {
+      transform: rotateX(-160deg) translateY(60px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes flipPage {
+    0% {
+      transform: rotateX(0deg);
+      opacity: 1;
+    }
+    50% {
+      transform: rotateX(-90deg);
+      opacity: 0.7;
+    }
+    100% {
+      transform: rotateX(-180deg);
+      opacity: 0;
+    }
+  }
+
+  .page.tearing {
+    animation: flipPage 0.7s cubic-bezier(0.5, 0.1, 0.7, 0.4) forwards;
+    z-index: 10;
+  }
+
+  .page.month-end.tearing {
+    animation: tearOff 1.4s cubic-bezier(0.4, 0.0, 0.6, 1.0) forwards;
+  }
+
+  .page.month-end .date-number {
+    color: var(--accent);
+  }
+
+  .page.month-end::after {
+    content: '';
+    position: absolute;
+    top: 24px;
+    left: 8px;
+    right: 8px;
+    height: 4px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      #b8b0a0 20%,
+      transparent 25%,
+      #b8b0a0 40%,
+      transparent 45%,
+      #b8b0a0 65%,
+      transparent 70%,
+      #b8b0a0 85%,
+      transparent 100%);
+    background-size: 12px 4px;
+    clip-path: polygon(
+      0% 50%, 3% 20%, 6% 70%, 9% 30%, 12% 80%, 15% 20%, 18% 60%,
+      21% 30%, 24% 70%, 27% 40%, 30% 80%, 33% 20%, 36% 60%, 39% 30%,
+      42% 70%, 45% 40%, 48% 80%, 51% 20%, 54% 60%, 57% 30%, 60% 70%,
+      63% 40%, 66% 80%, 69% 20%, 72% 60%, 75% 30%, 78% 70%, 81% 40%,
+      84% 80%, 87% 20%, 90% 60%, 93% 30%, 96% 70%, 100% 50%
+    );
+  }
+
+  .controls {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    z-index: 100;
+  }
+
+  .controls button {
+    background: rgba(255,255,255,0.1);
+    color: #fdfaf3;
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s ease;
+  }
+  .controls button:hover {
+    background: rgba(255,255,255,0.2);
+    border-color: rgba(255,255,255,0.5);
+  }
+  .controls .speed {
+    color: #ccc;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  .desk {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30%;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgba(60, 40, 20, 0.4) 50%,
+      rgba(30, 20, 10, 0.8) 100%);
+    pointer-events: none;
+    z-index: -1;
+  }
+</style>
+</head>
+<body>
+
+<div class="desk"></div>
+
+<div class="stand">
+  <div class="pad"></div>
+  <div class="binding"></div>
+  <div class="ring left"></div>
+  <div class="ring right"></div>
+  <div class="holes">
+    <div class="hole"></div>
+    <div class="hole"></div>
+  </div>
+  <div class="page-stack" id="stack"></div>
+</div>
+
+<div class="controls">
+  <button id="playPause">Pause</button>
+  <span class="speed" id="speedLabel">1 day / sec</span>
+  <button id="slower">Slower</button>
+  <button id="faster">Faster</button>
+</div>
+
+<script>
+  const months = [
+    { name: 'January',   days: 31 },
+    { name: 'February',  days: 28 },
+    { name: 'March',     days: 31 },
+    { name: 'April',     days: 30 },
+    { name: 'May',       days: 31 },
+    { name: 'June',      days: 30 },
+    { name: 'July',      days: 31 },
+    { name: 'August',    days: 31 },
+    { name: 'September', days: 30 },
+    { name: 'October',   days: 31 },
+    { name: 'November',  days: 30 },
+    { name: 'December',  days: 31 },
+  ];
+
+  const weekdays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  const quotes = [
+    "A new day, a fresh start.",
+    "Time is the wisest counselor.",
+    "The best is yet to come.",
+    "Small steps every day.",
+    "Today matters.",
+    "Make it count.",
+    "Onward.",
+  ];
+
+  const YEAR = 2026;
+  const JAN_1_WEEKDAY = 4;
+
+  let monthIdx = 0;
+  let dayIdx = 1;
+  let dayOfWeek = JAN_1_WEEKDAY;
+  let playing = true;
+  let interval = 1000;
+  let timer = null;
+
+  const stack = document.getElementById('stack');
+  const playPauseBtn = document.getElementById('playPause');
+  const speedLabel = document.getElementById('speedLabel');
+
+  function makePage(month, day, weekday, isMonthEnd) {
+    const page = document.createElement('div');
+    page.className = 'page' + (isMonthEnd ? ' month-end' : '');
+    page.innerHTML = `
+      <div class="perforation"></div>
+      <div class="month-header">
+        <div class="month-name">${month.name}</div>
+        <div class="year">${YEAR}</div>
+      </div>
+      <div class="day-content">
+        <div class="weekday">${weekday}</div>
+        <div class="date-number">${day}</div>
+        <div class="quote">${quotes[Math.floor(Math.random()*quotes.length)]}</div>
+      </div>
+      <div class="footer-note">${isMonthEnd ? '— end of month —' : 'day ' + dayOfYear(month, day) + ' of ' + (isLeap(YEAR) ? 366 : 365)}</div>
+    `;
+    return page;
+  }
+
+  function isLeap(y) {
+    return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
+  }
+
+  function dayOfYear(month, day) {
+    let total = 0;
+    for (let i = 0; i < months.indexOf(month); i++) {
+      total += months[i].days;
+    }
+    return total + day;
+  }
+
+  function currentMonth() {
+    const m = { ...months[monthIdx] };
+    if (m.name === 'February' && isLeap(YEAR)) m.days = 29;
+    return m;
+  }
+
+  function render(initial = false) {
+    const month = currentMonth();
+    const isMonthEnd = dayIdx === month.days;
+    const page = makePage(month, dayIdx, weekdays[dayOfWeek], isMonthEnd);
+    stack.innerHTML = '';
+    stack.appendChild(page);
+    if (!initial) {
+
+    }
+  }
+
+  function advance() {
+    const month = currentMonth();
+    const isMonthEnd = dayIdx === month.days;
+    const currentPage = stack.querySelector('.page');
+    if (!currentPage) return;
+
+    currentPage.classList.add('tearing');
+
+    const tearDuration = isMonthEnd ? 1400 : 700;
+
+    setTimeout(() => {
+      if (isMonthEnd) {
+        monthIdx = (monthIdx + 1) % 12;
+        dayIdx = 1;
+      } else {
+        dayIdx += 1;
+      }
+      dayOfWeek = (dayOfWeek + 1) % 7;
+      render();
+    }, tearDuration * 0.55);
+  }
+
+  function schedule() {
+    if (timer) clearTimeout(timer);
+    if (!playing) return;
+    const month = currentMonth();
+    const isMonthEnd = dayIdx === month.days;
+    const wait = isMonthEnd ? interval + 800 : interval;
+    timer = setTimeout(() => {
+      advance();
+      schedule();
+    }, wait);
+  }
+
+  playPauseBtn.addEventListener('click', () => {
+    playing = !playing;
+    playPauseBtn.textContent = playing ? 'Pause' : 'Play';
+    if (playing) schedule();
+    else if (timer) clearTimeout(timer);
+  });
+
+  document.getElementById('faster').addEventListener('click', () => {
+    interval = Math.max(200, interval - 200);
+    updateSpeedLabel();
+    schedule();
+  });
+
+  document.getElementById('slower').addEventListener('click', () => {
+    interval = Math.min(3000, interval + 200);
+    updateSpeedLabel();
+    schedule();
+  });
+
+  function updateSpeedLabel() {
+    const rate = (1000 / interval).toFixed(1);
+    speedLabel.textContent = `${rate} days / sec`;
+  }
+
+  updateSpeedLabel();
+  render(true);
+  schedule();
+</script>
+
+</body>
+</html>

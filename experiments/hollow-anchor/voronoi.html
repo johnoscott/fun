@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Voronoi</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0d10;
+    --ink: #e6e8ec;
+    --muted: #8a93a1;
+    --accent: #7cc4ff;
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "SF Pro Text", sans-serif; }
+  body { display: grid; grid-template-rows: auto 1fr; }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 14px; border-bottom: 1px solid #1a1f26;
+  }
+  header h1 { font-size: 13px; font-weight: 600; margin: 0; letter-spacing: 0.02em; }
+  header .spacer { flex: 1; }
+  header .meta { color: var(--muted); font-variant-numeric: tabular-nums; }
+  button {
+    background: #141922; color: var(--ink);
+    border: 1px solid #232a35; border-radius: 6px;
+    padding: 5px 10px; cursor: pointer; font: inherit;
+  }
+  button:hover { border-color: #35404f; }
+  button:active { background: #10141b; }
+  label { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  input[type="range"] { width: 120px; accent-color: var(--accent); }
+  main { position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Voronoi Diagram</h1>
+  <label>points <input id="count" type="range" min="8" max="400" value="80" /></label>
+  <span class="meta" id="countReadout">80</span>
+  <label><input id="showSites" type="checkbox" checked /> sites</label>
+  <label><input id="showEdges" type="checkbox" checked /> edges</label>
+  <button id="regen">Regenerate</button>
+  <div class="spacer"></div>
+  <span class="meta" id="stats"></span>
+</header>
+<main><canvas id="c"></canvas></main>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const countEl = document.getElementById('count');
+  const countReadout = document.getElementById('countReadout');
+  const showSitesEl = document.getElementById('showSites');
+  const showEdgesEl = document.getElementById('showEdges');
+  const regenBtn = document.getElementById('regen');
+  const stats = document.getElementById('stats');
+
+  let sites = [];
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = Math.floor(rect.width  * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    draw();
+  }
+
+  // Poisson-ish jittered grid so sites don't clump.
+  function generate(n) {
+    const w = canvas.width, h = canvas.height;
+    const cols = Math.max(1, Math.round(Math.sqrt(n * w / h)));
+    const rows = Math.max(1, Math.ceil(n / cols));
+    const cellW = w / cols, cellH = h / rows;
+    const pts = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (pts.length >= n) break;
+        const jx = Math.random() * 0.8 + 0.1;
+        const jy = Math.random() * 0.8 + 0.1;
+        pts.push([ (c + jx) * cellW, (r + jy) * cellH,
+                   0.55 + Math.random() * 0.35,     // hue phase
+                   0.35 + Math.random() * 0.25 ]);  // lightness
+      }
+    }
+    // shuffle so nearby sites don't share adjacent colors
+    for (let i = pts.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [pts[i], pts[j]] = [pts[j], pts[i]];
+    }
+    return pts.slice(0, n);
+  }
+
+  function siteColor(s) {
+    // pleasant blue/cyan/violet field
+    const hue = 190 + s[2] * 90;         // 190..280
+    const sat = 55 + (1 - s[3]) * 15;    // 55..70
+    const lig = 28 + s[3] * 30;          // 28..58
+    return `hsl(${hue.toFixed(1)} ${sat.toFixed(1)}% ${lig.toFixed(1)}%)`;
+  }
+
+  // Brute-force nearest-site fill. Fine for the point counts we allow.
+  function draw() {
+    const w = canvas.width, h = canvas.height;
+    if (!w || !h) return;
+    const t0 = performance.now();
+    const img = ctx.createImageData(w, h);
+    const data = img.data;
+    const n = sites.length;
+
+    // Pre-parse colors into rgb triples.
+    const cols = new Uint8ClampedArray(n * 3);
+    const tmp = document.createElement('canvas').getContext('2d');
+    for (let i = 0; i < n; i++) {
+      tmp.fillStyle = siteColor(sites[i]);
+      const m = tmp.fillStyle.match(/\d+/g); // browser normalizes to rgb()
+      cols[i*3]   = +m[0];
+      cols[i*3+1] = +m[1];
+      cols[i*3+2] = +m[2];
+    }
+
+    const sx = new Float32Array(n), sy = new Float32Array(n);
+    for (let i = 0; i < n; i++) { sx[i] = sites[i][0]; sy[i] = sites[i][1]; }
+
+    let p = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let best = 0, bestD = Infinity;
+        for (let i = 0; i < n; i++) {
+          const dx = x - sx[i], dy = y - sy[i];
+          const d = dx*dx + dy*dy;
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        data[p]   = cols[best*3];
+        data[p+1] = cols[best*3+1];
+        data[p+2] = cols[best*3+2];
+        data[p+3] = 255;
+        p += 4;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    if (showEdgesEl.checked) drawEdges();
+    if (showSitesEl.checked) drawSites();
+
+    const ms = (performance.now() - t0).toFixed(0);
+    stats.textContent = `${n} sites · ${w}×${h}px · ${ms} ms`;
+  }
+
+  // Edge overlay: mark pixels whose nearest site differs from a neighbor.
+  // Cheap second pass over the already-drawn image.
+  function drawEdges() {
+    const w = canvas.width, h = canvas.height;
+    const n = sites.length;
+    const sx = new Float32Array(n), sy = new Float32Array(n);
+    for (let i = 0; i < n; i++) { sx[i] = sites[i][0]; sy[i] = sites[i][1]; }
+
+    // Build owner map at reduced resolution for speed.
+    const step = 2;
+    const ow = Math.ceil(w / step), oh = Math.ceil(h / step);
+    const owner = new Int32Array(ow * oh);
+    for (let y = 0; y < oh; y++) {
+      const py = y * step;
+      for (let x = 0; x < ow; x++) {
+        const px = x * step;
+        let best = 0, bestD = Infinity;
+        for (let i = 0; i < n; i++) {
+          const dx = px - sx[i], dy = py - sy[i];
+          const d = dx*dx + dy*dy;
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        owner[y * ow + x] = best;
+      }
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#0b0d10';
+    for (let y = 0; y < oh - 1; y++) {
+      for (let x = 0; x < ow - 1; x++) {
+        const o = owner[y * ow + x];
+        if (o !== owner[y * ow + x + 1] || o !== owner[(y+1) * ow + x]) {
+          ctx.fillRect(x * step, y * step, step, step);
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawSites() {
+    ctx.save();
+    ctx.fillStyle = '#0b0d10';
+    ctx.strokeStyle = '#e6e8ec';
+    ctx.lineWidth = 1 * dpr;
+    const r = 2.2 * dpr;
+    for (const s of sites) {
+      ctx.beginPath();
+      ctx.arc(s[0], s[1], r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function regen() {
+    const n = +countEl.value;
+    countReadout.textContent = String(n);
+    sites = generate(n);
+    draw();
+  }
+
+  countEl.addEventListener('input', regen);
+  showSitesEl.addEventListener('change', draw);
+  showEdgesEl.addEventListener('change', draw);
+  regenBtn.addEventListener('click', regen);
+  window.addEventListener('resize', () => { resize(); });
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    sites.push([
+      (e.clientX - rect.left) * dpr,
+      (e.clientY - rect.top)  * dpr,
+      0.55 + Math.random() * 0.35,
+      0.35 + Math.random() * 0.25,
+    ]);
+    countEl.value = Math.min(+countEl.max, sites.length);
+    countReadout.textContent = String(sites.length);
+    draw();
+  });
+
+  resize();
+  regen();
+})();
+</script>
+</body>
+</html>

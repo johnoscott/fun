@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tear-off Calendar</title>
+<style>
+  :root {
+    --paper: #f5efe1;
+    --paper-shade: #e8dfc8;
+    --paper-edge: #d9cdae;
+    --ink: #1a1a1a;
+    --accent: #b7202c;
+    --gold: #b48a3b;
+    --bg1: #2b2018;
+    --bg2: #120b07;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: "Georgia", "Times New Roman", serif;
+    background:
+      radial-gradient(ellipse at 30% 20%, #3a2b20 0%, var(--bg1) 40%, var(--bg2) 100%);
+    color: #eee;
+    overflow: hidden;
+  }
+
+  .stage {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    perspective: 1400px;
+  }
+
+  /* wood/desk shadow beneath the calendar */
+  .desk-shadow {
+    position: absolute;
+    bottom: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 420px;
+    height: 40px;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.55), rgba(0,0,0,0) 70%);
+    filter: blur(4px);
+  }
+
+  .binding {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -170px);
+    width: 300px;
+    height: 26px;
+    background:
+      linear-gradient(180deg, #6b5a3d 0%, #3a2f1f 100%);
+    border-radius: 4px 4px 2px 2px;
+    box-shadow:
+      inset 0 -3px 6px rgba(0,0,0,0.6),
+      0 4px 10px rgba(0,0,0,0.5);
+    z-index: 5;
+  }
+  .binding::before, .binding::after {
+    content: "";
+    position: absolute;
+    top: -8px;
+    width: 8px;
+    height: 22px;
+    background: linear-gradient(180deg, #c9a54a, #6b4a12);
+    border-radius: 3px;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.6);
+  }
+  .binding::before { left: 40px; }
+  .binding::after  { right: 40px; }
+
+  /* stack of remaining pages behind */
+  .stack {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 320px;
+    height: 400px;
+    transform: translate(-50%, -50%);
+  }
+  .stack .layer {
+    position: absolute;
+    inset: 0;
+    background: var(--paper-shade);
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+  }
+  .stack .layer:nth-child(1) { transform: translate(3px, 6px) rotate(0.4deg); background: #e0d5b8; }
+  .stack .layer:nth-child(2) { transform: translate(-2px, 10px) rotate(-0.3deg); background: #d8ccae; }
+  .stack .layer:nth-child(3) { transform: translate(1px, 14px) rotate(0.6deg); background: #cfc19f; }
+
+  /* the page */
+  .page {
+    position: relative;
+    width: 320px;
+    height: 400px;
+    background: var(--paper);
+    background-image:
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,0.6), transparent 40%),
+      radial-gradient(circle at 70% 80%, rgba(0,0,0,0.05), transparent 50%),
+      repeating-linear-gradient(45deg, rgba(0,0,0,0.02) 0 1px, transparent 1px 3px);
+    border-radius: 4px;
+    box-shadow:
+      0 20px 40px rgba(0,0,0,0.55),
+      0 4px 8px rgba(0,0,0,0.35),
+      inset 0 0 40px rgba(120,90,40,0.08);
+    transform-origin: top center;
+    transform-style: preserve-3d;
+    display: grid;
+    grid-template-rows: 60px 1fr 60px;
+    color: var(--ink);
+    z-index: 10;
+    overflow: hidden;
+  }
+
+  /* perforation strip near top with holes */
+  .perf {
+    position: relative;
+    border-bottom: 1px dashed rgba(0,0,0,0.25);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 0 20px;
+    font-variant: small-caps;
+    letter-spacing: 3px;
+    font-size: 12px;
+    color: #6b5a3d;
+  }
+  .perf::before, .perf::after {
+    content: "";
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--bg2);
+    box-shadow: inset 0 2px 3px rgba(0,0,0,0.9);
+  }
+  .perf .month {
+    font-family: "Georgia", serif;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 4px;
+    font-size: 14px;
+  }
+
+  .body {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    align-items: center;
+    justify-items: center;
+    padding: 6px 20px 0;
+    text-align: center;
+    position: relative;
+  }
+  .dow {
+    font-size: 20px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: #333;
+    border-top: 1px solid rgba(0,0,0,0.15);
+    border-bottom: 1px solid rgba(0,0,0,0.15);
+    padding: 4px 20px;
+    margin-bottom: 6px;
+  }
+  .day {
+    font-family: "Georgia", "Playfair Display", serif;
+    font-weight: 700;
+    font-size: 180px;
+    line-height: 0.9;
+    color: var(--ink);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+    position: relative;
+  }
+  .day.weekend { color: var(--accent); }
+  .year {
+    font-size: 14px;
+    letter-spacing: 10px;
+    color: #6b5a3d;
+    padding-left: 10px;
+  }
+
+  .foot {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 0 20px;
+    border-top: 1px dashed rgba(0,0,0,0.2);
+    font-size: 11px;
+    color: #6b5a3d;
+    letter-spacing: 2px;
+  }
+  .foot .center {
+    font-family: "Georgia", serif;
+    font-style: italic;
+    color: #444;
+  }
+  .foot .quote {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 8px 4px 0;
+    font-style: italic;
+    color: #555;
+    font-size: 12px;
+    letter-spacing: 0;
+    max-width: 100%;
+  }
+
+  /* torn edge along the perforation (revealed under the ripped piece) */
+  .torn-edge {
+    position: absolute;
+    top: 59px;
+    left: 0; right: 0;
+    height: 6px;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,0.15), transparent),
+      repeating-linear-gradient(90deg,
+        var(--paper) 0 4px,
+        var(--paper-edge) 4px 6px,
+        var(--paper) 6px 10px,
+        var(--paper-edge) 10px 12px);
+    clip-path: polygon(
+      0 0, 3% 100%, 6% 20%, 10% 90%, 14% 30%, 18% 100%, 22% 25%,
+      26% 90%, 30% 15%, 34% 100%, 38% 30%, 42% 85%, 46% 20%,
+      50% 100%, 54% 25%, 58% 90%, 62% 15%, 66% 100%, 70% 30%,
+      74% 85%, 78% 20%, 82% 100%, 86% 25%, 90% 90%, 94% 15%,
+      98% 100%, 100% 20%, 100% 0
+    );
+    opacity: 0;
+    z-index: 6;
+    pointer-events: none;
+  }
+
+  /* animations */
+  @keyframes rip {
+    0%   { transform: rotateX(0deg) translateY(0) rotate(0deg); opacity: 1; }
+    35%  { transform: rotateX(-25deg) translateY(-10px) rotate(-1deg); }
+    70%  { transform: rotateX(-90deg) translateY(60px) rotate(-6deg); opacity: 0.9; }
+    100% { transform: rotateX(-140deg) translateY(240px) rotate(-14deg); opacity: 0; }
+  }
+  @keyframes rip-month {
+    0%   { transform: rotateX(0deg) translateY(0) rotate(0deg); opacity: 1; }
+    20%  { transform: rotateX(-20deg) translateY(-14px) rotate(-2deg); }
+    50%  { transform: rotateX(-95deg) translateY(80px) rotate(-10deg) translateX(-30px); }
+    100% { transform: rotateX(-160deg) translateY(400px) rotate(-40deg) translateX(-200px); opacity: 0; }
+  }
+  .page.ripping { animation: rip 900ms cubic-bezier(.4,.1,.3,1) forwards; }
+  .page.ripping-month { animation: rip-month 1400ms cubic-bezier(.4,.1,.3,1) forwards; }
+
+  /* enter fresh page */
+  @keyframes fresh {
+    0%   { transform: rotateX(-10deg) translateY(-6px); opacity: 0.7; }
+    100% { transform: rotateX(0) translateY(0); opacity: 1; }
+  }
+  .page.enter { animation: fresh 350ms ease-out both; }
+
+  /* controls */
+  .controls {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: rgba(0,0,0,0.35);
+    padding: 8px 14px;
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.08);
+    z-index: 100;
+  }
+  .controls button {
+    background: rgba(255,255,255,0.08);
+    color: #f5efe1;
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font: 500 12px/1 "Georgia", serif;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+  .controls button:hover { background: rgba(255,255,255,0.16); }
+  .controls .speed {
+    color: #d8ccae;
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 0 4px;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .caption {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #cbb98a;
+    font-family: "Georgia", serif;
+    font-style: italic;
+    letter-spacing: 3px;
+    font-size: 12px;
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="caption">— tear-off calendar —</div>
+
+  <div class="binding"></div>
+  <div class="stack" aria-hidden="true">
+    <div class="layer"></div>
+    <div class="layer"></div>
+    <div class="layer"></div>
+  </div>
+
+  <div class="page" id="page">
+    <div class="perf">
+      <span>tear here</span>
+      <span class="month" id="month">JULY</span>
+      <span style="text-align:right">tear here</span>
+    </div>
+    <div class="body">
+      <div class="dow" id="dow">SUNDAY</div>
+      <div class="day" id="day">12<span class="year" id="year">2026</span></div>
+      <div class="foot">
+        <span id="ord">no. 193</span>
+        <span class="center" id="phase">◐ waxing</span>
+        <span style="text-align:right" id="left">172 days remain</span>
+        <div class="quote" id="quote">"A page a day, a life at a time."</div>
+      </div>
+    </div>
+    <div class="torn-edge"></div>
+  </div>
+
+  <div class="desk-shadow"></div>
+
+  <div class="controls">
+    <button id="prev">‹ prev</button>
+    <button id="playpause">pause</button>
+    <button id="next">next ›</button>
+    <span class="speed" id="speedlabel">1.0×</span>
+    <button id="slower">–</button>
+    <button id="faster">+</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE",
+                  "JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+  const DOWS = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
+  const QUOTES = [
+    "A page a day, a life at a time.",
+    "Yesterday is gone; today is a gift.",
+    "Time is the coin of your life.",
+    "Well begun is half done.",
+    "Small steps, taken daily, cover vast ground.",
+    "The best time was yesterday. The next best is now.",
+    "Every morning we are born again.",
+    "Do what you can, with what you have, where you are."
+  ];
+  const PHASES = ["● new","◐ waxing","○ full","◑ waning"];
+
+  const $ = id => document.getElementById(id);
+  const pageEl = $("page");
+
+  // state — start today
+  const today = new Date(2026, 6, 12); // Jul 12, 2026
+  let cur = { y: today.getFullYear(), m: today.getMonth(), d: today.getDate() };
+  let playing = true;
+  let speed = 1.0; // multiplier
+  let timer = null;
+  let quoteIdx = 0;
+
+  const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
+  const dayOfWeek = (y, m, d) => new Date(y, m, d).getDay();
+  const dayOfYear = (y, m, d) => {
+    const start = new Date(y, 0, 0);
+    const now = new Date(y, m, d);
+    return Math.floor((now - start) / 86400000);
+  };
+  const isLeap = y => (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
+  const daysInYear = y => isLeap(y) ? 366 : 365;
+
+  function render() {
+    const dow = DOWS[dayOfWeek(cur.y, cur.m, cur.d)];
+    $("month").textContent = MONTHS[cur.m];
+    $("dow").textContent = dow;
+    const dayEl = $("day");
+    dayEl.firstChild.nodeValue = String(cur.d);
+    dayEl.classList.toggle("weekend", dow === "SUNDAY" || dow === "SATURDAY");
+    $("year").textContent = cur.y;
+
+    const doy = dayOfYear(cur.y, cur.m, cur.d);
+    $("ord").textContent = `no. ${doy}`;
+    $("left").textContent = `${daysInYear(cur.y) - doy} days remain`;
+    $("phase").textContent = PHASES[Math.floor((doy / 7) % 4)];
+    $("quote").textContent = QUOTES[quoteIdx % QUOTES.length];
+  }
+
+  function step(direction = 1) {
+    // determine if next tear is a month rollover
+    const nextDay = cur.d + direction;
+    const dim = daysInMonth(cur.y, cur.m);
+    const isMonthEnd = (direction > 0 && nextDay > dim) ||
+                       (direction < 0 && nextDay < 1);
+
+    // tear animation on current page
+    pageEl.classList.remove("enter");
+    void pageEl.offsetWidth; // reflow
+    pageEl.classList.add(isMonthEnd ? "ripping-month" : "ripping");
+
+    setTimeout(() => {
+      // advance date
+      if (direction > 0) {
+        cur.d = nextDay;
+        if (cur.d > dim) {
+          cur.d = 1; cur.m++;
+          if (cur.m > 11) { cur.m = 0; cur.y++; }
+        }
+      } else {
+        cur.d = nextDay;
+        if (cur.d < 1) {
+          cur.m--;
+          if (cur.m < 0) { cur.m = 11; cur.y--; }
+          cur.d = daysInMonth(cur.y, cur.m);
+        }
+      }
+      quoteIdx++;
+      render();
+      pageEl.classList.remove("ripping", "ripping-month");
+      pageEl.classList.add("enter");
+    }, isMonthEnd ? 1300 : 850);
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    if (!playing) return;
+    // interval depends on whether the *next* tear is a month rollover
+    const dim = daysInMonth(cur.y, cur.m);
+    const nextIsMonthEnd = (cur.d + 1) > dim;
+    const base = nextIsMonthEnd ? 2600 : 1400;
+    timer = setTimeout(() => {
+      step(1);
+      schedule();
+    }, base / speed);
+  }
+
+  $("prev").addEventListener("click", () => { step(-1); });
+  $("next").addEventListener("click", () => { step(1); });
+  $("playpause").addEventListener("click", (e) => {
+    playing = !playing;
+    e.target.textContent = playing ? "pause" : "play";
+    if (playing) schedule(); else clearTimeout(timer);
+  });
+  $("slower").addEventListener("click", () => {
+    speed = Math.max(0.25, +(speed - 0.25).toFixed(2));
+    $("speedlabel").textContent = speed.toFixed(2) + "×";
+    schedule();
+  });
+  $("faster").addEventListener("click", () => {
+    speed = Math.min(4, +(speed + 0.25).toFixed(2));
+    $("speedlabel").textContent = speed.toFixed(2) + "×";
+    schedule();
+  });
+
+  render();
+  schedule();
+})();
+</script>
+</body>
+</html>

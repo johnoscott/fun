@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Origami Drive</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0a0f2c; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  body.idle { cursor: none; }
+  #hint {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    font: 13px/1.4 system-ui, -apple-system, sans-serif; color: #fff;
+    background: rgba(0,0,0,.35); padding: 6px 14px; border-radius: 999px;
+    opacity: 0; transition: opacity .6s; pointer-events: none; white-space: nowrap;
+  }
+  body:not(.idle) #hint { opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint"></div>
+<script>
+'use strict';
+(() => {
+// ---------- constants ----------
+const LOOP = 60;          // seconds per simulated day
+const CH = 170;           // camera height above the road
+const RW = 320;           // road half-width
+const ZFAR = 7000, ZNEAR = 40, SEG = 50, BAND = 250;
+const LOOK = 2400, CARW = 85, W0 = 5.5; // W0: steering spring stiffness
+const BANK = 70, ARCH = 55, BRIDGE = 160; // river bank width, bridge arch height, bridge overhang past water
+
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const hint = document.getElementById('hint');
+let W, H, HOR, HORp, HZ, F, vignette;
+
+// ---------- helpers ----------
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = t => t * t * (3 - 2 * t);
+const hex = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const css = (c, a) => a === undefined
+  ? `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
+  : `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const lerpVal = (a, b, k) => typeof a === 'number' ? lerp(a, b, k) : a.map((v, i) => lerpVal(v, b[i], k));
+function keyed(keys, t) {
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i], b = keys[i + 1];
+    if (t >= a[0] && t <= b[0]) return lerpVal(a[1], b[1], smooth((t - a[0]) / (b[0] - a[0])));
+  }
+  return keys[0][1];
+}
+// plateau envelope: 1 between a and b, fading over f
+const env = (t, a, b, f) => smooth(clamp((t - a) / f, 0, 1)) * smooth(clamp((b - t) / f, 0, 1));
+function rng(seed) {
+  return () => {
+    seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const R = rng(Date.now() % 100000);
+
+// ---------- palette ----------
+const COL = Object.fromEntries(Object.entries({
+  snow: '#eef1f6', snow2: '#dfe4ee', wet: '#6c717d',
+  road1: '#e4d8c3', road2: '#d8cab3', verm: '#d6402a', white: '#f4efe4',
+  trunk: '#7a5236', bamboo: '#79a64e', bambooDk: '#5c8a3a',
+  stone: '#a39e94', black: '#2b2622', rock: '#8f8a84', fox: '#e07b39', deer: '#c48a52',
+  deerDk: '#7d5230', rabbit: '#f1ece2', wall: '#ece2cc', thatch: '#8a6644', roof: '#3d3c44',
+  pagoda: '#b9452f', hood: '#b5332b', glow: '#ffcf7a', cloud: '#fbf8f2', storm: '#868b98',
+  crane: '#f7f3ea', craneRed: '#d9473b', sun: '#ffd27a', sun2: '#ffb84f', sunLow: '#ff6e45',
+  moon: '#f4f1e2', moon2: '#d9d5c2', far: '#7f8fb8', mid: '#5f7f8a', fuji: '#6d7fb0',
+  water: '#4f86b0', water2: '#3f7398', bank: '#a08a68', plank1: '#b5804f', plank2: '#a57143',
+  koi: '#f08a3c', lily: '#5f9a4a', tanuki: '#8a7358', tanukiDk: '#3b3128', belly: '#d8c7a6',
+  straw: '#d9b86a', indigo: '#3d5a8a'
+}).map(([k, v]) => [k, hex(v)]));
+
+// seasons cycle day by day: spring, summer, autumn, winter
+const SEASONS = [
+  { name: 'Spring', grass: ['#89b46d', '#7aa560'], tree: '#f2b2c6', pine: '#2f6b4a', paddy: ['#a7c9cf', '#8fbf73'], hill: '#4f7d58', leaf: '#f4b8c9', reed: '#7da65a' },
+  { name: 'Summer', grass: ['#72aa58', '#62994b'], tree: '#5e9c50', pine: '#2b6444', paddy: ['#93cf5c', '#7fbd4f'], hill: '#3f7048', leaf: '#f4b8c9', reed: '#6c9c48' },
+  { name: 'Autumn', grass: ['#bba862', '#ab9853'], tree: '#d9542b', pine: '#3a6a45', paddy: ['#e2c35c', '#d0ad49'], hill: '#8a6a3e', leaf: '#e0642c', reed: '#b39a5a' },
+  { name: 'Winter', grass: ['#dfe5ec', '#d0d7e0'], tree: '#e8edf3', pine: '#5d7f72', paddy: ['#d7dde5', '#c5ccd6'], hill: '#8996a8', leaf: '#ffffff', reed: '#a8a594' }
+].map(s => ({ name: s.name, grass: s.grass.map(hex), tree: hex(s.tree), pine: hex(s.pine), paddy: s.paddy.map(hex), hill: hex(s.hill), leaf: hex(s.leaf), reed: hex(s.reed) }));
+const mixPal = (a, b, t) => ({
+  grass: [mix(a.grass[0], b.grass[0], t), mix(a.grass[1], b.grass[1], t)],
+  paddy: [mix(a.paddy[0], b.paddy[0], t), mix(a.paddy[1], b.paddy[1], t)],
+  tree: mix(a.tree, b.tree, t), pine: mix(a.pine, b.pine, t), hill: mix(a.hill, b.hill, t),
+  leaf: mix(a.leaf, b.leaf, t), reed: mix(a.reed, b.reed, t), winter: (a === SEASONS[3]) * (1 - t) + (b === SEASONS[3]) * t
+});
+
+// sky keyframes: [t, [top, mid, bottom]]
+const SKY = [
+  [0.00, ['#0a0f2c', '#18204a', '#2a3060']],
+  [0.13, ['#141a44', '#3b3468', '#8a5a7a']],
+  [0.20, ['#3f5f9e', '#d98c8c', '#ffc690']],
+  [0.30, ['#5d9ad6', '#9fcbea', '#f1e6cc']],
+  [0.50, ['#4e95dc', '#93c6ee', '#e2eef0']],
+  [0.70, ['#5f97d2', '#b0cfe6', '#f2dfbe']],
+  [0.80, ['#38498a', '#d27078', '#ffae6a']],
+  [0.87, ['#1b2152', '#523a72', '#b45a74']],
+  [0.93, ['#0a0f2c', '#18204a', '#2a3060']],
+  [1.00, ['#0a0f2c', '#18204a', '#2a3060']]
+].map(([t, c]) => [t, c.map(hex)]);
+// light keyframes: [t, [level, tintR, tintG, tintB, tintAmount]]
+const LIGHT = [
+  [0.00, [0.42, 70, 90, 170, 0.40]],
+  [0.13, [0.50, 120, 90, 160, 0.30]],
+  [0.20, [0.80, 255, 150, 110, 0.35]],
+  [0.30, [1.00, 255, 240, 220, 0.10]],
+  [0.50, [1.05, 255, 255, 255, 0.00]],
+  [0.70, [1.00, 255, 230, 200, 0.12]],
+  [0.80, [0.82, 255, 130, 90, 0.38]],
+  [0.87, [0.55, 130, 80, 150, 0.32]],
+  [0.93, [0.42, 70, 90, 170, 0.40]],
+  [1.00, [0.42, 70, 90, 170, 0.40]]
+];
+
+// ---------- frame state ----------
+let T = 9, D = 0, speed = 1300, speedT = 1300;
+let carO = 0, carV = 0, target = 0, roll = 0, head = 0, camX = 0, camY = CH, prevHead = 0, pitch = 0;
+let LT = 1, LT0 = 1, TM = [1, 1, 1], FOG = [200, 200, 200], SKYC = null, SUNDIR = 0, NIGHT = 0, FLASH = 0;
+let SNOW = 0, MIST = 0, LEAF = 0, CLOUD = 0, RAIN = 0, FLIES = 0, PAL = SEASONS[0], DAY = 0;
+
+function shade(c, b, f) {
+  const l = LT * b;
+  let r = c[0] * l * TM[0], gg = c[1] * l * TM[1], bb = c[2] * l * TM[2];
+  if (f > 0) { r += (FOG[0] - r) * f; gg += (FOG[1] - gg) * f; bb += (FOG[2] - bb) * f; }
+  return 'rgb(' + (r > 255 ? 255 : r | 0) + ',' + (gg > 255 ? 255 : gg | 0) + ',' + (bb > 255 ? 255 : bb | 0) + ')';
+}
+function fogAt(z) {
+  const k = clamp(z / ZFAR, 0, 1), q = Math.sqrt(k);
+  return 1 - (1 - Math.pow(k, 1.25)) * (1 - MIST * 0.5 * q) * (1 - RAIN * 0.35 * q);
+}
+
+// ---------- day plans: every day gets its own season, weather and pace ----------
+const plans = new Map();
+function plan(k) {
+  if (plans.has(k)) return plans.get(k);
+  const r = rng(k * 7919 + 17), s = ((k % 4) + 4) % 4, t0 = k * LOOP, ev = [], flashes = [];
+  const add = (kind, a, b, amp, f = 0.04) => ev.push({ kind, a: t0 + a * LOOP, b: t0 + b * LOOP, amp, f: f * LOOP });
+  if (r() < 0.7) { const a = 0.1 + r() * 0.04; add('mist', a, a + 0.08 + r() * 0.16, 0.5 + r() * 0.5, 0.05); }
+  if ((s === 0 || s === 2) && r() < 0.85) { const a = 0.2 + r() * 0.18; add('leaf', a, a + 0.08 + r() * 0.26, 0.5 + r() * 0.5, 0.05); }
+  if (s === 3 && r() < 0.55) { const a = 0.25 + r() * 0.3; add('snow', a, a + 0.08 + r() * 0.22, 0.4 + r() * 0.6); }
+  if (r() < [0.5, 0.65, 0.5, 0.15][s]) {
+    const a = 0.33 + r() * 0.3, len = 0.06 + r() * 0.2, amp = 0.35 + r() * 0.65;
+    add('rain', a, a + len, amp); add('cloud', a - 0.06, a + len + 0.06, amp, 0.08);
+    if (amp > 0.65) for (let i = 0, n = 2 + (r() * 3 | 0); i < n; i++) flashes.push(t0 + (a + 0.02 + r() * (len - 0.04)) * LOOP);
+  }
+  const night = [[0, 0.6], [0.05, 0.9], [0.25, 0.3], [0.9, 0]][s]; // [snow chance, firefly chance]
+  if (r() < night[0]) add('snow', 0.9 + r() * 0.03, 1.06 + r() * 0.08, 0.5 + r() * 0.5);
+  else if (r() < night[1]) add('flies', 0.79, 0.88 + r() * 0.06, 0.6 + r() * 0.4, 0.03);
+  const p = { s, ev, flashes, cloud: 0.1 + r() * 0.4, speed: 1100 + r() * 550 };
+  plans.set(k, p);
+  if (plans.size > 8) plans.delete(plans.keys().next().value);
+  return p;
+}
+function computeEnv(t) {
+  const k = Math.floor(T / LOOP), cur = plan(k), prev = plan(k - 1), bl = smooth(clamp(t / 0.12, 0, 1));
+  DAY = k;
+  const amt = { mist: 0, leaf: 0, snow: 0, rain: 0, cloud: 0, flies: 0 };
+  FLASH = 0;
+  for (let j = k - 1; j <= k + 1; j++) {
+    const p = plan(j);
+    for (const e of p.ev) amt[e.kind] = Math.max(amt[e.kind], env(T, e.a, e.b, e.f) * e.amp);
+    for (const f of p.flashes) FLASH += env(T, f, f + 0.12, 0.04) + 0.6 * env(T, f + 0.25, f + 0.32, 0.03);
+  }
+  ({ mist: MIST, leaf: LEAF, snow: SNOW, rain: RAIN, flies: FLIES } = amt);
+  CLOUD = clamp(lerp(prev.cloud, cur.cloud, bl) + amt.cloud * 0.8, 0, 1);
+  PAL = mixPal(SEASONS[prev.s], SEASONS[cur.s], bl);
+  speedT = lerp(prev.speed, cur.speed, bl) * (1 - 0.25 * RAIN) * (1 + 0.08 * Math.sin(T * 0.21));
+
+  const L = keyed(LIGHT, t);
+  LT0 = L[0]; LT = LT0 * (1 - 0.3 * RAIN);
+  TM = [lerp(1, L[1] / 255 * 1.15, L[4]), lerp(1, L[2] / 255 * 1.15, L[4]), lerp(1, L[3] / 255 * 1.15, L[4])];
+  NIGHT = clamp((0.8 - LT0) / 0.35, 0, 1);
+  const storm = COL.storm.map(v => v * LT0 * 0.85);
+  SKYC = keyed(SKY, t).map(c => mix(c, storm, RAIN * 0.7 + clamp(CLOUD - 0.25, 0, 1) * 0.15));
+  FOG = mix(SKYC[2], [255, 255, 255], MIST * 0.25 * LT0);
+  const sunA = (t - 0.17) / 0.68, moonA = ((t - 0.86 + 1) % 1) / 0.3;
+  SUNDIR = sunA > 0 && sunA < 1 ? (0.1 + 0.8 * sunA - 0.5) * 2 : moonA < 1 ? (moonA - 0.5) * 1.2 : 0;
+}
+
+// ---------- road, terrain, zones ----------
+const rc = d => Math.sin(d * 0.00021) * 900 + Math.sin(d * 0.000077 + 1.3) * 1600 + Math.sin(d * 0.00053) * 250;
+const rcd = d => Math.cos(d * 0.00021) * 0.189 + Math.cos(d * 0.000077 + 1.3) * 0.1232 + Math.cos(d * 0.00053) * 0.1325;
+const elB = d => Math.sin(d * 0.00045) * 240 + Math.sin(d * 0.00017 + 2) * 420 + Math.sin(d * 0.0011 + 1) * 40;
+let rivers = [], zones = [];
+function riverX(d) {
+  for (const r of rivers) { const x = Math.abs(d - r.d); if (x < r.hw + BRIDGE + 20) return [x, r]; }
+  return null;
+}
+const nearRiver = (d, pad) => rivers.some(r => Math.abs(d - r.d) < r.hw + pad);
+function elT(d) { // terrain height, dipping into river beds
+  const q = riverX(d); if (!q) return elB(d);
+  return elB(d) - 60 * (1 - smooth(clamp((q[0] - q[1].hw) / BANK, 0, 1)));
+}
+function elR(d) { // road height, arching over rivers as a taiko bridge
+  const q = riverX(d); if (!q) return elB(d);
+  const sp = q[1].hw + BRIDGE;
+  return elB(d) + (q[0] < sp ? ARCH * (1 - (q[0] / sp) ** 2) : 0);
+}
+function zoneAt(d) { for (const z of zones) if (d >= z.a && d < z.b) return z.type; return 'forest'; }
+
+// ---------- static sky scenery ----------
+const stars = Array.from({ length: 150 }, () => ({ x: R(), y: R() * 0.9, r: 0.8 + R() * 1.8, ph: R() * 6.28 }));
+const clouds = Array.from({ length: 10 }, () => ({
+  x: R(), y: 0.05 + R() * 0.24, s: 0.6 + R() * 0.9, sp: 8 + R() * 14,
+  puffs: Array.from({ length: 3 + (R() * 3 | 0) }, () => ({ dx: (R() - 0.5) * 1.8, r: 0.35 + R() * 0.45 }))
+    .sort((a, b) => a.r - b.r)
+}));
+const LAYERS = [
+  { col: 'far', n: 14, hmin: 0.17, hmax: 0.31, wmul: 1.5, drift: 0.0, fog: 0.5, snow: true, base: 0 },
+  { col: 'mid', n: 18, hmin: 0.09, hmax: 0.17, wmul: 1.7, drift: 0.004, fog: 0.3, snow: false, base: 2 },
+  { col: 'near', n: 22, hmin: 0.04, hmax: 0.09, wmul: 2.2, drift: 0.012, fog: 0.12, snow: false, base: 4 }
+].map(L => ({
+  ...L,
+  peaks: Array.from({ length: L.n }, (_, i) => ({
+    x: (i + R() * 0.8) / L.n, h: lerp(L.hmin, L.hmax, R()),
+    m: (R() - 0.5) * 0.6, k: 0.35 + R() * 0.3
+  }))
+}));
+
+// ---------- world objects ----------
+let objs = [];
+let nZ = 0, nS = 200, nL = 0, nO = 3200, nT = 4500, nP = 1500, nH = 2500, nK = 1800;
+const jit = n => Array.from({ length: n }, () => 0.75 + R() * 0.5);
+const side = () => R() < 0.5 ? -1 : 1;
+function spawn(lim) {
+  while (nZ < lim + 3000) {
+    const len = 5000 + R() * 5000, r = R();
+    const type = nZ < 3000 ? 'forest' : r < 0.45 ? 'forest' : r < 0.75 ? 'paddy' : 'village';
+    zones.push({ a: nZ, b: nZ + len, type });
+    if (nZ > 4000 && R() < 0.6) rivers.push({ d: nZ + len * (0.3 + R() * 0.4), hw: 140 + R() * 120 });
+    nZ += len;
+  }
+  while (nS < lim) {
+    nS += 90 + R() * 130;
+    const zt = zoneAt(nS);
+    for (const sd of [-1, 1]) {
+      const d = nS + R() * 60, o = sd * (RW + 190 + Math.pow(R(), 1.4) * 1700), r = R(), sc = 0.8 + R() * 0.6;
+      if (nearRiver(d, 120)) {
+        if (r < 0.5) objs.push({ t: 'reeds', d, o: sd * (RW + 170 + R() * 900), sc, j: jit(8) });
+        continue;
+      }
+      const tree = () => { const q = R(); objs.push({ t: q < 0.45 ? 'pine' : q < 0.75 ? 'sakura' : 'bamboo', d, o, sc, face: side(), j: jit(8) }); };
+      if (zt === 'forest') { if (r < 0.62) tree(); }
+      else if (zt === 'paddy') {
+        if (r < 0.06) tree();
+        else if (r < 0.11) objs.push({ t: 'scarecrow', d, o: sd * (RW + 250 + R() * 900), sc: 1, face: side() });
+        else if (r < 0.17) objs.push({ t: 'tancho', d, o: sd * (RW + 220 + R() * 1200), sc: 1, face: side(), ph: R() * 6 });
+        else if (r < 0.2) objs.push({ t: 'lander', d, o: sd * (RW + 300 + R() * 900), sc: 1.1, face: -sd, ph: R() * 6 });
+      } else {
+        if (r < 0.25) tree();
+        else if (r < 0.33) objs.push({ t: 'house', d, o: sd * (RW + 320 + R() * 500), sc: 0.85 + R() * 0.3, face: side() });
+      }
+    }
+  }
+  while (nL < lim) {
+    nL += 700;
+    if (!nearRiver(nL, BRIDGE + 60)) objs.push({ t: 'lantern', d: nL, o: -(RW + 95), sc: 1 });
+    if (!nearRiver(nL + 350, BRIDGE + 60)) objs.push({ t: 'lantern', d: nL + 350, o: RW + 95, sc: 1 });
+  }
+  while (nO < lim) {
+    nO += 1350 + R() * 800;
+    if (nearRiver(nO, BRIDGE + 300)) continue;
+    if (R() < 0.22) {
+      const sd = side();
+      objs.push({ t: 'deer', d: nO, o: sd * (RW + 320), vx: -sd * (180 + R() * 60), ob: 1, road: 1, r: 85, face: -sd, walk: 1, ph: R() * 6, sc: 1 });
+    } else {
+      const lanes = [-200, 0, 200].sort(() => R() - 0.5), n = R() < 0.35 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        const k = ['rock', 'fox', 'rabbit', 'deer', 'rock', 'tanuki'][R() * 6 | 0];
+        objs.push({ t: k, d: nO + R() * 80, o: lanes[i] + (R() - 0.5) * 30, ob: 1, road: 1,
+          r: k === 'rabbit' ? 55 : k === 'fox' || k === 'tanuki' ? 65 : 80, face: side(), ph: R() * 6, sc: 1, j: jit(6) });
+      }
+    }
+  }
+  while (nT < lim) {
+    nT += 5200 + R() * 3500;
+    if (!nearRiver(nT, BRIDGE + 300)) objs.push({ t: 'torii', d: nT, o: 0, road: 1, sc: 1 });
+  }
+  while (nP < lim) { nP += 4500 + R() * 6000; objs.push({ t: 'pagoda', d: nP, o: side() * (RW + 1400 + R() * 1400), sc: 1.3 + R() * 0.5 }); }
+  while (nH < lim) {
+    nH += 1800 + R() * 2600;
+    if (!nearRiver(nH, 300)) objs.push({ t: 'house', d: nH, o: side() * (RW + 480 + R() * 700), sc: 0.9 + R() * 0.3, face: side() });
+  }
+  while (nK < lim) {
+    nK += 2500 + R() * 4000;
+    if (zoneAt(nK) !== 'paddy' && !nearRiver(nK, 500))
+      objs.push({ t: 'pond', d: nK, o: side() * (RW + 420 + R() * 450), sc: 1, r: 150 + R() * 80, n: 3 + (R() * 3 | 0), ph: R() * 6 });
+  }
+}
+
+// ---------- particles (camera space) ----------
+const mk = (n, f) => Array.from({ length: n }, () => f({}));
+const respawn = (p, far) => {
+  p.x = (Math.random() - 0.5) * 3200; p.y = Math.random() * 900;
+  p.z = far ? 2600 + Math.random() * 600 : 60 + Math.random() * 3100;
+  p.ph = Math.random() * 6.28; return p;
+};
+const rain = mk(420, p => respawn(p)), snow = mk(320, p => respawn(p)),
+  leaves = mk(170, p => respawn(p)), flies = mk(70, p => { respawn(p); p.y = 20 + Math.random() * 220; return p; });
+
+// ---------- resize ----------
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  HOR = H * 0.44; F = H * 0.95;
+  vignette = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)'); vignette.addColorStop(1, 'rgba(10,6,20,0.38)');
+}
+
+// ---------- drawing primitives ----------
+let ox = 0, oy = 0, os = 1, of = 0, ofl = 1, osq = 0.1, oz = 1;
+function poly(c, b, ...p) {
+  g.beginPath();
+  for (let i = 0; i < p.length; i += 2) {
+    const x = ox + p[i] * os * ofl, y = oy - p[i + 1] * os;
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.closePath(); g.fillStyle = shade(c, b, of); g.fill();
+}
+const lit = s => 0.9 + 0.13 * SUNDIR * s * ofl;
+function shadow(w) {
+  g.fillStyle = `rgba(20,25,45,${0.2 * LT * (1 - of)})`;
+  g.beginPath(); g.ellipse(ox, oy, w * os, w * os * 0.16, 0, 0, 6.2832); g.fill();
+}
+function glowRect(x0, y0, x1, y1) {
+  g.fillStyle = css(mix(mix([90, 80, 70], COL.glow, NIGHT), FOG, of * 0.6));
+  g.fillRect(ox + Math.min(x0 * ofl, x1 * ofl) * os, oy - y1 * os, Math.abs(x1 - x0) * os, (y1 - y0) * os);
+}
+function halo(x, y, r) {
+  if (NIGHT < 0.05) return;
+  const X = ox + x * os * ofl, Y = oy - y * os, rr = r * os;
+  const gr = g.createRadialGradient(X, Y, 0, X, Y, rr);
+  gr.addColorStop(0, `rgba(255,200,120,${0.35 * NIGHT * (1 - of)})`); gr.addColorStop(1, 'rgba(255,200,120,0)');
+  g.fillStyle = gr; g.fillRect(X - rr, Y - rr, rr * 2, rr * 2);
+}
+function quad(a, b, c, d, col) {
+  g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.lineTo(d[0], d[1]);
+  g.closePath(); g.fillStyle = col; g.fill();
+}
+
+// ---------- object drawers (local units, y up, origin at ground) ----------
+function craneBody(flying) {
+  if (!flying) {
+    poly(COL.black, 0.8, -8, 0, -3, 0, -1, 92, -7, 92);
+    poly(COL.black, 0.8, 7, 0, 12, 0, 9, 92, 3, 92);
+  } else {
+    poly(COL.black, 0.8, -20, 98, -14, 100, -62, 50, -66, 54);
+    poly(COL.black, 0.8, -10, 98, -4, 100, -52, 44, -56, 48);
+  }
+  poly(COL.black, 0.85, -50, 100, -78, 94, -58, 120, -30, 116);
+  poly(COL.crane, lit(-1), -50, 100, 0, 85, 30, 120, -10, 136);
+  poly(COL.crane, lit(1) * 0.9, 0, 85, 45, 100, 30, 120);
+  if (flying) {
+    poly(COL.black, 0.9, 28, 112, 36, 120, 90, 150, 86, 140);
+    poly(COL.crane, 1, 84, 136, 98, 150, 116, 146);
+    poly(COL.craneRed, 1, 88, 146, 94, 151, 90, 153);
+  } else {
+    poly(COL.black, 0.9, 25, 115, 35, 120, 55, 190, 45, 192);
+    poly(COL.crane, 1, 45, 188, 58, 196, 80, 186);
+    poly(COL.craneRed, 1, 47, 193, 54, 197, 50, 199);
+  }
+}
+const DRAW = {
+  pine() {
+    shadow(130);
+    poly(COL.trunk, 0.85, -10, 0, 10, 0, 7, 80, -7, 80);
+    for (let i = 0; i < 3; i++) {
+      const w = 135 - 35 * i, yb = 55 + 68 * i, yt = yb + 135 - 18 * i;
+      poly(PAL.pine, lit(-1), -w, yb, 0, yt, 0, yb - 14);
+      poly(PAL.pine, lit(1) * 0.86, 0, yb - 14, 0, yt, w, yb);
+      if (PAL.winter > 0.05) {
+        g.globalAlpha = PAL.winter;
+        poly(COL.snow, 1.05, -w * 0.35, yt - (yt - yb) * 0.35, 0, yt, w * 0.35, yt - (yt - yb) * 0.35, 0, yt - (yt - yb) * 0.25);
+        g.globalAlpha = 1;
+      }
+    }
+  },
+  sakura(o) { // blossom in spring, green in summer, maple red in autumn, snow-laden in winter
+    shadow(150);
+    poly(COL.trunk, 0.85, -14, 0, 14, 0, 9, 150, -9, 150);
+    poly(COL.trunk, 0.7, 4, 110, 62, 190, 12, 140);
+    poly(COL.trunk, 0.78, -4, 120, -58, 185, -10, 142);
+    const cy = 235, n = 8, k = 1 - PAL.winter * 0.25;
+    for (let i = 0; i < n; i++) {
+      const a0 = i / n * 6.2832, a1 = (i + 1) / n * 6.2832, am = (a0 + a1) / 2;
+      const r0 = o.j[i] * 130 * k, r1 = o.j[(i + 1) % n] * 130 * k;
+      const b = 0.9 + 0.12 * Math.cos(am) * SUNDIR * ofl + 0.07 * Math.sin(am) + (i % 2 ? 0.04 : -0.04);
+      poly(PAL.tree, b, 0, cy, Math.cos(a0) * r0 * 1.2, cy + Math.sin(a0) * r0 * 0.85, Math.cos(a1) * r1 * 1.2, cy + Math.sin(a1) * r1 * 0.85);
+    }
+  },
+  bamboo(o) {
+    shadow(80);
+    for (let k = 0; k < 5; k++) {
+      const x = (k - 2) * 24 + (o.j[k] - 1) * 30, h = 330 + o.j[k + 1] * 150;
+      poly(COL.bamboo, lit(k < 2 ? -1 : 1), x - 5, 0, x + 5, 0, x + 4, h, x - 4, h);
+      for (let y = 70; y < h; y += 72) poly(COL.bambooDk, 0.9, x - 6, y, x + 6, y, x + 6, y + 6, x - 6, y + 6);
+      const s = k % 2 ? 1 : -1;
+      poly(COL.bamboo, 1.05, x, h - 30, x + s * 70, h + 10, x + s * 20, h - 10);
+      poly(COL.bambooDk, 0.95, x, h - 80, x - s * 60, h - 40, x - s * 18, h - 62);
+    }
+  },
+  reeds(o) {
+    for (let k = 0; k < 7; k++) {
+      const x = (k - 3) * 16 + (o.j[k] - 1) * 30, h = 80 + o.j[k + 1] * 80, sw = Math.sin(T * 2 + k + o.d) * 8;
+      poly(PAL.reed, lit(k < 3 ? -1 : 1), x - 4, 0, x + 4, 0, x + sw, h);
+      if (k % 2) poly(COL.trunk, 0.75, x + sw * 0.8 - 4, h - 8, x + sw * 0.8 + 4, h - 8, x + sw * 0.75 + 4, h - 34, x + sw * 0.75 - 4, h - 34);
+    }
+  },
+  lantern() {
+    shadow(45);
+    poly(COL.stone, lit(-1) * 0.9, -36, 0, 36, 0, 30, 18, -30, 18);
+    poly(COL.stone, lit(-1), -11, 18, 0, 18, 0, 95, -9, 95);
+    poly(COL.stone, lit(1) * 0.88, 0, 18, 11, 18, 9, 95, 0, 95);
+    poly(COL.stone, 0.95, -30, 95, 30, 95, 26, 108, -26, 108);
+    poly(COL.stone, lit(-1) * 0.92, -22, 108, 22, 108, 22, 150, -22, 150);
+    glowRect(-11, 115, 11, 143);
+    poly(COL.stone, lit(-1), -50, 150, 0, 150, 0, 186);
+    poly(COL.stone, lit(1) * 0.88, 0, 150, 50, 150, 0, 186);
+    poly(COL.stone, 1, -7, 183, 7, 183, 0, 202);
+    halo(0, 129, 90);
+  },
+  torii() {
+    const px = RW + 60, sp = RW + 165;
+    for (const s of [-1, 1]) {
+      poly(COL.verm, lit(-1), s * px - 20, 0, s * px, 0, s * px, 440, s * px - 17, 440);
+      poly(COL.verm, lit(1) * 0.85, s * px, 0, s * px + 20, 0, s * px + 17, 440, s * px, 440);
+      poly(COL.black, 0.9, s * px - 24, 0, s * px + 24, 0, s * px + 22, 30, s * px - 22, 30);
+    }
+    poly(COL.verm, 0.95, -(px + 80), 352, px + 80, 352, px + 80, 380, -(px + 80), 380);       // nuki
+    poly(COL.verm, 0.9, -16, 380, 16, 380, 16, 432, -16, 432);                              // gakuzuka
+    poly(COL.verm, lit(-1), -(sp + 10), 470, -(sp - 15), 436, 0, 436, 0, 452);               // shimaki L
+    poly(COL.verm, lit(1) * 0.85, 0, 436, sp - 15, 436, sp + 10, 470, 0, 452);                // shimaki R
+    poly(COL.black, 0.95, -(sp + 22), 492, -(sp + 10), 470, 0, 452, 0, 470);                 // kasagi L
+    poly(COL.black, 0.8, 0, 452, sp + 10, 470, sp + 22, 492, 0, 470);                       // kasagi R
+  },
+  pagoda() {
+    shadow(200);
+    let y = 0;
+    for (let i = 0; i < 4; i++) {
+      const w = 120 - 20 * i;
+      poly(COL.pagoda, lit(-1), -w, y, 0, y, 0, y + 90, -w, y + 90);
+      poly(COL.pagoda, lit(1) * 0.85, 0, y, w, y, w, y + 90, 0, y + 90);
+      glowRect(-w * 0.5, y + 25, -w * 0.2, y + 60);
+      const rw = w + 75;
+      poly(COL.roof, lit(-1), -(rw + 15), y + 112, -rw, y + 88, 0, y + 88, 0, y + 132);
+      poly(COL.roof, lit(1) * 0.82, 0, y + 88, rw, y + 88, rw + 15, y + 112, 0, y + 132);
+      y += 122;
+    }
+    poly(COL.roof, 0.8, -6, y, 6, y, 4, y + 150, -4, y + 150);
+    for (let k = 0; k < 4; k++) poly(COL.glow, 0.7, -14, y + 30 + k * 26, 14, y + 30 + k * 26, 10, y + 36 + k * 26, -10, y + 36 + k * 26);
+  },
+  house() {
+    shadow(200);
+    poly(COL.wall, lit(-1), -150, 0, 0, 0, 0, 110, -150, 110);
+    poly(COL.wall, lit(1) * 0.9, 0, 0, 150, 0, 150, 110, 0, 110);
+    for (const x of [-150, -75, 0, 75, 142]) poly(COL.trunk, 0.8, x, 0, x + 8, 0, x + 8, 110, x, 110);
+    glowRect(-62, 35, -14, 80); glowRect(22, 35, 64, 80);
+    poly(COL.thatch, lit(-1), -190, 100, 0, 100, 0, 275);
+    poly(COL.thatch, lit(1) * 0.8, 0, 100, 190, 100, 0, 275);
+    if (PAL.winter > 0.05) { g.globalAlpha = PAL.winter; poly(COL.snow, 1.05, -120, 165, 0, 275, 120, 165, 0, 190); g.globalAlpha = 1; }
+    poly(COL.roof, 0.9, -40, 240, 40, 240, 22, 285, -22, 285);
+    halo(0, 60, 180);
+  },
+  pond(o) { // flat koi pond, squashed by perspective
+    const sq = clamp(osq, 0.015, 0.6), E = (rx, ry, col) => {
+      g.beginPath(); g.ellipse(ox, oy, rx * os, ry * os * sq, 0, 0, 6.2832); g.fillStyle = col; g.fill();
+    };
+    E(o.r + 34, o.r + 34, shade(COL.stone, 0.92, of));
+    E(o.r, o.r, shade(mix(COL.water, SKYC[1], 0.35), 1, of));
+    E(o.r * 0.6, o.r * 0.5, shade(mix(COL.water2, SKYC[1], 0.2), 1, of));
+    for (let i = 0; i < 3; i++) {
+      const a = o.ph + i * 2.2, X = ox + Math.cos(a) * o.r * 0.7 * os, Y = oy + Math.sin(a) * o.r * 0.7 * os * sq;
+      g.beginPath(); g.ellipse(X, Y, 22 * os, 22 * os * sq, 0, 0.4, 6.0); g.lineTo(X, Y); g.closePath();
+      g.fillStyle = shade(COL.lily, 0.95, of); g.fill();
+    }
+    for (let i = 0; i < o.n; i++) {
+      const dir = i % 2 ? 1 : -1, a = T * 0.7 * dir + i * 2.1 + o.ph, rr = o.r * (0.3 + 0.12 * i);
+      const X = ox + Math.cos(a) * rr * os, Y = oy + Math.sin(a) * rr * os * sq;
+      let vx = -Math.sin(a) * dir, vy = Math.cos(a) * dir * sq;
+      const m = Math.hypot(vx, vy) || 1; vx /= m; vy /= m;
+      const L = 28 * os, w = 8 * os * Math.max(sq * 2, 0.4), wig = Math.sin(T * 8 + i) * 0.3;
+      g.beginPath();
+      g.moveTo(X + vx * L, Y + vy * L); g.lineTo(X - vy * w, Y + vx * w);
+      g.lineTo(X - vx * L * 0.6, Y - vy * L * 0.6); g.lineTo(X + vy * w, Y - vx * w); g.closePath();
+      g.fillStyle = shade(i % 3 === 1 ? COL.white : COL.koi, 1.05, of); g.fill();
+      const tx = X - vx * L * 0.6, ty = Y - vy * L * 0.6;
+      g.beginPath(); g.moveTo(tx, ty);
+      g.lineTo(tx - (vx + vy * (0.5 + wig)) * L * 0.5, ty - (vy - vx * (0.5 + wig)) * L * 0.5);
+      g.lineTo(tx - (vx - vy * (0.5 - wig)) * L * 0.5, ty - (vy + vx * (0.5 - wig)) * L * 0.5); g.closePath(); g.fill();
+    }
+  },
+  scarecrow() {
+    shadow(40);
+    poly(COL.trunk, 0.8, -4, 0, 4, 0, 4, 165, -4, 165);
+    poly(COL.trunk, 0.75, -75, 118, 75, 118, 75, 126, -75, 126);
+    poly(COL.indigo, lit(-1), -50, 128, 0, 128, 0, 62, -34, 58);
+    poly(COL.indigo, lit(1) * 0.85, 0, 128, 50, 128, 34, 58, 0, 62);
+    poly(COL.straw, 1, -15, 128, 15, 128, 12, 158, -12, 158);
+    poly(COL.straw, lit(-1), -55, 152, 0, 152, 0, 192);
+    poly(COL.straw, lit(1) * 0.82, 0, 152, 55, 152, 0, 192);
+  },
+  tancho() { shadow(55); craneBody(false); },
+  lander(o) { // a red-crowned crane gliding down to land in the paddies as you approach
+    const h = clamp((oz - 900) * 0.1, 0, 280), flying = h > 2;
+    shadow(55 * (1 - h / 400));
+    oy -= h * os;
+    const fl = flying ? Math.sin(T * 5 + o.ph) : 0;
+    if (flying) {
+      poly(COL.crane, 0.75, -25, 110, 20, 110, -40, 140 + fl * 120);
+      poly(COL.black, 0.7, -40, 140 + fl * 120, -30, 128 + fl * 90, -52, 132 + fl * 110);
+    }
+    craneBody(flying);
+    if (flying) {
+      poly(COL.crane, 0.98, -15, 108, 30, 108, 0, 150 + Math.sin(T * 5 + o.ph + 0.3) * 140);
+      poly(COL.black, 0.8, 0, 150 + Math.sin(T * 5 + o.ph + 0.3) * 140, 8, 135 + Math.sin(T * 5 + o.ph + 0.3) * 105, -12, 138 + Math.sin(T * 5 + o.ph + 0.3) * 115);
+    }
+  },
+  rock(o) {
+    shadow(100);
+    const j = o.j, p = [[-95, 0], [-82, 20 + 40 * j[0]], [-35, 30 + 55 * j[1]], [30, 30 + 50 * j[2]], [85, 15 + 30 * j[3]], [95, 0]];
+    const c = [8, 42];
+    for (let i = 0; i < 5; i++) {
+      const s = (p[i][0] + p[i + 1][0]) > 0 ? 1 : -1;
+      poly(COL.rock, 0.82 + (i % 2) * 0.12 + 0.1 * SUNDIR * s * ofl, c[0], c[1], p[i][0], p[i][1], p[i + 1][0], p[i + 1][1]);
+    }
+    poly(COL.rock, 0.7, p[5][0], 0, p[0][0], 0, c[0], c[1]);
+    const sn = Math.max(SNOW, PAL.winter);
+    if (sn > 0.05) { g.globalAlpha = sn; poly(COL.snow, 1, p[1][0], p[1][1], p[2][0], p[2][1] + 4, p[3][0], p[3][1] + 4, p[4][0], p[4][1], c[0], c[1] + 8); g.globalAlpha = 1; }
+  },
+  fox(o) {
+    shadow(70);
+    const sw = Math.sin(T * 3 + o.ph) * 8;
+    poly(COL.fox, 0.85, -25, 10, -95, 30 + sw, -70, 55 + sw * 0.5);
+    poly(COL.white, 1, -95, 30 + sw, -80, 46 + sw, -84, 26 + sw);
+    poly(COL.fox, lit(-1), -35, 0, 10, 0, 15, 85);
+    poly(COL.fox, lit(1) * 0.85, 10, 0, 42, 0, 15, 85);
+    poly(COL.white, 0.95, 22, 30, 42, 0, 26, 74);
+    poly(COL.fox, 1, 0, 80, 56, 92, 18, 118);
+    poly(COL.white, 0.95, 20, 84, 56, 92, 26, 94);
+    poly(COL.black, 0.8, 52, 90, 58, 92, 53, 95);
+    poly(COL.fox, 0.8, 4, 106, 8, 142, 22, 115);
+    poly(COL.fox, 0.7, 18, 114, 30, 140, 31, 110);
+  },
+  tanuki(o) {
+    shadow(65);
+    const sw = Math.sin(T * 2.5 + o.ph) * 5;
+    poly(COL.tanuki, 0.85, -28, 12, -82, 24 + sw, -72, 50 + sw);
+    poly(COL.tanukiDk, 0.9, -60, 20 + sw * 0.7, -68, 22 + sw * 0.8, -64, 44 + sw * 0.8, -56, 42 + sw * 0.7);
+    poly(COL.tanuki, lit(-1), -36, 0, 4, 0, 0, 82, -30, 62);
+    poly(COL.tanuki, lit(1) * 0.88, 4, 0, 40, 0, 30, 62, 0, 82);
+    poly(COL.belly, 0.95, -12, 8, 24, 8, 18, 52, 2, 62, -8, 50);
+    poly(COL.tanuki, 1, -20, 70, 34, 70, 7, 112);
+    poly(COL.tanukiDk, 0.85, -18, 92, -22, 116, -4, 104);
+    poly(COL.tanukiDk, 0.85, 18, 104, 36, 116, 32, 92);
+    poly(COL.tanukiDk, 0.9, -14, 80, 28, 80, 22, 92, 7, 85, -8, 92);
+    poly(COL.white, 0.95, -6, 72, 20, 72, 7, 80);
+    poly(COL.black, 1, 3, 73, 11, 73, 7, 69);
+  },
+  rabbit(o) {
+    const hop = Math.abs(Math.sin(T * 5 + o.ph)) * 28;
+    shadow(55);
+    oy -= hop * os;
+    poly(COL.white, 0.95, -48, 22, -38, 10, -52, 8);
+    poly(COL.rabbit, lit(-1), -42, 0, 10, 0, -5, 58);
+    poly(COL.rabbit, lit(1) * 0.86, 10, 0, 32, 0, -5, 58);
+    poly(COL.rabbit, 1, 0, 45, 46, 55, 16, 80);
+    poly(COL.rabbit, 0.85, 14, 74, 16, 142, 28, 78);
+    poly(COL.rabbit, 0.75, 22, 76, 38, 136, 33, 72);
+    poly(COL.black, 0.8, 30, 62, 35, 64, 31, 66);
+  },
+  deer(o) {
+    shadow(90);
+    const w = o.walk ? T * 9 + o.ph : 0;
+    [-48, -30, 35, 52].forEach((lx, i) => {
+      const sw = o.walk ? Math.sin(w + (i % 2) * 3.14) * 14 : 0;
+      poly(COL.deerDk, 0.85, lx - 6, 100, lx + 6, 100, lx + 2 + sw, 0, lx - 3 + sw, 0);
+    });
+    poly(COL.deer, lit(-1), -62, 95, 0, 92, 5, 150, -55, 140);
+    poly(COL.deer, lit(1) * 0.88, 0, 92, 60, 98, 55, 148, 5, 150);
+    poly(COL.white, 0.95, -62, 138, -56, 118, -46, 140);
+    poly(COL.deer, 0.92, 38, 132, 62, 140, 80, 196, 60, 202);
+    poly(COL.deer, 1, 58, 192, 112, 180, 74, 216);
+    poly(COL.deerDk, 0.9, 64, 210, 52, 232, 74, 214);
+    g.strokeStyle = shade(COL.deerDk, 0.8, of); g.lineWidth = Math.max(1, 4 * os); g.lineCap = 'round';
+    g.beginPath();
+    const L = (a, b, c, d) => { g.moveTo(ox + a * os * ofl, oy - b * os); g.lineTo(ox + c * os * ofl, oy - d * os); };
+    L(72, 214, 66, 262); L(68, 240, 50, 258); L(67, 252, 82, 272); L(78, 213, 86, 254); L(84, 238, 100, 252);
+    g.stroke();
+  }
+};
+
+// ---------- sky ----------
+function drawSky(t) {
+  const sky = SKYC, gr = g.createLinearGradient(0, 0, 0, HZ);
+  gr.addColorStop(0, css(sky[0])); gr.addColorStop(0.55, css(sky[1])); gr.addColorStop(1, css(sky[2]));
+  g.fillStyle = gr; g.fillRect(-W * 0.2, -H * 0.3, W * 1.4, HZ + H * 0.3 + 2);
+
+  const sa = NIGHT * (1 - CLOUD * 0.8);
+  if (sa > 0.02) {
+    const span = W * 1.4;
+    for (const s of stars) {
+      const x = ((s.x * span - head * F) % span + span) % span - W * 0.2, y = s.y * HZ;
+      const a = sa * (0.55 + 0.45 * Math.sin(T * 2 + s.ph)), r = s.r;
+      g.fillStyle = `rgba(255,250,230,${a})`;
+      g.beginPath(); g.moveTo(x, y - r * 2); g.lineTo(x + r * 0.5, y); g.lineTo(x, y + r * 2); g.lineTo(x - r * 0.5, y); g.closePath();
+      g.moveTo(x - r * 2, y); g.lineTo(x, y - r * 0.5); g.lineTo(x + r * 2, y); g.lineTo(x, y + r * 0.5); g.closePath(); g.fill();
+    }
+  }
+
+  const moonA = ((t - 0.86 + 1) % 1) / 0.3;
+  if (moonA < 1) {
+    const mx = W * (0.12 + 0.76 * moonA) - head * F, my = HZ - Math.sin(moonA * Math.PI) * H * 0.36, r = H * 0.04;
+    const gl = g.createRadialGradient(mx, my, r, mx, my, r * 5);
+    gl.addColorStop(0, `rgba(220,225,255,${0.25 * (1 - RAIN)})`); gl.addColorStop(1, 'rgba(220,225,255,0)');
+    g.fillStyle = gl; g.fillRect(mx - r * 5, my - r * 5, r * 10, r * 10);
+    facetDisc(mx, my, r, 10, COL.moon, COL.moon2, 1 - CLOUD * 0.4);
+  }
+
+  const sunA = (t - 0.17) / 0.68;
+  if (sunA > -0.08 && sunA < 1.08) {
+    const sx = W * (0.1 + 0.8 * sunA) - head * F, alt = Math.sin(sunA * Math.PI);
+    const sy = HZ - alt * H * 0.4, r = H * 0.055;
+    const low = 1 - clamp(alt * 2.2, 0, 1);
+    const gl = g.createRadialGradient(sx, sy, r * 0.8, sx, sy, r * (5 + low * 4));
+    gl.addColorStop(0, `rgba(255,${200 - low * 70},${120 - low * 50},${(0.45 + low * 0.25) * (1 - RAIN * 0.85)})`);
+    gl.addColorStop(1, 'rgba(255,180,120,0)');
+    g.fillStyle = gl; g.fillRect(sx - r * 9, sy - r * 9, r * 18, r * 18);
+    facetDisc(sx, sy, r, 12, mix(COL.sun, COL.sunLow, low), mix(COL.sun2, COL.sunLow, low * 0.8), 1 - RAIN * 0.8);
+  }
+}
+function facetDisc(x, y, r, n, c1, c2, alpha) {
+  g.globalAlpha = alpha;
+  for (let i = 0; i < n; i++) {
+    const a0 = i / n * 6.2832 + T * 0.05, a1 = (i + 1) / n * 6.2832 + T * 0.05;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a0) * r, y + Math.sin(a0) * r); g.lineTo(x + Math.cos(a1) * r, y + Math.sin(a1) * r); g.closePath();
+    g.fillStyle = css(i % 2 ? c1 : c2); g.fill();
+  }
+  g.globalAlpha = 1;
+}
+function drawFuji() { // fixed landmark: pleated paper cone with a zigzag snow cap
+  const cx = W / 2 - (head + 0.12) * F, base = HZ + 1, h = H * 0.42, w = H * 1.0, n = 16;
+  const fog = clamp(0.45 + MIST * 0.3 + RAIN * 0.35, 0, 0.92);
+  const prof = i => { const x = i / n * 2 - 1; return [x, Math.min(0.93, Math.pow(1 - Math.abs(x), 1.9) * 1.05)]; };
+  const snowK = 0.75 + 0.25 * PAL.winter;
+  for (let i = 0; i < n; i++) {
+    const [x0, y0] = prof(i), [x1, y1] = prof(i + 1), s = x0 + x1 < 0 ? -1 : 1;
+    const b = 0.88 + 0.12 * SUNDIR * s + (i % 2 ? 0.04 : -0.04);
+    quad([cx + x0 * w, base], [cx + x0 * w, base - y0 * h], [cx + x1 * w, base - y1 * h], [cx + x1 * w, base], shade(COL.fuji, b, fog));
+    const s0 = (i % 2 ? 0.6 : 0.68) * snowK, s1 = ((i + 1) % 2 ? 0.6 : 0.68) * snowK;
+    if (y0 > s0 || y1 > s1)
+      quad([cx + x0 * w, base - Math.min(y0, s0) * h], [cx + x0 * w, base - y0 * h], [cx + x1 * w, base - y1 * h], [cx + x1 * w, base - Math.min(y1, s1) * h],
+        shade(COL.snow, b + 0.08, fog * 0.8));
+  }
+}
+function drawClouds() {
+  const n = 3 + CLOUD * 7, span = W + 800;
+  const base = mix(COL.cloud, COL.storm, RAIN * 0.85);
+  for (let i = 0; i < clouds.length && i < n; i++) {
+    const c = clouds[i], a = clamp(n - i, 0, 1);
+    const u = H * 0.085 * c.s;
+    const cx = ((c.x * span + T * c.sp - head * F * 0.9) % span + span) % span - 400, by = c.y * H + RAIN * H * 0.04 + (HORp - HOR);
+    g.globalAlpha = a * 0.96;
+    for (const p of c.puffs) {
+      const px = cx + p.dx * u, r = p.r * u, k = 6;
+      for (let s = 0; s < k; s++) {
+        const a0 = Math.PI + s / k * Math.PI, a1 = Math.PI + (s + 1) / k * Math.PI, am = (a0 + a1) / 2;
+        g.beginPath(); g.moveTo(px, by); g.lineTo(px + Math.cos(a0) * r, by + Math.sin(a0) * r); g.lineTo(px + Math.cos(a1) * r, by + Math.sin(a1) * r); g.closePath();
+        g.fillStyle = shade(base, 0.86 + 0.08 * (s % 2) - 0.1 * Math.cos(am) * SUNDIR, 0.12); g.fill();
+      }
+    }
+    g.globalAlpha = 1;
+  }
+}
+function crane(x, y, sz, ph, col, dir) {
+  const P = (b, ...p) => {
+    g.beginPath();
+    for (let i = 0; i < p.length; i += 2) { const X = x + p[i] * sz * dir, Y = y - p[i + 1] * sz; i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
+    g.closePath(); g.fillStyle = shade(col, b, 0.15); g.fill();
+  };
+  P(0.72, -0.15, 0, 0.25, 0, -0.05, 1.15 * Math.sin(ph) + 0.1);
+  P(0.86, -0.5, 0, 0, 0.2, 0.5, 0, 0, -0.22);
+  P(0.95, 0.3, 0.02, 1.15, 0.72, 0.42, 0.12);
+  P(0.8, 1.15, 0.72, 1.38, 0.62, 1.17, 0.6);
+  P(0.9, -0.3, 0.02, -1.15, 0.62, -0.42, 0.12);
+  P(1.0, -0.25, 0.05, 0.3, 0.05, -0.1, 1.3 * Math.sin(ph + 0.35) + 0.1);
+}
+function drawCranes() {
+  const span = W * 2.6, lead = (T * W * 0.07) % span - W * 0.5 - head * F * 0.6;
+  const by = H * 0.19 + Math.sin(T * 0.4) * H * 0.03 + (HORp - HOR);
+  for (let k = 0; k < 5; k++) {
+    const row = (k + 1) >> 1, s = k % 2 ? 1 : -1;
+    crane(lead - row * W * 0.05, by + row * s * H * 0.035 + Math.sin(T * 1.3 + k) * 3,
+      H * 0.022 * (1 - row * 0.06), T * 6 + k * 0.8, k === 0 ? COL.craneRed : COL.crane, 1);
+  }
+}
+function drawMountains() {
+  const PW = W * 1.7;
+  for (const L of LAYERS) {
+    const base = HZ + L.base, off = ((head * F + D * L.drift) % PW + PW) % PW;
+    const fog = clamp(L.fog + MIST * 0.3 + RAIN * 0.2, 0, 0.9), col = L.col === 'near' ? PAL.hill : COL[L.col];
+    for (const p of L.peaks) {
+      for (let rep = -1; rep <= 1; rep++) {
+        const X = p.x * PW - off + rep * PW, h = p.h * H, w = h * L.wmul;
+        if (X + w < -W * 0.2 || X - w > W * 1.2) continue;
+        const A = [X, base - h], Lp = [X - w, base], Rp = [X + w, base], M = [X + w * p.m, base];
+        const K = [lerp(A[0], Lp[0], p.k), lerp(A[1], Lp[1], p.k)];
+        const tri = (b, a, c, d, cc = col) => { g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(c[0], c[1]); g.lineTo(d[0], d[1]); g.closePath(); g.fillStyle = shade(cc, b, fog); g.fill(); };
+        tri(0.92 - 0.14 * SUNDIR, A, K, M);
+        tri(0.86 - 0.14 * SUNDIR, K, Lp, M);
+        tri(0.8 + 0.14 * SUNDIR, A, M, Rp);
+        if (L.snow) {
+          const s = 0.26, f = q => [lerp(A[0], q[0], s), lerp(A[1], q[1], s)];
+          tri(1.05, A, f(Lp), f(M), COL.snow); tri(0.92 + 0.1 * SUNDIR, A, f(M), f(Rp), COL.snow);
+        }
+      }
+    }
+  }
+}
+
+// ---------- ground, road, bridges, and objects (painted far to near so hills hide what's behind them) ----------
+function drawWorld() {
+  g.fillStyle = css(FOG); g.fillRect(-W * 0.2, HZ, W * 1.4, H * 1.4);
+  const sn = SNOW * 0.75;
+  const gA = mix(PAL.grass[0], COL.snow, sn), gB = mix(PAL.grass[1], COL.snow2, sn);
+  const pA = mix(mix(PAL.paddy[0], SKYC[1], 0.3), COL.snow, sn), pB = mix(PAL.paddy[1], COL.snow2, sn);
+  const wA = mix(COL.water, SKYC[1], 0.35), wB = mix(COL.water2, SKYC[1], 0.25);
+  const wet = c => mix(mix(c, COL.wet, RAIN * 0.5), COL.snow, Math.max(SNOW, PAL.winter * 0.6) * 0.35);
+  const rA = wet(COL.road1), rB = wet(COL.road2);
+  const pt = d => {
+    const z = Math.max(d - D, ZNEAR), dd = D + z, s = F / z;
+    return { x: W / 2 + (rc(dd) - camX - head * z) * s, yT: HORp + (camY - elT(dd)) * s, yR: HORp + (camY - elR(dd)) * s, s, z };
+  };
+  const X = (p, o) => p.x + o * p.s;
+
+  objs.sort((a, b) => b.d - a.d);
+  let dFar = Math.floor((D + ZFAR) / SEG) * SEG, pf = pt(dFar), oi = 0;
+  while (oi < objs.length && objs[oi].d >= dFar) oi++;
+  while (true) {
+    const dNear = dFar - SEG, pn = pt(dNear), f = fogAt(pf.z), band = Math.floor(dNear / BAND) & 1;
+    const rv = riverX(dNear + SEG / 2), zt = zoneAt(dNear);
+    const inWater = rv && rv[0] < rv[1].hw, onBank = rv && !inWater && rv[0] < rv[1].hw + BANK;
+    const onBridge = rv && rv[0] < rv[1].hw + BRIDGE;
+
+    if (pn.yT > pf.yT) {
+      const col = inWater ? (Math.floor(dNear / 100) & 1 ? wA : wB) : onBank ? COL.bank
+        : zt === 'paddy' ? (Math.floor(dNear / 150) & 1 ? pA : pB) : band ? gA : gB;
+      g.fillStyle = shade(col, 1, f);
+      g.fillRect(-W * 0.2, pf.yT, W * 1.4, pn.yT - pf.yT + 1);
+      if (inWater) { // drifting ripples
+        g.fillStyle = shade(COL.white, 0.95, Math.max(f, 0.25));
+        for (let k = 0; k < 2; k++) {
+          const o = ((dNear * 7.3 + k * 1900 + T * 260 * (k ? 1 : -1)) % 4000 + 4000) % 4000 - 2000;
+          g.fillRect(X(pn, o), pf.yT + (pn.yT - pf.yT) * 0.3, 120 * pn.s, Math.max(1, (pn.yT - pf.yT) * 0.35));
+        }
+      }
+    }
+    const strip = (o0, o1, col, h = 0) => quad(
+      [X(pf, o0), pf.yR - h * pf.s], [X(pf, o1), pf.yR - h * pf.s],
+      [X(pn, o1), pn.yR - h * pn.s + 1], [X(pn, o0), pn.yR - h * pn.s + 1], col);
+    if (onBridge) {
+      for (const sd of [-1, 1]) { // vermilion fascia down to the bank or water
+        const o = sd * (RW + 12);
+        quad([X(pf, o), pf.yR], [X(pn, o), pn.yR], [X(pn, o), pn.yT], [X(pf, o), pf.yT], shade(COL.verm, 0.72, f));
+      }
+      if (pn.yR > pf.yR) strip(-RW - 12, RW + 12, shade(Math.floor(dNear / SEG) & 1 ? COL.plank1 : COL.plank2, 1, f));
+      for (const sd of [-1, 1]) {
+        const o = sd * (RW + 6);
+        quad([X(pf, o), pf.yR - 50 * pf.s], [X(pn, o), pn.yR - 50 * pn.s], [X(pn, o), pn.yR - 38 * pn.s], [X(pf, o), pf.yR - 38 * pf.s], shade(COL.verm, 1, f));
+        if (Math.floor(dNear / SEG) % 3 === 0) {
+          const px = X(pn, o), w = 7 * pn.s;
+          g.fillStyle = shade(COL.verm, 0.85, f); g.fillRect(px - w, pn.yR - 58 * pn.s, w * 2, 58 * pn.s);
+          g.fillStyle = shade(COL.black, 1, f); g.fillRect(px - w * 1.3, pn.yR - 66 * pn.s, w * 2.6, 9 * pn.s);
+        }
+      }
+    } else if (pn.yR > pf.yR) {
+      strip(-RW - 40, RW + 40, shade(band ? COL.verm : COL.white, 0.95, f));
+      strip(-RW, RW, shade(band ? rA : rB, 1, f));
+      if (band) strip(-10, 10, shade(COL.white, 1, f));
+    }
+    while (oi < objs.length && objs[oi].d >= dNear) drawObj(objs[oi++]);
+    if (pn.z <= ZNEAR) break;
+    pf = pn; dFar = dNear;
+  }
+  if (MIST > 0.01 || RAIN > 0.01) {
+    const a = MIST * 0.6 + RAIN * 0.25, gr = g.createLinearGradient(0, HZ - H * 0.14, 0, HZ + H * 0.2);
+    gr.addColorStop(0, css(FOG, 0)); gr.addColorStop(0.4, css(FOG, a)); gr.addColorStop(1, css(FOG, 0));
+    g.fillStyle = gr; g.fillRect(-W * 0.2, HZ - H * 0.14, W * 1.4, H * 0.34);
+  }
+}
+function drawObj(o) {
+  const z = o.d - D;
+  if (z > ZFAR || z < ZNEAR) return;
+  const s = F / z, x = W / 2 + (rc(o.d) + o.o - camX - head * z) * s;
+  const reach = (o.t === 'torii' ? RW + 200 : o.t === 'pagoda' ? 400 : 300) * s * (o.sc || 1);
+  if (x + reach < -W * 0.25 || x - reach > W * 1.25) return;
+  const e = o.road ? elR(o.d) : elT(o.d);
+  ox = x; oy = HORp + (camY - e) * s; os = s * (o.sc || 1); of = fogAt(z); ofl = o.face || 1;
+  osq = (camY - e) / z; oz = z;
+  DRAW[o.t](o);
+}
+
+// ---------- particles ----------
+function stepParticles(dt) {
+  const adv = (arr, fall, sway) => {
+    for (const p of arr) {
+      p.z -= speed * dt; p.y -= fall * dt; p.x += Math.sin(T * 1.3 + p.ph) * sway * dt - carV * dt * 0.6;
+      if (p.z < 40 || p.y < 0) { respawn(p, p.z < 40); if (p.y < 0) p.y = 900; }
+    }
+  };
+  adv(rain, 2600, 0);
+  adv(snow, 110, 40);
+  adv(leaves, 60, 90);
+  for (const p of flies) {
+    p.z -= speed * dt * 0.98; p.x += Math.sin(T + p.ph) * 30 * dt; p.y += Math.cos(T * 1.7 + p.ph) * 20 * dt;
+    if (p.z < 40) { respawn(p, true); p.y = 20 + Math.random() * 220; }
+  }
+}
+function drawParticles() {
+  const P = (x, y, z) => { const s = F / z; return [W / 2 + x * s, HORp + (CH - y) * s, s]; };
+  let n = Math.floor(RAIN * rain.length);
+  if (n) {
+    g.strokeStyle = `rgba(205,215,235,${0.35 + 0.25 * LT})`; g.lineWidth = 1.1; g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const p = rain[i], a = P(p.x, p.y, p.z), b = P(p.x, p.y + 45, p.z + 70);
+      g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+    }
+    g.stroke();
+  }
+  n = Math.floor(SNOW * snow.length);
+  if (n) {
+    g.fillStyle = `rgba(250,252,255,${0.6 + 0.3 * LT})`; g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const p = snow[i], a = P(p.x, p.y, p.z), r = Math.min(5 * a[2], 9);
+      g.moveTo(a[0] + r, a[1]); g.lineTo(a[0], a[1] + r); g.lineTo(a[0] - r, a[1]); g.lineTo(a[0], a[1] - r); g.closePath();
+    }
+    g.fill();
+  }
+  n = Math.floor(LEAF * leaves.length);
+  if (n) {
+    const big = 1 + 0.6 * clamp((PAL.leaf[0] - PAL.leaf[1]) / 120, 0, 1); // autumn leaves are larger than petals
+    for (let k = 0; k < 2; k++) {
+      g.fillStyle = shade(PAL.leaf, k ? 1.08 : 0.85, 0); g.beginPath();
+      for (let i = k; i < n; i += 2) {
+        const p = leaves[i], a = P(p.x, p.y, p.z), r = Math.min(8 * big * a[2], 15 * big), ang = T * 3 + p.ph;
+        const c = Math.cos(ang) * r, s = Math.sin(ang) * r * 0.45;
+        g.moveTo(a[0] + c, a[1] + s); g.lineTo(a[0] - s, a[1] + c * 0.5); g.lineTo(a[0] - c, a[1] - s); g.lineTo(a[0] + s, a[1] - c * 0.5); g.closePath();
+      }
+      g.fill();
+    }
+  }
+  if (FLIES > 0.01) {
+    g.globalCompositeOperation = 'lighter';
+    for (const p of flies) {
+      const a = P(p.x, p.y, p.z), fl = FLIES * (0.5 + 0.5 * Math.sin(T * 4 + p.ph * 3));
+      const r = Math.min(3 * a[2], 6);
+      g.fillStyle = `rgba(255,220,110,${0.18 * fl})`; g.beginPath(); g.arc(a[0], a[1], r * 3, 0, 6.2832); g.fill();
+      g.fillStyle = `rgba(255,240,170,${0.9 * fl})`; g.beginPath(); g.arc(a[0], a[1], r * 0.8, 0, 6.2832); g.fill();
+    }
+    g.globalCompositeOperation = 'source-over';
+  }
+}
+
+// ---------- vehicle ----------
+function steer(dt) {
+  let best = target, bestC = Infinity;
+  for (let c = -220; c <= 220; c += 20) {
+    let cost = Math.abs(c - carO) * 0.4 + Math.abs(c) * 0.15 - (c === target ? 40 : 0);
+    for (const o of objs) {
+      if (!o.ob) continue;
+      const z = o.d - D;
+      if (z < ZNEAR || z > LOOK) continue;
+      // where the car will actually be when it reaches this obstacle (critically damped spring)
+      const ta = z / speed, e = Math.exp(-W0 * ta) * (1 + W0 * ta);
+      const at = c + (carO - c) * e + carV * ta * Math.exp(-W0 * ta);
+      const pred = o.o + (o.vx || 0) * ta, gap = Math.abs(pred - at) - (o.r + CARW);
+      if (gap < 25) cost += 2000 * (1.2 - z / LOOK);
+      else if (gap < 80) cost += (80 - gap) * 3 * (1 - z / LOOK);
+    }
+    if (cost < bestC) { bestC = cost; best = c; }
+  }
+  target = best;
+  carV += ((target - carO) * W0 * W0 - carV * 2 * W0) * dt;
+  carO += carV * dt;
+}
+function drawHood() {
+  const bob = Math.sin(T * 11) * 1.2 + Math.sin(T * 3.1) * 0.8, sx = -carV * 0.03;
+  const yb = H + 2, A = [W * 0.24 + sx, H * 0.92 + bob], M = [W * 0.5 + sx, H * 0.885 + bob], B = [W * 0.76 + sx, H * 0.92 + bob];
+  const tri = (b, ...p) => { g.beginPath(); g.moveTo(p[0][0], p[0][1]); for (const q of p.slice(1)) g.lineTo(q[0], q[1]); g.closePath(); g.fillStyle = shade(COL.hood, b, 0); g.fill(); };
+  ofl = 1;
+  tri(lit(-1) * 0.95, [-10 + sx, yb], A, M, [W * 0.5 + sx, yb]);
+  tri(lit(1) * 0.8, M, B, [W + 10 + sx, yb], [W * 0.5 + sx, yb]);
+  tri(lit(-1) * 1.08, A, M, [W * 0.3 + sx, yb]);
+  tri(lit(1) * 0.9, M, B, [W * 0.7 + sx, yb]);
+  const s = H * 0.012; // folded-paper crane ornament
+  g.fillStyle = shade(COL.white, 1, 0);
+  g.beginPath(); g.moveTo(M[0], M[1] - s * 2.2); g.lineTo(M[0] + s, M[1]); g.lineTo(M[0], M[1] + s * 0.6); g.lineTo(M[0] - s, M[1]); g.closePath(); g.fill();
+}
+
+// ---------- main loop ----------
+function update(dt) {
+  speed = lerp(speed, speedT, Math.min(1, dt * 0.6));
+  D += speed * dt;
+  spawn(D + ZFAR + 300);
+  for (const o of objs) if (o.vx) o.o += o.vx * dt;
+  objs = objs.filter(o => o.d - D > ZNEAR);
+  zones = zones.filter(z => z.b > D - 500);
+  rivers = rivers.filter(r => r.d + r.hw + BRIDGE + 100 > D);
+  steer(dt);
+  prevHead = head; head = rcd(D); camX = rc(D) + carO; camY = elR(D) + CH;
+  pitch = lerp(pitch, (elR(D + 600) - elR(D)) / 600 * 0.8, Math.min(1, dt * 2.5));
+  HORp = HOR + pitch * F; HZ = HORp + CH * F / ZFAR;
+  const turn = dt > 0 ? (head - prevHead) / dt : 0;
+  roll = lerp(roll, clamp(-carV * 0.00022 - turn * 0.25, -0.06, 0.06), Math.min(1, dt * 4));
+  stepParticles(dt);
+}
+function render(t) {
+  g.save();
+  g.translate(W / 2, H * 0.55); g.rotate(roll); g.scale(1.1, 1.1); g.translate(-W / 2, -H * 0.55);
+  drawSky(t);
+  drawFuji();
+  drawClouds();
+  drawMountains();
+  drawCranes();
+  drawWorld();
+  drawParticles();
+  g.restore();
+  drawHood();
+  if (RAIN > 0.3 && FLASH > 0.01) { g.fillStyle = `rgba(235,240,255,${0.5 * Math.min(1, FLASH)})`; g.fillRect(0, 0, W, H); }
+  g.fillStyle = vignette; g.fillRect(0, 0, W, H);
+}
+
+let last = performance.now(), paused = false, shownDay = -1;
+function frame(now) {
+  const dt = paused ? 0 : Math.min(0.05, (now - last) / 1000);
+  last = now; T += dt;
+  const t = (T % LOOP) / LOOP;
+  computeEnv(t);
+  update(dt);
+  render(t);
+  if (DAY !== shownDay) {
+    shownDay = DAY;
+    hint.textContent = `Day ${DAY + 1} · ${SEASONS[plan(DAY).s].name} — double-click or F for fullscreen · Space to pause`;
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- screensaver chrome ----------
+let idleTimer;
+const wake = () => { document.body.classList.remove('idle'); clearTimeout(idleTimer); idleTimer = setTimeout(() => document.body.classList.add('idle'), 2000); };
+const fullscreen = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {});
+addEventListener('mousemove', wake);
+addEventListener('dblclick', fullscreen);
+addEventListener('keydown', e => {
+  if (e.code === 'Space') { paused = !paused; e.preventDefault(); }
+  if (e.key === 'f' || e.key === 'F') fullscreen();
+  wake();
+});
+addEventListener('resize', resize);
+resize(); wake();
+computeEnv((T % LOOP) / LOOP); update(0);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

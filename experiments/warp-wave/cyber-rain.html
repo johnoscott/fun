@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Cyber Rain</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: #7dffb4;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
+  #hud {
+    position: fixed;
+    top: 12px;
+    left: 14px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #43ffb2;
+    text-shadow: 0 0 8px rgba(67, 255, 178, 0.6);
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.75;
+  }
+  #hud b { color: #eaffe6; font-weight: 500; }
+  #hint {
+    position: fixed;
+    bottom: 12px;
+    right: 14px;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #2f9d70;
+    opacity: 0.6;
+    pointer-events: none;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+  <canvas id="rain"></canvas>
+  <div id="hud">
+    <div><b>▚ CYBER RAIN</b> // stream <span id="streams">0</span></div>
+    <div>fps <span id="fps">--</span> · glyphs <span id="glyphs">0</span></div>
+  </div>
+  <div id="hint">click to bloom · move mouse to disturb</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("rain");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  const GLYPHS =
+    "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンー" +
+    "0123456789<>[]{}/=+*#$%&@?!:;∎░▒▓█▚▙▟◢◣◤◥▲▼◆◇◉○●";
+  const glyphArr = [...GLYPHS];
+  const pick = () => glyphArr[(Math.random() * glyphArr.length) | 0];
+
+  let W = 0, H = 0, DPR = 1;
+  const FONT_SIZE = 16;      // css px
+  const COL_WIDTH = FONT_SIZE;
+  let cols = 0;
+  let streams = [];
+  let mouse = { x: -9999, y: -9999, active: false };
+  const bursts = [];
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.font = `${FONT_SIZE}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    ctx.textBaseline = "top";
+    // wipe with solid black on resize so trails don't smear at new size
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+
+    cols = Math.ceil(W / COL_WIDTH);
+    streams = new Array(cols).fill(0).map((_, i) => makeStream(i));
+    document.getElementById("streams").textContent = cols;
+  }
+
+  function makeStream(i) {
+    return {
+      x: i * COL_WIDTH,
+      y: -Math.random() * H,
+      speed: 1 + Math.random() * 2.4,          // px per frame at 60fps baseline
+      length: 8 + (Math.random() * 26) | 0,
+      trail: [],
+      lastEmit: 0,
+      flicker: Math.random() * 0.02 + 0.005,
+      hueShift: Math.random() < 0.03,          // rare cyan stream
+      restartAt: H + Math.random() * 400,
+    };
+  }
+
+  // FPS meter
+  let last = performance.now();
+  let frames = 0, fpsAccum = 0;
+  const fpsEl = document.getElementById("fps");
+  const glyphsEl = document.getElementById("glyphs");
+  let glyphCount = 0;
+
+  function step(now) {
+    const dt = Math.min(48, now - last); // clamp for tab switches
+    last = now;
+    frames++;
+    fpsAccum += dt;
+    if (fpsAccum >= 500) {
+      fpsEl.textContent = Math.round((frames * 1000) / fpsAccum);
+      frames = 0; fpsAccum = 0;
+    }
+
+    // fade previous frame — this creates the phosphor trail
+    ctx.fillStyle = "rgba(0, 0, 0, 0.09)";
+    ctx.fillRect(0, 0, W, H);
+
+    const timeScale = dt / (1000 / 60); // frames of 60fps elapsed
+
+    glyphCount = 0;
+
+    for (let i = 0; i < streams.length; i++) {
+      const s = streams[i];
+
+      // mouse repulsion — nearby streams accelerate & scramble
+      let boost = 1;
+      if (mouse.active) {
+        const dx = s.x - mouse.x;
+        const dy = s.y - mouse.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 180 * 180) {
+          const f = 1 - Math.sqrt(d2) / 180;
+          boost = 1 + f * 2.2;
+        }
+      }
+
+      s.y += s.speed * boost * timeScale;
+
+      // emit new head glyph every ~FONT_SIZE of downward travel
+      const headRow = Math.floor(s.y / FONT_SIZE);
+      if (headRow !== s.lastEmit) {
+        s.lastEmit = headRow;
+        s.trail.push({ ch: pick(), row: headRow, born: now });
+        if (s.trail.length > s.length) s.trail.shift();
+      }
+
+      // draw trail
+      for (let t = 0; t < s.trail.length; t++) {
+        const g = s.trail[t];
+        const y = g.row * FONT_SIZE;
+        if (y < -FONT_SIZE || y > H + FONT_SIZE) continue;
+
+        // occasional glyph mutation for that scrambling feel
+        if (Math.random() < s.flicker) g.ch = pick();
+
+        const age = (s.trail.length - 1 - t) / Math.max(1, s.trail.length - 1);
+        // head = white-hot, tail = dim green
+        if (t === s.trail.length - 1) {
+          ctx.fillStyle = s.hueShift ? "#c4faff" : "#eaffe6";
+          ctx.shadowColor = s.hueShift ? "rgba(140,230,255,0.9)" : "rgba(180,255,200,0.9)";
+          ctx.shadowBlur = 8;
+        } else {
+          const alpha = Math.max(0.05, 1 - age * 1.15);
+          ctx.fillStyle = s.hueShift
+            ? `rgba(90, 210, 255, ${alpha})`
+            : `rgba(60, 240, 140, ${alpha})`;
+          ctx.shadowBlur = 0;
+        }
+        ctx.fillText(g.ch, s.x, y);
+        glyphCount++;
+      }
+      ctx.shadowBlur = 0;
+
+      // restart stream once fully off-screen
+      const topY = (s.trail.length ? s.trail[0].row : headRow) * FONT_SIZE;
+      if (topY > s.restartAt) {
+        s.y = -Math.random() * H * 0.5 - FONT_SIZE * 4;
+        s.trail.length = 0;
+        s.speed = 1 + Math.random() * 2.4;
+        s.length = 8 + (Math.random() * 26) | 0;
+        s.hueShift = Math.random() < 0.03;
+        s.lastEmit = Math.floor(s.y / FONT_SIZE);
+        s.restartAt = H + Math.random() * 400;
+      }
+    }
+
+    // click bursts — brief radial pulse of extra glyphs
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i];
+      const life = (now - b.born) / b.dur;
+      if (life >= 1) { bursts.splice(i, 1); continue; }
+      const r = life * b.radius;
+      const alpha = (1 - life) * 0.9;
+      const count = 22;
+      ctx.shadowColor = "rgba(180,255,200,0.9)";
+      ctx.shadowBlur = 10;
+      for (let k = 0; k < count; k++) {
+        const ang = (k / count) * Math.PI * 2 + b.rot;
+        const x = b.x + Math.cos(ang) * r;
+        const y = b.y + Math.sin(ang) * r;
+        ctx.fillStyle = `rgba(190,255,215,${alpha})`;
+        ctx.fillText(pick(), x, y);
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    glyphsEl.textContent = glyphCount;
+    requestAnimationFrame(step);
+  }
+
+  // interactivity
+  window.addEventListener("resize", resize);
+  window.addEventListener("mousemove", (e) => {
+    mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true;
+  });
+  window.addEventListener("mouseleave", () => { mouse.active = false; });
+  window.addEventListener("click", (e) => {
+    bursts.push({
+      x: e.clientX, y: e.clientY,
+      born: performance.now(),
+      dur: 700,
+      radius: 180 + Math.random() * 60,
+      rot: Math.random() * Math.PI,
+    });
+  });
+  window.addEventListener("touchmove", (e) => {
+    if (!e.touches[0]) return;
+    mouse.x = e.touches[0].clientX;
+    mouse.y = e.touches[0].clientY;
+    mouse.active = true;
+  }, { passive: true });
+
+  resize();
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

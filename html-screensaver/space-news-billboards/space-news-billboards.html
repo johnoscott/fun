@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space News Ride</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            color: #0ff;
+        }
+
+        #starfield {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        #scene {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            perspective: 1000px;
+            perspective-origin: center center;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .craft-assembly {
+            position: absolute;
+            transform-style: preserve-3d;
+            opacity: 0;
+            will-change: transform, opacity;
+        }
+
+        /* Spaceship part */
+        .spaceship {
+            position: absolute;
+            top: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 40px;
+            background: linear-gradient(90deg, #333, #666, #333);
+            border-radius: 50% 50% 0 0;
+            border-bottom: 5px solid #0ff;
+            box-shadow: 0 -5px 15px rgba(0, 255, 255, 0.3);
+            z-index: 2;
+        }
+
+        .thruster {
+            position: absolute;
+            bottom: 40px;
+            width: 20px;
+            height: 30px;
+            background: #ff5500;
+            border-radius: 50%;
+            filter: blur(5px);
+            animation: thrust 0.1s infinite alternate;
+        }
+        
+        .thruster.left { left: 20px; }
+        .thruster.right { right: 20px; }
+
+        @keyframes thrust {
+            from { transform: scaleY(1); opacity: 0.8; }
+            to { transform: scaleY(1.5); opacity: 1; }
+        }
+
+        /* Struts connecting ship to billboard */
+        .strut {
+            position: absolute;
+            top: -20px;
+            width: 6px;
+            height: 40px;
+            background: repeating-linear-gradient(
+                45deg,
+                #222,
+                #222 5px,
+                #0ff 5px,
+                #0ff 10px
+            );
+            z-index: 1;
+        }
+        .strut.left { left: 10%; }
+        .strut.right { right: 10%; }
+
+        /* The Billboard */
+        .billboard {
+            position: relative;
+            width: 700px;
+            max-width: 90vw;
+            background: rgba(10, 20, 30, 0.85);
+            border: 2px solid #0ff;
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.4), inset 0 0 20px rgba(0, 255, 255, 0.2);
+            padding: 25px;
+            box-sizing: border-box;
+            text-align: center;
+            border-radius: 0 0 15px 15px;
+            backdrop-filter: blur(4px);
+        }
+
+        .billboard::before, .billboard::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        .billboard img {
+            width: 100%;
+            max-height: 350px;
+            object-fit: cover;
+            border: 1px solid #0ff;
+            margin-bottom: 20px;
+            filter: contrast(1.2) saturate(1.1);
+        }
+
+        .billboard h2 {
+            margin: 0 0 15px 0;
+            font-size: 1.8rem;
+            color: #fff;
+            text-shadow: 0 0 8px #0ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .billboard p {
+            margin: 0;
+            font-size: 1.2rem;
+            line-height: 1.5;
+            color: #ccc;
+        }
+
+        .billboard .source {
+            margin-top: 20px;
+            font-size: 1rem;
+            color: #0ff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: inline-block;
+            border-top: 1px solid rgba(0, 255, 255, 0.5);
+            padding-top: 10px;
+        }
+
+        /* Flight path animation */
+        @keyframes flyBy {
+            0% {
+                transform: translate3d(var(--startX), var(--startY), -8000px) rotateX(var(--rotX)) rotateZ(var(--rotZ));
+                opacity: 0;
+            }
+            15% {
+                opacity: 1;
+            }
+            30% {
+                /* Arrives in front of viewer */
+                transform: translate3d(0, 0, -150px) rotateX(5deg) rotateZ(0deg);
+                opacity: 1;
+            }
+            70% {
+                /* Drifts slowly */
+                transform: translate3d(0, -20px, 0px) rotateX(-5deg) rotateZ(0deg);
+                opacity: 1;
+            }
+            85% {
+                opacity: 1;
+            }
+            100% {
+                /* Zooms past */
+                transform: translate3d(var(--endX), var(--endY), 1500px) rotateX(var(--rotX2)) rotateZ(var(--rotZ2));
+                opacity: 0;
+            }
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 10px #0ff;
+            animation: pulse 1s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="starfield"></canvas>
+    <div id="loading">Establishing link to Earth feeds...</div>
+    <div id="scene"></div>
+
+    <script>
+        // Starfield background
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let stars = [];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        for (let i = 0; i < 600; i++) {
+            stars.push({
+                x: Math.random() * width - width / 2,
+                y: Math.random() * height - height / 2,
+                z: Math.random() * 2000,
+                radius: Math.random() * 2
+            });
+        }
+
+        function drawStars() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(0, 0, width, height);
+            
+            const cx = width / 2;
+            const cy = height / 2;
+
+            ctx.fillStyle = 'white';
+            stars.forEach(star => {
+                star.z -= 10; // Faster stars for sense of speed
+                if (star.z <= 0) {
+                    star.x = Math.random() * width - cx;
+                    star.y = Math.random() * height - cy;
+                    star.z = 2000;
+                }
+
+                const px = cx + (star.x / star.z) * 800;
+                const py = cy + (star.y / star.z) * 800;
+                const r = Math.max(0.1, star.radius * (1000 / star.z));
+
+                if (px > 0 && px < width && py > 0 && py < height) {
+                    // Star streaking effect
+                    ctx.fillStyle = `rgba(255, 255, 255, ${1 - star.z/2000})`;
+                    ctx.beginPath();
+                    ctx.arc(px, py, r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+            requestAnimationFrame(drawStars);
+        }
+        drawStars();
+
+        // News fetching and rendering
+        const RSS_URLS = [
+            'https://feeds.bbci.co.uk/news/world/rss.xml',
+            'https://rss.nytimes.com/services/xml/rss/nyt/World.xml'
+        ];
+        
+        const RSS2JSON_API = 'https://api.rss2json.com/v1/api.json?rss_url=';
+
+        async function fetchNews() {
+            let allItems = [];
+            for (let url of RSS_URLS) {
+                try {
+                    const response = await fetch(RSS2JSON_API + encodeURIComponent(url));
+                    const data = await response.json();
+                    if (data.status === 'ok') {
+                        allItems = allItems.concat(data.items);
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch feed:", url);
+                }
+            }
+            return allItems.sort(() => Math.random() - 0.5); // Shuffle
+        }
+
+        function createCraft(item) {
+            const container = document.createElement('div');
+            container.className = 'craft-assembly';
+            
+            let imgHtml = '';
+            let imgUrl = item.thumbnail || (item.enclosure && item.enclosure.link);
+            if (!imgUrl && item.description.match(/<img[^>]+src="([^">]+)"/)) {
+                imgUrl = item.description.match(/<img[^>]+src="([^">]+)"/)[1];
+            }
+
+            if (imgUrl) {
+                imgHtml = `<img src="${imgUrl}" alt="News Image" onerror="this.style.display='none'">`;
+            }
+
+            let cleanDesc = item.description.replace(/<\/?[^>]+(>|$)/g, "").trim();
+            if (cleanDesc.length > 250) {
+                cleanDesc = cleanDesc.substring(0, 250) + '...';
+            }
+            
+            const host = new URL(item.link).hostname.replace('www.', '');
+
+            container.innerHTML = `
+                <div class="spaceship">
+                    <div class="thruster left"></div>
+                    <div class="thruster right"></div>
+                </div>
+                <div class="strut left"></div>
+                <div class="strut right"></div>
+                <div class="billboard">
+                    ${imgHtml}
+                    <h2>${item.title}</h2>
+                    <p>${cleanDesc}</p>
+                    <div class="source">INCOMING TRANSMISSION: ${host}</div>
+                </div>
+            `;
+
+            // Randomize trajectory origin and destination for dynamic flight path
+            const startX = (Math.random() - 0.5) * 6000 + 'px';
+            const startY = (Math.random() - 0.5) * 4000 + 'px';
+            const endX = (Math.random() - 0.5) * 4000 + 'px';
+            const endY = (Math.random() - 0.5) * 4000 + 'px';
+            const rotX = (Math.random() - 0.5) * 60 + 'deg';
+            const rotZ = (Math.random() - 0.5) * 45 + 'deg';
+            const rotX2 = (Math.random() - 0.5) * 90 + 'deg';
+            const rotZ2 = (Math.random() - 0.5) * 90 + 'deg';
+
+            container.style.setProperty('--startX', startX);
+            container.style.setProperty('--startY', startY);
+            container.style.setProperty('--endX', endX);
+            container.style.setProperty('--endY', endY);
+            container.style.setProperty('--rotX', rotX);
+            container.style.setProperty('--rotZ', rotZ);
+            container.style.setProperty('--rotX2', rotX2);
+            container.style.setProperty('--rotZ2', rotZ2);
+
+            return container;
+        }
+
+        async function startRide() {
+            const loading = document.getElementById('loading');
+            const scene = document.getElementById('scene');
+            
+            const newsItems = await fetchNews();
+            loading.style.display = 'none';
+
+            if (newsItems.length === 0) {
+                loading.textContent = "SIGNAL LOST.";
+                loading.style.display = 'block';
+                return;
+            }
+
+            let currentIndex = 0;
+            const animationDuration = 14000; // 14 seconds for one full pass
+
+            function spawnNext() {
+                if (currentIndex >= newsItems.length) {
+                    currentIndex = 0; 
+                }
+
+                const item = newsItems[currentIndex];
+                const craft = createCraft(item);
+                
+                craft.style.animation = `flyBy ${animationDuration}ms ease-in-out forwards`;
+                
+                scene.appendChild(craft);
+
+                // Clean up the DOM once animation completes
+                setTimeout(() => {
+                    if (craft.parentNode) {
+                        scene.removeChild(craft);
+                    }
+                }, animationDuration);
+
+                currentIndex++;
+
+                // Wait until this craft has completely passed before spawning the next one
+                // We add a tiny 500ms delay between crafts for a brief empty-space breather
+                setTimeout(spawnNext, animationDuration + 500);
+            }
+
+            spawnNext();
+        }
+
+        startRide();
+    </script>
+</body>
+</html>

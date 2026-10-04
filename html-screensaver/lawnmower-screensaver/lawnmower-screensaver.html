@@ -1,0 +1,769 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Mow — isometric lawnmower screensaver</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  canvas{display:block;width:100vw;height:100vh;image-rendering:pixelated}
+  body.nocursor{cursor:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+const TAU = Math.PI*2;
+const GRID = 22, TH = 8, HTW = 8, HTH = 4;   // tile 16x8, grid 22x22
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const buf = document.createElement('canvas'), g = buf.getContext('2d');
+
+let W = 480, H = 270, OX = 240, OY = 40;
+let stars = [], flies = [];
+
+const clamp = (v,a,b)=> v<a?a : v>b?b : v;
+const mix = (a,b,t)=> a+(b-a)*t;
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  cv.width  = Math.max(1, Math.round(innerWidth*dpr));
+  cv.height = Math.max(1, Math.round(innerHeight*dpr));
+  H = 270;
+  W = Math.max(340, Math.round(H*innerWidth/Math.max(1,innerHeight)));
+  buf.width = W; buf.height = H;
+  OX = Math.round(W/2);
+  OY = Math.round((H - GRID*TH)/2) + 8;
+  stars = [];
+  for(let i=0;i<110;i++) stars.push({x:Math.random()*W, y:Math.random()*H, p:Math.random()*TAU, s:Math.random()<0.12?2:1});
+  flies = [];
+  for(let i=0;i<12;i++) flies.push({x:OX+(Math.random()-0.5)*280, y:OY+25+Math.random()*120, p:Math.random()*TAU, q:Math.random()*TAU});
+}
+addEventListener('resize', resize);
+resize();
+
+// ---------- world ----------
+const grass = new Float32Array(GRID*GRID);
+const taint = new Float32Array(GRID*GRID);   // 0..1 strange purple alien grass
+for(let i=0;i<grass.length;i++) grass[i] = 0.55 + Math.random()*0.45;
+const gi = (x,y)=> y*GRID + x;
+const wts = (x,y)=> [Math.round(OX + (x-y)*HTW), Math.round(OY + (x+y)*HTH + 4)];
+
+let holes = [];                       // {x,y,age,life,gt}
+const holeAt = (x,y)=> holes.find(h=>h.x===x && h.y===y);
+function spawnHole(hx,hy){
+  holes.push({x:hx, y:hy, age:0, life:22+Math.random()*22, gt:0});
+  const [sx,sy]=wts(hx,hy);
+  puff(sx,sy,[122,86,54],8,12,true);
+}
+
+const DIRV = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+const mower = {x:GRID/2, y:GRID/2, dir:0, state:'mow', t:0, turnT:3, speed:2.1, bob:0, hole:null, fx:0, fy:0};
+function setDirFrom(dx,dy){
+  if(Math.abs(dx)>Math.abs(dy)) mower.dir = dx>0?0:1;
+  else if(dy!==0) mower.dir = dy>0?2:3;
+}
+
+// ---------- alien mode ----------
+const alien = {active:false, phase:'', t:0, glow:0, R:6.5, cx:0, cy:0, r:0, th:0,
+               gx:0, gy:0, saucers:[], ship:{x:0,y:0}, timer:40+Math.random()*50};
+function startAlien(){
+  const A = alien;
+  A.active=true; A.phase='infect'; A.t=0; A.glow=0;
+  const lo = A.R+1, hi = GRID-2-A.R;
+  A.cx = lo + Math.random()*(hi-lo);
+  A.cy = lo + Math.random()*(hi-lo);
+  A.r = A.R; A.th = Math.random()*TAU;
+  A.front = A.R;   // purple infection front, sweeps outside → in
+  A.saucers = [];
+  for(let i=0;i<3;i++) A.saucers.push({
+    x: Math.random()<0.5 ? -40 : W+40, y: 15+Math.random()*60,
+    tx: W*(0.1+Math.random()*0.8), ty: 12+Math.random()*80,
+    timer: 0.4+Math.random(), p: Math.random()*TAU});
+}
+function alienMowTile(){
+  const mtx = Math.round(mower.x), mty = Math.round(mower.y);
+  if(mtx>=0&&mtx<GRID&&mty>=0&&mty<GRID&&!holeAt(mtx,mty)){
+    const i = gi(mtx,mty);
+    if(grass[i]>0.3){
+      const [sx,sy]=wts(mtx,mty);
+      puff(sx,sy-2,[96,180,70],2,18,true);
+    }
+    if(grass[i]>0.03) grass[i]=0.03;
+    taint[i]=0;
+  }
+}
+function updateAlien(dt){
+  const A = alien; A.t += dt;
+  for(const s of A.saucers){
+    s.timer -= dt;
+    if(s.timer<=0 && A.phase!=='depart'){
+      s.tx = W*(0.06+Math.random()*0.88); s.ty = 10+Math.random()*84;
+      s.timer = 0.5+Math.random()*1.3;
+    }
+    s.x += (s.tx-s.x)*Math.min(1,dt*5);
+    s.y += (s.ty-s.y)*Math.min(1,dt*5);
+  }
+  if(A.phase==='infect'){
+    // strange purple grass sweeps into the circle from the outside edge
+    A.glow = Math.min(1, A.glow+dt*0.5);
+    A.front = Math.max(0, A.R*(1 - A.t/5.5));
+    const x0 = Math.max(0, Math.floor(A.cx-A.R-1)), x1 = Math.min(GRID-1, Math.ceil(A.cx+A.R+1));
+    const y0 = Math.max(0, Math.floor(A.cy-A.R-1)), y1 = Math.min(GRID-1, Math.ceil(A.cy+A.R+1));
+    for(let ty=y0; ty<=y1; ty++) for(let tx=x0; tx<=x1; tx++){
+      const d = Math.hypot(tx-A.cx, ty-A.cy);
+      if(d<=A.R+0.4 && d>=A.front-0.5){
+        const i = gi(tx,ty);
+        taint[i] = Math.min(1, taint[i]+dt*1.4);
+        grass[i] = Math.min(1, grass[i]+dt*0.4);   // it grows unnaturally fast, too
+      }
+    }
+    if(Math.random()<dt*28){   // sparkles along the advancing front
+      const ang = Math.random()*TAU, rr = A.front + Math.random()*1.5;
+      const [sx,sy] = wts(A.cx+Math.cos(ang)*rr, A.cy+Math.sin(ang)*rr);
+      parts.push({x:sx, y:sy-2, vx:(Math.random()-0.5)*4, vy:-8-Math.random()*8,
+                  life:0.4+Math.random()*0.4, c:[196,130,255]});
+    }
+    if(A.t>5.8){
+      A.phase='arrive'; A.t=0;
+      A.th = Math.atan2(mower.y-A.cy, mower.x-A.cx);   // walk to the nearest edge point
+    }
+  }else if(A.phase==='arrive'){
+    A.glow = Math.min(1, A.glow+dt*0.8);
+    const sx = A.cx+Math.cos(A.th)*A.r, sy = A.cy+Math.sin(A.th)*A.r;
+    const dx = sx-mower.x, dy = sy-mower.y, d = Math.hypot(dx,dy);
+    if(d>0.01){
+      const step = Math.min(d, 4.5*dt);
+      mower.x += dx/d*step; mower.y += dy/d*step;
+      setDirFrom(dx,dy);
+    }
+    mower.bob += dt*18;
+    if(d<0.25 || A.t>4.5){ A.phase='mow'; A.t=0; }
+  }else if(A.phase==='mow'){
+    mower.bob += dt*30;
+    const ds = mower.speed*10*dt;             // 10x speed
+    const dth = ds/Math.max(0.6, A.r);
+    A.th += dth;
+    A.r -= 1.55*dth/TAU;                      // ring spacing → visible crop circles
+    const px = mower.x, py = mower.y;
+    mower.x = A.cx+Math.cos(A.th)*A.r;
+    mower.y = A.cy+Math.sin(A.th)*A.r;
+    setDirFrom(mower.x-px, mower.y-py);
+    alienMowTile();
+    if(A.r<0.45){
+      A.phase='beam'; A.t=0;
+      mower.state='beamed';
+      mower.x=A.cx; mower.y=A.cy;
+      const [gx,gy]=wts(A.cx,A.cy);
+      A.gx=gx; A.gy=gy;
+      A.ship.x=gx; A.ship.y=-30;
+    }
+  }else if(A.phase==='beam'){
+    A.ship.x += (A.gx-A.ship.x)*Math.min(1,dt*3);
+    A.ship.y += ((A.gy-62)-A.ship.y)*Math.min(1,dt*2.5);
+    if(A.t>0.9 && A.t<2.6 && Math.random()<dt*30)   // beam sparkles
+      parts.push({x:A.gx+(Math.random()-0.5)*14, y:A.gy-Math.random()*40,
+                  vx:(Math.random()-0.5)*4, vy:-24-Math.random()*10,
+                  life:0.3+Math.random()*0.3, c:[170,255,180]});
+    if(A.t>3.1){
+      A.phase='depart'; A.t=0;
+      for(const s of A.saucers){ s.tx = s.x<W/2 ? -60 : W+60; s.ty = -20; s.timer = 99; }
+    }
+  }else if(A.phase==='depart'){
+    A.glow = Math.max(0, A.glow-dt*0.9);
+    A.ship.y -= dt*(40+A.t*170);
+    A.ship.x += dt*A.t*130;
+    if(A.t>1.6){
+      A.active=false; A.glow=0;
+      mower.state='gone'; mower.t=0.8;
+    }
+  }
+}
+
+// ---------- weather ----------
+const WSTATES = {sunny:{cc:0.18,rn:0}, cloudy:{cc:0.68,rn:0}, rain:{cc:0.92,rn:0.65}, storm:{cc:1,rn:1}};
+let wname='sunny', wTimer=18+Math.random()*14, cc=0.2, rn=0, wind=0.2, flash=0;
+function nextWeather(){
+  const table = {sunny:['cloudy','cloudy','sunny'], cloudy:['sunny','rain','cloudy','rain'],
+                 rain:['cloudy','storm','rain'], storm:['rain','rain','cloudy']};
+  const opts = table[wname];
+  wname = opts[(Math.random()*opts.length)|0];
+  wTimer = 22 + Math.random()*26;
+}
+
+const clouds = [];
+for(let i=0;i<7;i++){
+  const blobs=[], n=3+((Math.random()*4)|0);
+  for(let j=0;j<n;j++) blobs.push({dx:(j*8 - n*4 + ((Math.random()*5)|0)), dy:((Math.random()*5)|0)-2,
+                                   w:9+((Math.random()*13)|0), h:4+((Math.random()*3)|0)});
+  clouds.push({x:Math.random()*W, y:8+Math.random()*66, v:2.5+Math.random()*4, a:0, blobs});
+}
+
+const drops = [];
+for(let i=0;i<150;i++) drops.push({x:Math.random()*W, y:Math.random()*H, v:160+Math.random()*90});
+
+let parts = [];
+function puff(x,y,c,n,sp,up){
+  for(let i=0;i<n;i++) parts.push({x:x+(Math.random()-0.5)*4, y:y+(Math.random()-0.5)*2,
+    vx:(Math.random()-0.5)*sp, vy: up? -(4+Math.random()*sp) : (Math.random()-0.5)*sp,
+    life:0.35+Math.random()*0.55, c});
+}
+
+// ---------- mower brain ----------
+function pickDir(){
+  let best=-1, bs=-1e9;
+  for(let d=0; d<4; d++){
+    const v = DIRV[d];
+    const nx = mower.x+v.x*1.5, ny = mower.y+v.y*1.5;
+    if(nx<1||nx>GRID-2||ny<1||ny>GRID-2) continue;
+    let s = Math.random()*2
+          + (d===mower.dir ? 1.1 : 0)
+          + ((v.x===-DIRV[mower.dir].x && v.y===-DIRV[mower.dir].y) ? -1.6 : 0);
+    for(let k=1;k<=6;k++){
+      const tx=Math.round(mower.x+v.x*k), ty=Math.round(mower.y+v.y*k);
+      if(tx<1||tx>GRID-2||ty<1||ty>GRID-2) break;
+      s += grass[gi(tx,ty)]*0.6;
+    }
+    if(s>bs){ bs=s; best=d; }
+  }
+  if(best>=0) mower.dir = best;
+  mower.turnT = 2.5 + Math.random()*4;
+}
+
+function respawn(){
+  for(let tries=0;tries<60;tries++){
+    const rx = 1+((Math.random()*(GRID-2))|0), ry = 1+((Math.random()*(GRID-2))|0);
+    if(holes.some(h=> (h.x-rx)*(h.x-rx)+(h.y-ry)*(h.y-ry) < 6)) continue;
+    mower.x=rx; mower.y=ry; break;
+  }
+  mower.state='spawn'; mower.t=0; mower.hole=null;
+  const [sx,sy]=wts(mower.x,mower.y);
+  puff(sx,sy-3,[235,235,235],10,10,false);
+  pickDir();
+}
+
+// ---------- update ----------
+let last = performance.now(), tSec = 150*0.16, hint = 7, holeT = 6+Math.random()*6;
+
+function update(dt){
+  tSec += dt;
+  if(hint>0) hint -= dt;
+
+  // weather
+  wTimer -= dt; if(wTimer<=0) nextWeather();
+  const tgt = WSTATES[wname];
+  cc += clamp(tgt.cc-cc, -dt*0.06, dt*0.06);
+  rn += clamp(tgt.rn-rn, -dt*0.22, dt*0.22);
+  wind = Math.sin(tSec*0.1)*0.4 + rn*0.8;
+  flash = Math.max(0, flash - dt*6);
+  if(wname==='storm' && Math.random()<dt*0.35) flash = 1;
+
+  // grass grows (faster in rain)
+  const grow = 0.0075*(1 + rn*2.2)*dt;
+  for(let i=0;i<grass.length;i++){
+    grass[i]+=grow; if(grass[i]>1) grass[i]=1;
+    if(taint[i]>0 && !alien.active){ taint[i]-=dt*0.03; if(taint[i]<0) taint[i]=0; }
+  }
+
+  // clouds
+  const vis = Math.round(cc*clouds.length);
+  for(let i=0;i<clouds.length;i++){
+    const c = clouds[i];
+    c.x += c.v*(0.6+wind*0.8)*dt;
+    if(c.x > W+90) c.x = -90;
+    const ta = i<vis ? 1 : 0;
+    c.a += (ta-c.a)*Math.min(1, dt*0.6);
+  }
+
+  // rain
+  const active = (rn*drops.length)|0;
+  for(let i=0;i<active;i++){
+    const d = drops[i];
+    d.y += d.v*dt; d.x += wind*26*dt;
+    if(d.y>H){ d.y -= H+Math.random()*24; d.x = Math.random()*W; }
+    if(d.x>W) d.x -= W; if(d.x<0) d.x += W;
+  }
+
+  // gopher holes
+  holeT -= dt;
+  if(holeT<=0){
+    holeT = 5 + Math.random()*9;
+    if(holes.length<7){
+      for(let tries=0;tries<40;tries++){
+        const hx = 1+((Math.random()*(GRID-2))|0), hy = 1+((Math.random()*(GRID-2))|0);
+        const dd = (hx-mower.x)*(hx-mower.x)+(hy-mower.y)*(hy-mower.y);
+        if(dd < 12 || holeAt(hx,hy)) continue;
+        spawnHole(hx,hy);
+        break;
+      }
+    }
+  }
+  for(const h of holes){
+    h.age += dt;
+    if(h.gt>0) h.gt -= dt;
+    else if(Math.random()<dt*0.05) h.gt = 1.6;
+  }
+  holes = holes.filter(h=>{
+    if(h===mower.hole) return true;
+    if(h.age > h.life){
+      const [sx,sy]=wts(h.x,h.y);
+      puff(sx,sy,[122,86,54],7,10,true);
+      grass[gi(h.x,h.y)] = 0.05;
+      return false;
+    }
+    return true;
+  });
+
+  // aliens
+  if(!alien.active){
+    alien.timer -= dt;
+    if(alien.timer<=0 && mower.state==='mow'){
+      startAlien();
+      alien.timer = 50+Math.random()*70;
+    }
+  }else updateAlien(dt);
+
+  // mower (normal brain suspended while the aliens are in control)
+  const m = mower;
+  if(m.state==='mow' && !(alien.active && (alien.phase==='arrive'||alien.phase==='mow'))){
+    m.bob += dt*10;
+    m.turnT -= dt;
+    const v = DIRV[m.dir];
+    const nx = m.x+v.x*m.speed*dt, ny = m.y+v.y*m.speed*dt;
+    if(nx<1||nx>GRID-2||ny<1||ny>GRID-2) pickDir();
+    else { m.x=nx; m.y=ny; }
+    if(m.turnT<=0) pickDir();
+
+    // cut grass under the machine
+    const mtx = Math.round(m.x+v.x*0.6), mty = Math.round(m.y+v.y*0.6);
+    if(mtx>=0&&mtx<GRID&&mty>=0&&mty<GRID&&!holeAt(mtx,mty)){
+      const i = gi(mtx,mty);
+      if(grass[i]>0.3){
+        const [sx,sy]=wts(mtx,mty);
+        puff(sx,sy-2,[96,180,70],2,14,true);
+      }
+      if(grass[i]>0.03) grass[i]=0.03;
+      taint[i]=0;
+    }
+    // exhaust
+    if(Math.random()<dt*5){
+      const [px,py]=wts(m.x,m.y);
+      parts.push({x:px+(v.x-v.y)*6, y:py+(v.x+v.y)*3-6, vx:(Math.random()-0.5)*3, vy:-6-Math.random()*4,
+                  life:0.5+Math.random()*0.3, c:[120,120,126]});
+    }
+    // fall into a hole? (the beam protects him during a visitation)
+    for(const h of holes){
+      if(alien.active || h.age<0.5) continue;
+      const dx = m.x+v.x*0.5-h.x, dy = m.y+v.y*0.5-h.y;
+      if(dx*dx+dy*dy < 0.32){
+        m.state='fall'; m.t=0; m.hole=h;
+        const [fx,fy]=wts(h.x,h.y);
+        m.fx=fx; m.fy=fy;
+        puff(fx,fy,[122,86,54],8,14,true);
+        break;
+      }
+    }
+  }else if(m.state==='fall'){
+    m.t += dt;
+    m.x += (m.hole.x-m.x)*Math.min(1,dt*6);
+    m.y += (m.hole.y-m.y)*Math.min(1,dt*6);
+    if(m.t>1.15){
+      m.state='gone'; m.t=0;
+      puff(m.fx,m.fy,[90,62,38],12,16,true);
+      holes = holes.filter(h=>h!==m.hole);   // hole collapses behind them
+      m.hole=null;
+    }
+  }else if(m.state==='gone'){
+    m.t += dt;
+    if(m.t>3.2) respawn();
+  }else if(m.state==='spawn'){
+    m.t += dt;
+    if(m.t>0.6){ m.state='mow'; }
+  }
+
+  // particles
+  parts = parts.filter(p=>{
+    p.life -= dt;
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 30*dt;
+    return p.life>0;
+  });
+}
+
+// ---------- drawing helpers ----------
+let L = [1,1,1];
+const col = (r,gr,bl)=> 'rgb('+Math.min(255,Math.round(r*L[0]))+','+Math.min(255,Math.round(gr*L[1]))+','+Math.min(255,Math.round(bl*L[2]))+')';
+const HW = [2,4,6,8,8,6,4,2];   // half-widths of a 16x8 tile diamond
+
+function fieldDiamond(yoff, color){
+  g.fillStyle = color;
+  const FH = GRID*TH;
+  for(let r=0;r<FH;r++){
+    const hw = r<FH/2 ? 2*(r+1) : 2*(FH-r);
+    g.fillRect(OX-hw, OY+yoff+r, hw*2, 1);
+  }
+}
+
+function drawMan(px,py,dir,walking){
+  const v = DIRV[dir];
+  const bo = walking ? (Math.sin(mower.bob)>0?1:0) : 0;
+  const y = py - bo;
+  g.fillStyle = col(52,58,84);   // pants
+  g.fillRect(px-2,y-3,1,3); g.fillRect(px+1,y-3,1,3);
+  g.fillStyle = col(59,111,212); // shirt
+  g.fillRect(px-2,y-6,4,3);
+  g.fillStyle = col(232,180,138); // arms
+  g.fillRect(px-3,y-6,1,2); g.fillRect(px+2,y-6,1,2);
+  g.fillStyle = col(232,180,138); // head
+  g.fillRect(px-1,y-9,3,3);
+  g.fillStyle = col(210,60,45);  // cap
+  g.fillRect(px-1,y-10,3,1);
+  const sdx = (v.x-v.y);
+  g.fillRect(px-1+(sdx>0?3:-1), y-9, 1, 1); // cap brim
+}
+
+function drawMachine(mx,my){
+  g.fillStyle = col(24,24,28);   // wheels
+  g.fillRect(mx-3,my-1,2,2); g.fillRect(mx+2,my-1,2,2);
+  g.fillStyle = col(196,57,43);  // deck
+  g.fillRect(mx-3,my-3,7,3);
+  g.fillStyle = col(226,88,70);
+  g.fillRect(mx-3,my-4,7,1);
+  g.fillStyle = col(130,138,150); // engine
+  g.fillRect(mx-1,my-6,3,2);
+  g.fillStyle = col(40,40,44);
+  g.fillRect(mx,my-7,1,1);
+}
+
+function drawGuy(px,py,dir,walking){
+  const v = DIRV[dir];
+  const ox = Math.round((v.x-v.y)*6), oy = Math.round((v.x+v.y)*3);
+  const mx = px+ox, my = py+oy;
+  g.fillStyle = 'rgba(0,0,0,0.22)';
+  g.fillRect(px-3,py,6,1); g.fillRect(px-2,py+1,4,1);
+  g.fillRect(mx-3,my,6,1); g.fillRect(mx-2,my+1,4,1);
+  const handle = ()=>{
+    g.fillStyle = col(150,155,165);
+    for(const t of [0.35,0.65])
+      g.fillRect(Math.round(px+(mx-px)*t), Math.round((py-5)+((my-3)-(py-5))*t), 1, 1);
+  };
+  if(my>py){ drawMan(px,py,dir,walking); handle(); drawMachine(mx,my); }
+  else     { drawMachine(mx,my); handle(); drawMan(px,py,dir,walking); }
+}
+
+function drawSaucer(x,y,t){
+  x = Math.round(x); y = Math.round(y+Math.sin(t*4)*1.5);
+  g.fillStyle = col(150,225,205);                    // dome
+  g.fillRect(x-2,y-4,5,2); g.fillRect(x-1,y-5,3,1);
+  g.fillStyle = col(168,176,190);                    // disc
+  g.fillRect(x-5,y-2,11,2);
+  g.fillStyle = col(96,102,118);
+  g.fillRect(x-4,y,9,1);
+  const lc = ['#ff6b6b','#ffe14d','#6bff9a'];
+  for(let i=0;i<3;i++){ g.fillStyle = lc[(i+((t*6)|0))%3]; g.fillRect(x-3+i*3,y,1,1); }
+}
+function drawShip(x,y){
+  x = Math.round(x); y = Math.round(y);
+  g.fillStyle = col(140,235,210);                    // dome
+  g.fillRect(x-4,y-6,9,3); g.fillRect(x-2,y-8,5,2);
+  g.fillStyle = col(172,180,196);                    // hull
+  g.fillRect(x-12,y-3,25,3);
+  g.fillStyle = col(104,110,126);
+  g.fillRect(x-10,y,21,2);
+  const lc = ['#ff6b6b','#ffe14d','#6bff9a'];
+  for(let i=0;i<5;i++){ g.fillStyle = lc[(i+((tSec*8)|0))%3]; g.fillRect(x-8+i*4,y+1,2,1); }
+}
+
+function drawHole(h){
+  const [sx,sy] = wts(h.x,h.y);
+  const s = clamp(h.age/0.6, 0, 1);
+  g.fillStyle = col(122,86,54);      // dirt rim
+  const rim = [3,5,6,5,3];
+  for(let r=0;r<5;r++){
+    const hw = Math.max(1, Math.round(rim[r]*s));
+    g.fillRect(sx-hw, sy-3+r+1, hw*2, 1);
+  }
+  g.fillStyle = col(26,16,10);       // dark opening
+  const inn = [2,4,5,4,2];
+  for(let r=0;r<5;r++){
+    const hw = Math.max(0, Math.round(inn[r]*s));
+    if(hw>0) g.fillRect(sx-hw, sy-3+r+1, hw*2, 1);
+  }
+  g.fillStyle = col(139,101,60);     // scattered dirt
+  const hsh = ((h.x*73856093) ^ (h.y*19349663))>>>0;
+  g.fillRect(sx-7+(hsh&3), sy+1, 1, 1);
+  g.fillRect(sx+5+((hsh>>2)&3), sy, 1, 1);
+  g.fillRect(sx-2+((hsh>>4)&3), sy+4, 1, 1);
+  // gopher peeking
+  if(h.gt>0 && s>=1){
+    const pr = 1 - h.gt/1.6;
+    const rise = Math.round(Math.sin(Math.PI*pr)*5);
+    if(rise>0){
+      const yTop = sy+2-rise;
+      g.fillStyle = col(148,101,58);
+      g.fillRect(sx-2, yTop, 4, rise);
+      g.fillStyle = col(120,80,44);
+      g.fillRect(sx-2, yTop-1, 1, 1); g.fillRect(sx+1, yTop-1, 1, 1); // ears
+      if(rise>2){
+        g.fillStyle = col(20,16,12);
+        g.fillRect(sx-2, yTop+1, 1, 1); g.fillRect(sx+1, yTop+1, 1, 1); // eyes
+        g.fillStyle = col(214,142,132);
+        g.fillRect(sx-1, yTop+2, 2, 1); // nose
+      }
+    }
+  }
+}
+
+// ---------- render ----------
+function render(){
+  // sun / moon / global light
+  const cyc = 150, df = (tSec%cyc)/cyc;
+  const isDay = df < 0.5;
+  let elev, sunP=0, moonP=0;
+  if(isDay){ sunP = df/0.5; elev = Math.sin(Math.PI*sunP); }
+  else     { moonP = (df-0.5)/0.5; elev = -Math.sin(Math.PI*moonP); }
+  const dl = clamp((elev+0.06)*3.2, 0, 1);
+  const dusk = clamp(1 - Math.abs(elev)/0.22, 0, 1);
+  L = [mix(0.32,1,dl)*(1+0.35*dusk), mix(0.38,1,dl)*(1+0.02*dusk), mix(0.62,1,dl)*(1-0.28*dusk)];
+  if(alien.glow>0){   // eerie green cast while the saucers are here
+    L = [L[0]*mix(1,0.72,alien.glow), L[1]*mix(1,1.12,alien.glow), L[2]*mix(1,0.8,alien.glow)];
+  }
+
+  // sky (banded pixel gradient)
+  let top = [mix(8,86,dl), mix(12,168,dl), mix(38,220,dl)];
+  let bot = [mix(18,168,dl), mix(28,220,dl), mix(66,242,dl)];
+  bot = [mix(bot[0],244,dusk*0.65), mix(bot[1],160,dusk*0.65), mix(bot[2],92,dusk*0.65)];
+  top = [mix(top[0],104,dusk*0.4), mix(top[1],74,dusk*0.4), mix(top[2],120,dusk*0.4)];
+  const BANDS = 16;
+  for(let i=0;i<BANDS;i++){
+    const t = i/(BANDS-1);
+    g.fillStyle = 'rgb('+Math.round(mix(top[0],bot[0],t))+','+Math.round(mix(top[1],bot[1],t))+','+Math.round(mix(top[2],bot[2],t))+')';
+    g.fillRect(0, Math.floor(i*H/BANDS), W, Math.ceil(H/BANDS)+1);
+  }
+
+  // stars
+  if(dl<0.6){
+    for(const s of stars){
+      const tw = 0.5+0.5*Math.sin(tSec*2+s.p);
+      const a = (1-dl/0.6)*tw*0.9;
+      if(a>0.04){ g.fillStyle='rgba(255,255,255,'+a.toFixed(2)+')'; g.fillRect(s.x|0, s.y|0, s.s, s.s); }
+    }
+  }
+
+  // sun & moon (pixel discs)
+  const disc = (x,y,core,rim)=>{
+    const rows=[1,2,3,3,3,2,1];
+    g.fillStyle=rim;
+    for(let r=0;r<7;r++) g.fillRect(x-rows[r], y-3+r, rows[r]*2, 1);
+    g.fillStyle=core;
+    for(let r=1;r<6;r++) g.fillRect(x-rows[r]+1, y-3+r, rows[r]*2-2, 1);
+  };
+  if(isDay && elev>-0.05){
+    const sx = Math.round(W*(0.06+0.88*sunP)), sy = Math.round(H*0.9 - elev*H*0.72);
+    disc(sx, sy, '#ffd94f', dusk>0.3 ? '#ff8d2e' : '#ffb52e');
+  }
+  if(!isDay && Math.sin(Math.PI*moonP)>0.02){
+    const mx = Math.round(W*(0.06+0.88*moonP)), my = Math.round(H*0.9 - Math.sin(Math.PI*moonP)*H*0.72);
+    disc(mx, my, '#e6ecf7', '#b8c2d9');
+    g.fillStyle='#aab4cc';
+    g.fillRect(mx-1,my-1,1,1); g.fillRect(mx+1,my+1,1,1); g.fillRect(mx,my-2,1,1);
+  }
+
+  // clouds
+  for(const c of clouds){
+    if(c.a<0.03) continue;
+    g.globalAlpha = c.a*0.92;
+    const base = [238-110*rn, 240-104*rn, 244-88*rn];
+    g.fillStyle = col(base[0],base[1],base[2]);
+    for(const bl of c.blobs){
+      g.fillRect(Math.round(c.x+bl.dx), Math.round(c.y+bl.dy), bl.w, bl.h);
+      g.fillRect(Math.round(c.x+bl.dx+2), Math.round(c.y+bl.dy-2), Math.max(1,bl.w-4), 2);
+    }
+    g.globalAlpha = 1;
+  }
+
+  // island dirt base
+  fieldDiamond(14, col(74,50,34));
+  fieldDiamond(7,  col(107,74,47));
+
+  // grass palette for this frame (6 levels x 2 parities)
+  const GREENS = [[154,222,107],[131,207,88],[111,194,77],[92,179,68],[74,165,60],[61,150,54]];
+  const PURPS  = [[204,158,232],[182,132,218],[160,108,202],[139,88,185],[120,72,168],[104,60,152]];
+  const pal = GREENS.map(c=>[col(c[0],c[1],c[2]), col(c[0]*0.94,c[1]*0.94,c[2]*0.94)]);
+  const bladeCol = col(46,125,43);
+
+  // tiles back-to-front
+  for(let sum=0; sum<=2*(GRID-1); sum++){
+    const x0 = Math.max(0, sum-(GRID-1)), x1 = Math.min(GRID-1, sum);
+    for(let x=x0; x<=x1; x++){
+      const y = sum-x;
+      const sx = OX+(x-y)*HTW, sy = OY+(x+y)*HTH;
+      const ti = gi(x,y);
+      const hgt = grass[ti], tn = taint[ti];
+      const lvl = Math.min(5, (hgt*6)|0);
+      if(tn>0.03){
+        const gc = GREENS[lvl], pc = PURPS[lvl];
+        const f = (x+y)&1 ? 0.94 : 1;
+        g.fillStyle = col(mix(gc[0],pc[0],tn)*f, mix(gc[1],pc[1],tn)*f, mix(gc[2],pc[2],tn)*f);
+      }else g.fillStyle = pal[lvl][(x+y)&1];
+      for(let r=0;r<8;r++) g.fillRect(sx-HW[r], sy+r, HW[r]*2, 1);
+      const hole = holeAt(x,y);
+      if(hole){ drawHole(hole); continue; }
+      if(hgt>0.45){
+        const hsh = ((x*73856093) ^ (y*19349663))>>>0;
+        const n = Math.min(3, 1+((hgt*3)|0));
+        g.fillStyle = tn>0.03 ? col(mix(46,128,tn), mix(125,62,tn), mix(43,172,tn)) : bladeCol;
+        for(let k=0;k<n;k++){
+          const bx = ((hsh>>(k*5))%11) - 5;
+          const by = 2 + ((hsh>>(k*3+7))&3);
+          const bh = 1 + ((hsh>>(k*2+3))&1) + (hgt>0.85?1:0);
+          g.fillRect(sx+bx, sy+by-bh, 1, bh);
+        }
+      }
+    }
+  }
+
+  // mower man
+  const m = mower;
+  if(m.state==='mow' || m.state==='spawn'){
+    const [px,py] = wts(m.x,m.y);
+    if(dl<0.45){  // headlight glow at night
+      const v=DIRV[m.dir];
+      const gx=px+(v.x-v.y)*10, gy=py+(v.x+v.y)*5-2;
+      const rg=g.createRadialGradient(gx,gy,1,gx,gy,20);
+      rg.addColorStop(0,'rgba(255,224,130,'+(0.28*(1-dl/0.45)).toFixed(2)+')');
+      rg.addColorStop(1,'rgba(255,224,130,0)');
+      g.fillStyle=rg; g.fillRect(gx-20,gy-20,40,40);
+    }
+    if(m.state==='spawn') g.globalAlpha = (Math.sin(m.t*25)>0)?1:0.35;
+    drawGuy(px,py,m.dir,m.state==='mow');
+    g.globalAlpha = 1;
+  }else if(m.state==='fall'){
+    const [px,py] = wts(m.x,m.y);
+    const yo = Math.round(Math.pow(m.t/1.15,2)*18);
+    g.save();
+    g.beginPath(); g.rect(0,0,W,m.fy+4); g.clip();
+    drawGuy(px,py+yo,m.dir,false);
+    g.restore();
+    if(m.t<0.35){
+      g.fillStyle='#ff3b30';
+      g.fillRect(px,py-24,2,5); g.fillRect(px,py-17,2,2);
+    }
+  }
+
+  // fireflies at night
+  if(dl<0.35){
+    const na = 1-dl/0.35;
+    for(const f of flies){
+      const fx = f.x + Math.sin(tSec*0.7+f.p)*14;
+      const fy = f.y + Math.sin(tSec*0.9+f.q)*8;
+      const blink = Math.sin(tSec*3+f.p*5);
+      if(blink>0.2){
+        const a = (0.35+0.65*blink)*na;
+        g.fillStyle='rgba(190,255,120,'+(a*0.25).toFixed(2)+')';
+        g.fillRect((fx|0)-1,(fy|0)-1,3,3);
+        g.fillStyle='rgba(224,255,150,'+a.toFixed(2)+')';
+        g.fillRect(fx|0, fy|0, 1, 1);
+      }
+    }
+  }
+
+  // aliens: tractor beam, abductee, saucers, mothership
+  if(alien.active){
+    if(alien.phase==='beam'){
+      const top = alien.ship.y+4, gy = alien.gy+2;
+      const ba = Math.min(1,(alien.t-0.7)*3) * clamp((3.0-alien.t)*3,0,1);
+      if(ba>0 && gy>top){
+        for(let ry=Math.max(0,Math.round(top)); ry<gy; ry++){
+          const f = (ry-top)/Math.max(1,gy-top);
+          const wdt = Math.round(mix(3,15,f));
+          const a = (0.22+0.12*Math.sin(ry*0.8 - tSec*18))*ba;
+          g.fillStyle = 'rgba(180,255,190,'+Math.max(0,a).toFixed(2)+')';
+          g.fillRect(alien.gx-wdt, ry, wdt*2, 1);
+        }
+      }
+      if(alien.t>1.0){   // up he goes, gently spinning
+        const rp = clamp((alien.t-1.0)/1.4, 0, 1);
+        const rise = Math.round(52*rp*rp*(3-2*rp));
+        g.globalAlpha = 1 - clamp((rise-38)/14, 0, 1);
+        drawGuy(alien.gx, alien.gy-rise, ((alien.t*5)|0)%4, false);
+        g.globalAlpha = 1;
+      }
+    }
+    for(const s of alien.saucers) drawSaucer(s.x, s.y, tSec+s.p);
+    if(alien.phase==='beam' || alien.phase==='depart')
+      drawShip(alien.ship.x, alien.ship.y+Math.sin(tSec*3)*1.5);
+  }
+
+  // particles
+  for(const p of parts){
+    g.globalAlpha = clamp(p.life*2,0,1);
+    g.fillStyle = col(p.c[0],p.c[1],p.c[2]);
+    g.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+  }
+  g.globalAlpha = 1;
+
+  // rain (in front of everything)
+  const active = (rn*drops.length)|0;
+  if(active>0){
+    g.fillStyle = 'rgba(172,202,240,'+(0.28+0.3*Math.max(dl,0.3)).toFixed(2)+')';
+    for(let i=0;i<active;i++){
+      const d = drops[i];
+      g.fillRect(d.x|0, d.y|0, 1, 3);
+    }
+  }
+
+  // lightning flash
+  if(flash>0){
+    g.fillStyle = 'rgba(255,255,255,'+(flash*0.5).toFixed(2)+')';
+    g.fillRect(0,0,W,H);
+  }
+
+  // hint
+  if(hint>0){
+    g.globalAlpha = clamp(hint/2,0,1)*0.65;
+    g.fillStyle = '#ffffff';
+    g.font = '9px monospace';
+    g.textAlign = 'center';
+    g.fillText('click to dig a gopher hole · F = fullscreen', W/2, H-8);
+    g.globalAlpha = 1;
+  }
+
+  // blit to screen
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(buf, 0,0, cv.width, cv.height);
+}
+
+// ---------- main loop ----------
+function frame(now){
+  let dt = (now-last)/1000; last = now;
+  if(dt>0.06) dt = 0.06;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// click digs a gopher hole where you point
+addEventListener('click', (e)=>{
+  const bx = e.clientX/innerWidth*W, by = e.clientY/innerHeight*H;
+  const a = (bx-OX)/HTW, b2 = (by-OY-4)/HTH;
+  const hx = Math.round((b2+a)/2), hy = Math.round((b2-a)/2);
+  if(hx>=1 && hx<=GRID-2 && hy>=1 && hy<=GRID-2 && !holeAt(hx,hy)) spawnHole(hx,hy);
+});
+// F toggles fullscreen
+addEventListener('keydown', (e)=>{
+  if(e.key==='f' || e.key==='F'){
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(()=>{});
+  }
+});
+let curT;
+addEventListener('mousemove', ()=>{
+  document.body.classList.remove('nocursor');
+  clearTimeout(curT);
+  curT = setTimeout(()=>document.body.classList.add('nocursor'), 2500);
+});
+curT = setTimeout(()=>document.body.classList.add('nocursor'), 2500);
+</script>
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Force-Directed Graph Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        canvas {
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: #0d0d13;
+            cursor: grab;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        .info {
+            color: #e0e0e0;
+            margin-top: 20px;
+            text-align: center;
+            max-width: 600px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .info h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #fff;
+        }
+
+        .stats {
+            color: #888;
+            font-size: 12px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="info">
+        <h2>Force-Directed Graph Layout</h2>
+        <p>Nodes repel each other (coulomb force) while connected nodes attract (spring force). Drag nodes to interact.</p>
+        <div class="stats">
+            Nodes: <span id="nodeCount">0</span> | Edges: <span id="edgeCount">0</span> | FPS: <span id="fps">60</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = Math.min(900, window.innerWidth - 40);
+            canvas.height = Math.min(700, window.innerHeight - 200);
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Graph simulation
+        class Node {
+            constructor(id, x, y) {
+                this.id = id;
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.fx = 0;
+                this.fy = 0;
+                this.mass = 1;
+            }
+
+            resetForce() {
+                this.fx = 0;
+                this.fy = 0;
+            }
+
+            applyForce(fx, fy) {
+                this.fx += fx;
+                this.fy += fy;
+            }
+
+            update(alpha) {
+                this.vx += this.fx / this.mass * alpha;
+                this.vy += this.fy / this.mass * alpha;
+                this.vx *= 0.98; // friction
+                this.vy *= 0.98;
+                this.x += this.vx;
+                this.y += this.vy;
+            }
+        }
+
+        class Edge {
+            constructor(source, target) {
+                this.source = source;
+                this.target = target;
+            }
+        }
+
+        // Create graph
+        const nodes = [];
+        const edges = [];
+        const nodeMap = {};
+
+        function addNode(id, x, y) {
+            const node = new Node(id, x, y);
+            nodes.push(node);
+            nodeMap[id] = node;
+            return node;
+        }
+
+        function addEdge(sourceId, targetId) {
+            const source = nodeMap[sourceId];
+            const target = nodeMap[targetId];
+            if (source && target) {
+                edges.push(new Edge(source, target));
+            }
+        }
+
+        // Generate sample graph (connected network)
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // Create a ring of nodes
+        const nodeCount = 12;
+        for (let i = 0; i < nodeCount; i++) {
+            const angle = (i / nodeCount) * Math.PI * 2;
+            const x = centerX + Math.cos(angle) * 150;
+            const y = centerY + Math.sin(angle) * 150;
+            addNode(`N${i}`, x, y);
+        }
+
+        // Add some central nodes
+        addNode('C1', centerX - 80, centerY);
+        addNode('C2', centerX + 80, centerY);
+        addNode('C3', centerX, centerY - 80);
+
+        // Connect nodes (create edges)
+        for (let i = 0; i < nodeCount; i++) {
+            const next = (i + 1) % nodeCount;
+            addEdge(`N${i}`, `N${next}`);
+            if (i % 3 === 0) addEdge(`N${i}`, 'C1');
+            if (i % 3 === 1) addEdge(`N${i}`, 'C2');
+            if (i % 3 === 2) addEdge(`N${i}`, 'C3');
+        }
+
+        // Connect central nodes
+        addEdge('C1', 'C2');
+        addEdge('C2', 'C3');
+        addEdge('C3', 'C1');
+
+        // Simulation parameters
+        const CHARGE = -3000;
+        const LINK_DISTANCE = 100;
+        const LINK_STRENGTH = 0.1;
+        const DAMPING = 0.92;
+
+        let draggedNode = null;
+        let dragX = 0;
+        let dragY = 0;
+
+        // Mouse interactions
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            for (let node of nodes) {
+                const dx = node.x - x;
+                const dy = node.y - y;
+                if (Math.sqrt(dx * dx + dy * dy) < 15) {
+                    draggedNode = node;
+                    dragX = x;
+                    dragY = y;
+                    break;
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (draggedNode) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                draggedNode.x = x;
+                draggedNode.y = y;
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            draggedNode = null;
+        });
+
+        function simulation(alpha) {
+            // Apply coulomb repulsion between all nodes
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const dx = nodes[j].x - nodes[i].x;
+                    const dy = nodes[j].y - nodes[i].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+                    const force = CHARGE / (distance * distance);
+                    const fx = (dx / distance) * force;
+                    const fy = (dy / distance) * force;
+
+                    nodes[i].applyForce(-fx, -fy);
+                    nodes[j].applyForce(fx, fy);
+                }
+            }
+
+            // Apply spring force along edges
+            for (let edge of edges) {
+                const dx = edge.target.x - edge.source.x;
+                const dy = edge.target.y - edge.source.y;
+                const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+                const displacement = distance - LINK_DISTANCE;
+                const force = displacement * LINK_STRENGTH * alpha;
+                const fx = (dx / distance) * force;
+                const fy = (dy / distance) * force;
+
+                edge.source.applyForce(fx, fy);
+                edge.target.applyForce(-fx, -fy);
+            }
+
+            // Constrain nodes to canvas
+            for (let node of nodes) {
+                if (node !== draggedNode) {
+                    const margin = 30;
+                    const padding = 15;
+                    if (node.x < padding) {
+                        node.x = padding;
+                        node.vx = 0;
+                    }
+                    if (node.x > canvas.width - padding) {
+                        node.x = canvas.width - padding;
+                        node.vx = 0;
+                    }
+                    if (node.y < padding) {
+                        node.y = padding;
+                        node.vy = 0;
+                    }
+                    if (node.y > canvas.height - padding) {
+                        node.y = canvas.height - padding;
+                        node.vy = 0;
+                    }
+                    node.update(alpha);
+                }
+                node.resetForce();
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#0d0d13';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw edges
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            for (let edge of edges) {
+                ctx.beginPath();
+                ctx.moveTo(edge.source.x, edge.source.y);
+                ctx.lineTo(edge.target.x, edge.target.y);
+                ctx.stroke();
+            }
+
+            // Draw nodes with gradient
+            for (let node of nodes) {
+                const gradient = ctx.createRadialGradient(node.x - 4, node.y - 4, 0, node.x, node.y, 12);
+                gradient.addColorStop(0, '#00d4ff');
+                gradient.addColorStop(0.5, '#0099cc');
+                gradient.addColorStop(1, '#0066aa');
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Node outline
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Node label
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.id, node.x, node.y);
+            }
+        }
+
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fpsTime = lastTime;
+
+        function animate() {
+            const now = performance.now();
+            const deltaTime = (now - lastTime) / 16.67; // Normalize to 60fps
+            lastTime = now;
+
+            // Update simulation
+            const alpha = Math.min(0.5, Math.max(0.01, 1 / Math.sqrt(nodes.length)));
+            simulation(alpha);
+
+            // Draw
+            draw();
+
+            // Update FPS
+            frameCount++;
+            if (now - fpsTime >= 1000) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                fpsTime = now;
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Update stats
+        document.getElementById('nodeCount').textContent = nodes.length;
+        document.getElementById('edgeCount').textContent = edges.length;
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>

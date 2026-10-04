@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spirograph Screensaver</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #05060f;
+  }
+  canvas { display: block; }
+  #hud {
+    position: fixed;
+    left: 14px;
+    bottom: 12px;
+    font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    color: rgba(200, 210, 255, 0.45);
+    user-select: none;
+    pointer-events: none;
+    transition: opacity 1.2s ease;
+  }
+  #panel {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    width: 230px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: rgba(12, 14, 30, 0.82);
+    border: 1px solid rgba(140, 150, 255, 0.18);
+    backdrop-filter: blur(8px);
+    font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+    color: rgba(205, 213, 255, 0.85);
+    user-select: none;
+    transition: opacity 0.35s ease;
+    opacity: 0;
+  }
+  #panel:hover, #panel:focus-within { opacity: 1; }
+  #panel .row { margin: 10px 0 2px; }
+  #panel label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+  }
+  #panel label span.val { color: rgba(140, 220, 255, 0.9); }
+  #panel input[type=range] {
+    width: 100%;
+    accent-color: #6d7cff;
+  }
+  #panel select {
+    width: 100%;
+    background: rgba(20, 24, 48, 0.9);
+    color: inherit;
+    border: 1px solid rgba(140, 150, 255, 0.25);
+    border-radius: 5px;
+    padding: 3px 4px;
+    font: inherit;
+  }
+  #panel .title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    color: rgba(160, 175, 255, 0.95);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">spirograph — click canvas for new curves · space pause · hover top-right for controls</div>
+<div id="panel">
+  <div class="title">SPIROGRAPH</div>
+  <div class="row">
+    <label>lines <span class="val" id="v-count">3</span></label>
+    <input type="range" id="count" min="1" max="10" step="1" value="3">
+  </div>
+  <div class="row">
+    <label>thickness <span class="val" id="v-thick">1.2</span></label>
+    <input type="range" id="thick" min="0.3" max="6" step="0.1" value="1.2">
+  </div>
+  <div class="row">
+    <label>speed <span class="val" id="v-speed">1.0×</span></label>
+    <input type="range" id="speed" min="0.1" max="5" step="0.1" value="1">
+  </div>
+  <div class="row">
+    <label>trailing fade
+      <input type="checkbox" id="fade" checked style="accent-color:#6d7cff">
+    </label>
+  </div>
+  <div class="row" id="trail-row">
+    <label>trail length <span class="val" id="v-trail">60</span></label>
+    <input type="range" id="trail" min="10" max="600" step="5" value="60">
+  </div>
+  <div class="row">
+    <label>trajectory</label>
+    <select id="traj">
+      <option value="mix" selected>mix (random per curve)</option>
+      <option value="hypo">hypotrochoid (inside ring)</option>
+      <option value="epi">epitrochoid (outside ring)</option>
+      <option value="wobble">wobbly hypotrochoid</option>
+    </select>
+  </div>
+</div>
+<script>
+"use strict";
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const hud = document.getElementById("hud");
+
+// ---- settings, driven by the control panel ----
+const settings = {
+  count: 3,
+  thickness: 1.2,
+  speed: 1.0,     // global multiplier
+  trail: 60,      // approx frames a line survives before fading out
+  fade: true,     // off = pen-on-paper: lines persist, page clears when done
+  traj: "mix",
+};
+
+function fadeAlpha() {
+  // Longer trail -> gentler fade. trail=10 → 0.30, trail=600 → 0.005.
+  return Math.min(0.3, 3 / settings.trail);
+}
+
+let W, H, cx, cy, scale;
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cx = W / 2;
+  cy = H / 2;
+  scale = Math.min(W, H) * 0.42;
+  ctx.fillStyle = "#05060f";
+  ctx.fillRect(0, 0, W, H);
+}
+window.addEventListener("resize", resize);
+resize();
+
+function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+
+function newCurve() {
+  const R = 1;
+  const p = 2 + Math.floor(Math.random() * 11);   // 2..12
+  let q = 3 + Math.floor(Math.random() * 16);     // 3..18
+  if (q === p) q += 1;
+  const r = p / q;
+  const g = gcd(p, q);
+  const period = 2 * Math.PI * (q / g);
+
+  let mode = settings.traj;
+  if (mode === "mix") {
+    mode = ["hypo", "hypo", "epi", "wobble"][Math.floor(Math.random() * 4)];
+  }
+  // Pen offset: proportions chosen so curves sweep through the center
+  // (hypo) or bloom outward (epi) without leaving a dark hole.
+  const d = mode === "epi"
+    ? r * (0.5 + Math.random() * 1.0)
+    : (R - r) * (0.25 + Math.random() * 0.75);
+
+  return {
+    R, r, d, period, mode,
+    t: 0,
+    speed: (0.9 + Math.random() * 1.4) * 0.028,
+    hue: Math.random() * 360,
+    hueDrift: 12 + Math.random() * 30,
+    wobble: mode === "wobble" ? 0.05 + Math.random() * 0.09 : 0,
+    rot: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - 0.5) * 0.0006,
+    prev: null,
+    laps: 0,
+  };
+}
+
+function point(cv, t) {
+  const { R, r, d } = cv;
+  let x, y, norm;
+  if (cv.mode === "epi") {
+    const k = (R + r) / r;
+    x = (R + r) * Math.cos(t) - d * Math.cos(k * t);
+    y = (R + r) * Math.sin(t) - d * Math.sin(k * t);
+    norm = (R + r) + d;
+  } else {
+    const k = (R - r) / r;
+    x = (R - r) * Math.cos(t) + d * Math.cos(k * t);
+    y = (R - r) * Math.sin(t) - d * Math.sin(k * t);
+    norm = (R - r) + d;
+  }
+  if (cv.wobble) {
+    const w = 1 + cv.wobble * Math.sin(t * 3 + cv.rot);
+    x *= w; y *= w;
+  }
+  const s = scale / (norm * 1.05);
+  const c = Math.cos(cv.rot), sn = Math.sin(cv.rot);
+  return [cx + (x * c - y * sn) * s, cy + (x * sn + y * c) * s];
+}
+
+let curves = [];
+function syncCurveCount() {
+  while (curves.length < settings.count) curves.push(newCurve());
+  curves.length = settings.count;
+}
+syncCurveCount();
+
+function clearCanvas() {
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "#05060f";
+  ctx.fillRect(0, 0, W, H);
+}
+
+function freshPage() {
+  clearCanvas();
+  curves = curves.map(() => newCurve());
+}
+
+let paused = false;
+let hudTimer = setTimeout(() => hud.style.opacity = "0", 5000);
+
+function stepCurve(cv, i) {
+  const spd = cv.speed * settings.speed;
+  const steps = Math.max(4, Math.ceil(spd / 0.006));
+  for (let s = 0; s < steps; s++) {
+    const t = cv.t + spd * (s / steps);
+    const pt = point(cv, t);
+    if (cv.prev) {
+      const progress = (t % cv.period) / cv.period;
+      const hue = (cv.hue + progress * cv.hueDrift + cv.laps * 47) % 360;
+      ctx.strokeStyle = `hsla(${hue}, 90%, 62%, 0.55)`;
+      ctx.lineWidth = settings.thickness;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cv.prev[0], cv.prev[1]);
+      ctx.lineTo(pt[0], pt[1]);
+      ctx.stroke();
+    }
+    cv.prev = pt;
+  }
+  cv.t += spd;
+  cv.rot += cv.rotSpeed;
+  if (cv.t >= cv.period) {
+    cv.t -= cv.period;
+    cv.laps += 1;
+    if (cv.laps >= 2) {
+      // Pen mode: the drawing is finished — clear the page and start a
+      // new one once every curve has completed at least one full pass.
+      if (!settings.fade && curves.every(c => c.laps >= 1)) {
+        freshPage();
+      } else {
+        curves[i] = newCurve();
+      }
+    }
+  }
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  if (paused) return;
+  if (settings.fade) {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = `rgba(5, 6, 15, ${fadeAlpha()})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.globalCompositeOperation = "lighter";
+  curves.forEach(stepCurve);
+}
+requestAnimationFrame(frame);
+
+// ---- controls ----
+function bindSlider(id, valId, fmt, apply) {
+  const el = document.getElementById(id);
+  const val = document.getElementById(valId);
+  el.addEventListener("input", () => {
+    apply(parseFloat(el.value));
+    val.textContent = fmt(parseFloat(el.value));
+  });
+}
+bindSlider("count", "v-count", v => v, v => { settings.count = v; syncCurveCount(); });
+bindSlider("thick", "v-thick", v => v.toFixed(1), v => settings.thickness = v);
+bindSlider("speed", "v-speed", v => v.toFixed(1) + "×", v => settings.speed = v);
+bindSlider("trail", "v-trail", v => v, v => settings.trail = v);
+document.getElementById("fade").addEventListener("change", (e) => {
+  settings.fade = e.target.checked;
+  document.getElementById("trail-row").style.opacity = settings.fade ? "1" : "0.35";
+  freshPage();   // start clean in either mode
+});
+document.getElementById("traj").addEventListener("change", (e) => {
+  settings.traj = e.target.value;
+  if (settings.fade) curves = curves.map(() => newCurve());
+  else freshPage();
+});
+
+function regenerate() {
+  if (settings.fade) curves = curves.map(() => newCurve());
+  else freshPage();
+}
+canvas.addEventListener("click", regenerate);
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Space") { paused = !paused; e.preventDefault(); }
+  if (e.key === "n") regenerate();
+  clearTimeout(hudTimer);
+  hud.style.opacity = "1";
+  hudTimer = setTimeout(() => hud.style.opacity = "0", 4000);
+});
+</script>
+</body>
+</html>

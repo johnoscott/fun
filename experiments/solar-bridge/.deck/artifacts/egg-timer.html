@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animated Egg Timer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .timer-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .egg-timer {
+            position: relative;
+            width: 200px;
+            height: 300px;
+            filter: drop-shadow(0 10px 40px rgba(0, 0, 0, 0.2));
+        }
+
+        /* Top bulb */
+        .top-bulb {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #fff9e6 0%, #ffe680 100%);
+            border-radius: 60px 60px 20px 20px;
+            border: 3px solid #d4a574;
+            overflow: hidden;
+        }
+
+        .sand-top {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(180deg, #f4d03f 0%, #d4a017 100%);
+            animation: drainSand 3s linear infinite;
+        }
+
+        @keyframes drainSand {
+            0% { height: 100%; }
+            100% { height: 10%; }
+        }
+
+        /* Neck/narrow part */
+        .neck {
+            position: absolute;
+            top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 40px;
+            background: linear-gradient(90deg, #e8e8e8 0%, #f5f5f5 50%, #e8e8e8 100%);
+            border: 2px solid #d4a574;
+            border-radius: 50%;
+        }
+
+        .sand-neck {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 50%;
+            background: linear-gradient(180deg, #f4d03f 0%, #d4a017 100%);
+            animation: fillNeck 3s linear infinite;
+        }
+
+        @keyframes fillNeck {
+            0% { height: 0%; }
+            50% { height: 50%; }
+            100% { height: 50%; }
+        }
+
+        /* Falling sand particles */
+        .sand-particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: radial-gradient(circle at 30% 30%, #f9e79f, #d4a017);
+            border-radius: 50%;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: fallSand 1.5s linear infinite;
+        }
+
+        .sand-particle:nth-child(1) { top: 110px; animation-delay: 0s; }
+        .sand-particle:nth-child(2) { top: 110px; animation-delay: 0.3s; }
+        .sand-particle:nth-child(3) { top: 110px; animation-delay: 0.6s; }
+        .sand-particle:nth-child(4) { top: 110px; animation-delay: 0.9s; }
+        .sand-particle:nth-child(5) { top: 110px; animation-delay: 1.2s; }
+
+        @keyframes fallSand {
+            0% {
+                top: 110px;
+                opacity: 1;
+            }
+            100% {
+                top: 150px;
+                opacity: 0.3;
+            }
+        }
+
+        /* Bottom bulb */
+        .bottom-bulb {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #fff9e6 0%, #ffe680 100%);
+            border-radius: 20px 20px 60px 60px;
+            border: 3px solid #d4a574;
+            overflow: hidden;
+        }
+
+        .sand-bottom {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(180deg, #f4d03f 0%, #d4a017 100%);
+            animation: fillSand 3s linear infinite;
+        }
+
+        @keyframes fillSand {
+            0% { height: 10%; }
+            100% { height: 90%; }
+        }
+
+        /* Base/stand */
+        .stand {
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 160px;
+            height: 30px;
+            background: linear-gradient(135deg, #c9a961 0%, #a0826d 100%);
+            border-radius: 0 0 20px 20px;
+            border: 2px solid #8b7355;
+        }
+
+        .stand::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 140px;
+            height: 4px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 2px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 400px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        input[type="range"] {
+            width: 150px;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #fcb69f, #ffecd2);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #fcb69f, #ff9999);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #fcb69f, #ff9999);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        button {
+            background: linear-gradient(135deg, #ff9999, #fcb69f);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(255, 153, 153, 0.3);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 153, 153, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.reset {
+            background: linear-gradient(135deg, #a0d8d8, #7ec8c8);
+            box-shadow: 0 5px 15px rgba(160, 216, 216, 0.3);
+        }
+
+        button.reset:hover {
+            box-shadow: 0 8px 25px rgba(160, 216, 216, 0.4);
+        }
+
+        .timer-display {
+            background: white;
+            padding: 20px 40px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            min-width: 200px;
+        }
+
+        .timer-label {
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .timer-value {
+            font-size: 48px;
+            font-weight: bold;
+            color: linear-gradient(135deg, #fcb69f, #ff9999);
+            font-family: 'Courier New', monospace;
+        }
+
+        .status-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 10px;
+            background: #cccccc;
+            animation: none;
+        }
+
+        .status-light.active {
+            background: #ff6b6b;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #8b4513;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="timer-container">
+        <div class="title">⏳ Egg Timer</div>
+
+        <div class="egg-timer">
+            <div class="top-bulb">
+                <div class="sand-top"></div>
+                <div class="sand-particle"></div>
+                <div class="sand-particle"></div>
+                <div class="sand-particle"></div>
+                <div class="sand-particle"></div>
+                <div class="sand-particle"></div>
+            </div>
+            <div class="neck">
+                <div class="sand-neck"></div>
+            </div>
+            <div class="bottom-bulb">
+                <div class="sand-bottom"></div>
+            </div>
+            <div class="stand"></div>
+        </div>
+
+        <div class="timer-display">
+            <div class="timer-label">Time Remaining</div>
+            <div class="timer-value" id="timerDisplay">3:00<span class="status-light active"></span></div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="timeSlider" style="font-size: 12px; color: #666; font-weight: 600;">Minutes:</label>
+                <input type="range" id="timeSlider" min="1" max="10" value="3">
+                <span id="timeValue" style="font-weight: 600; color: #ff9999; min-width: 30px;">3</span>
+            </div>
+            <button id="startBtn">Start</button>
+            <button class="reset" id="resetBtn">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        let isRunning = false;
+        let totalSeconds = 3 * 60;
+        let remainingSeconds = totalSeconds;
+        let timerInterval = null;
+        let animationDuration = 3000; // milliseconds
+
+        const timeSlider = document.getElementById('timeSlider');
+        const timeValue = document.getElementById('timeValue');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const topBulb = document.querySelector('.sand-top');
+        const bottomBulb = document.querySelector('.sand-bottom');
+        const sandNeck = document.querySelector('.sand-neck');
+        const statusLight = document.querySelector('.status-light');
+
+        timeSlider.addEventListener('change', (e) => {
+            totalSeconds = parseInt(e.target.value) * 60;
+            remainingSeconds = totalSeconds;
+            timeValue.textContent = e.target.value;
+            animationDuration = totalSeconds * 1000;
+            updateDisplay();
+            resetTimer();
+        });
+
+        startBtn.addEventListener('click', () => {
+            if (remainingSeconds <= 0) {
+                resetTimer();
+            }
+            if (!isRunning) {
+                isRunning = true;
+                startBtn.textContent = 'Pause';
+                startTimer();
+                statusLight.classList.add('active');
+            } else {
+                isRunning = false;
+                startBtn.textContent = 'Resume';
+                clearInterval(timerInterval);
+                statusLight.classList.remove('active');
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            resetTimer();
+        });
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                if (remainingSeconds > 0) {
+                    remainingSeconds--;
+                    updateDisplay();
+                    updateAnimation();
+                } else {
+                    finishTimer();
+                }
+            }, 1000);
+        }
+
+        function resetTimer() {
+            isRunning = false;
+            clearInterval(timerInterval);
+            remainingSeconds = totalSeconds;
+            startBtn.textContent = 'Start';
+            statusLight.classList.remove('active');
+            updateDisplay();
+            resetAnimation();
+        }
+
+        function updateDisplay() {
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            timerDisplay.innerHTML = `${minutes}:${seconds.toString().padStart(2, '0')}<span class="status-light ${isRunning ? 'active' : ''}"></span>`;
+        }
+
+        function updateAnimation() {
+            const progress = 1 - (remainingSeconds / totalSeconds);
+            topBulb.style.height = (100 - progress * 90) + '%';
+            bottomBulb.style.height = (10 + progress * 80) + '%';
+        }
+
+        function resetAnimation() {
+            topBulb.style.height = '100%';
+            bottomBulb.style.height = '10%';
+        }
+
+        function finishTimer() {
+            isRunning = false;
+            clearInterval(timerInterval);
+            startBtn.textContent = 'Start';
+            statusLight.classList.remove('active');
+            playFinishAnimation();
+            alert('⏳ Time is up!');
+        }
+
+        function playFinishAnimation() {
+            const timer = document.querySelector('.egg-timer');
+            timer.style.animation = 'none';
+            setTimeout(() => {
+                timer.style.animation = 'shake 0.5s ease-in-out';
+            }, 10);
+        }
+
+        // Add shake animation for finish
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-10px); }
+                75% { transform: translateX(10px); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        updateDisplay();
+    </script>
+</body>
+</html>

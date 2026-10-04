@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethereal DNA - 60s Journey of Life</title>
+    <style>
+        :root {
+            --bg-color: #030308;
+            --accent-color: #00ffcc;
+            --glass-bg: rgba(10, 10, 25, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-color: #e0e0ff;
+            --font-family: system-ui, -apple-system, sans-serif, 'Courier New';
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: background 1.5s ease;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+            pointer-events: auto;
+        }
+
+        /* Sci-Fi HUD Overlays */
+        .hud {
+            position: absolute;
+            z-index: 10;
+            padding: 1.5rem;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .hud-glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 1rem;
+            pointer-events: auto;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .top-left {
+            top: 1.5rem;
+            left: 1.5rem;
+            max-width: 320px;
+        }
+
+        .top-right {
+            top: 1.5rem;
+            right: 1.5rem;
+            width: 340px;
+            text-align: right;
+        }
+
+        .bottom-hud {
+            position: absolute;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 3rem);
+            max-width: 850px;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #ffffff, var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .epoch-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+            text-transform: uppercase;
+        }
+
+        .epoch-subtitle {
+            font-size: 0.82rem;
+            color: var(--accent-color);
+            opacity: 0.9;
+            font-weight: 500;
+            min-height: 2.5rem;
+            line-height: 1.35;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            text-align: left;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 6px 10px;
+        }
+
+        .stat-label {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.5);
+            letter-spacing: 1px;
+        }
+
+        .stat-val {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #fff;
+            font-family: monospace;
+        }
+
+        /* Sci-Fi Logs Scroll */
+        .terminal-log {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 255, 204, 0.15);
+            border-radius: 8px;
+            height: 128px;
+            overflow-y: hidden;
+            font-family: monospace;
+            font-size: 0.72rem;
+            padding: 10px 12px;
+            color: #55ffaa;
+            text-align: left;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .terminal-log div {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.45;
+        }
+
+        /* Custom Interactive Controls */
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            margin-top: 10px;
+        }
+
+        .timeline-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            gap: 6px;
+        }
+
+        .scrub-bar {
+            width: 100%;
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.06);
+            height: 6px;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .scrub-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            background: var(--accent-color);
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px var(--accent-color);
+            transition: transform 0.1s;
+        }
+
+        .scrub-bar::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
+        }
+
+        /* Timeline Event Ticks Style */
+        .timeline-ticks-wrapper {
+            position: relative;
+            width: 100%;
+            height: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .timeline-tick {
+            position: absolute;
+            bottom: 2px;
+            width: 2px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateX(-50%);
+            transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+            z-index: 1;
+        }
+        
+        .timeline-tick.anticipated {
+            background: var(--accent-color);
+            height: 18px;
+            width: 3px;
+            box-shadow: 0 0 10px var(--accent-color), 0 0 20px var(--accent-color);
+            z-index: 5;
+            bottom: -3px;
+            animation: tick-flash 0.35s infinite alternate;
+        }
+
+        .timeline-tick.passed {
+            background: rgba(0, 255, 204, 0.45);
+            height: 5px;
+            width: 2px;
+        }
+
+        @keyframes tick-flash {
+            0% { opacity: 0.5; filter: drop-shadow(0 0 1px var(--accent-color)); }
+            100% { opacity: 1; filter: drop-shadow(0 0 8px var(--accent-color)); }
+        }
+
+        .btn-panel {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--glass-border);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.75rem;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        button:hover {
+            background: var(--accent-color);
+            color: #000;
+            box-shadow: 0 0 12px var(--accent-color);
+            border-color: #fff;
+        }
+
+        button.active {
+            background: rgba(0, 255, 204, 0.2);
+            border-color: var(--accent-color);
+        }
+
+        .time-markers {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.62rem;
+            color: rgba(255,255,255,0.4);
+            font-family: monospace;
+        }
+
+        .time-markers span {
+            cursor: pointer;
+            transition: color 0.3s, transform 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .time-markers span:hover {
+            color: #ffffff;
+            transform: scale(1.05);
+        }
+
+        .marker-active {
+            color: var(--accent-color) !important;
+            font-weight: bold;
+        }
+
+        /* Mutate Alert Toast */
+        #mutation-alert {
+            position: absolute;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: rgba(255, 30, 100, 0.95);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            z-index: 100;
+            pointer-events: none;
+            letter-spacing: 1px;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 15px rgba(255, 30, 100, 0.4);
+            text-transform: uppercase;
+        }
+
+        #mutation-alert.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Sound Note Toggle Overlay */
+        .audio-indicator {
+            font-size: 0.72rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: rgba(0, 255, 204, 0.8);
+        }
+
+        .sound-wave {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            width: 15px;
+            height: 10px;
+        }
+
+        .sound-wave span {
+            width: 2px;
+            background-color: var(--accent-color);
+            animation: pulse-audio 1s infinite alternate;
+        }
+
+        .sound-wave span:nth-child(2) { animation-delay: 0.15s; height: 60%; }
+        .sound-wave span:nth-child(3) { animation-delay: 0.3s; height: 100%; }
+        .sound-wave span:nth-child(1) { height: 40%; }
+
+        @keyframes pulse-audio {
+            0% { transform: scaleY(0.3); }
+            100% { transform: scaleY(1.1); }
+        }
+
+        /* Utility helper classes */
+        .text-accent { color: var(--accent-color); }
+        .flex { display: flex; }
+        .flex-col { display: flex; flex-direction: column; }
+        .gap-1 { gap: 0.25rem; }
+
+        @media (max-width: 600px) {
+            .hud { display: none !important; }
+            .bottom-hud { width: 95%; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Canvas for Screensaver graphics -->
+    <canvas id="screensaver-canvas"></canvas>
+
+    <!-- Mutation Alert -->
+    <div id="mutation-alert">Gene Mutation Induced!</div>
+
+    <!-- HUD Top Left: App Title & Science Stats -->
+    <div class="hud top-left hud-glass">
+        <h1>Evolving Double Helix</h1>
+        <p style="font-size: 0.65rem; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 1px;">Biogenetic Simulation</p>
+        
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-label">Cosmic Epoch</div>
+                <div class="stat-val" id="hud-epoch">1 / 6</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Geological Age</div>
+                <div class="stat-val" id="hud-age">4.0 B.Y.A.</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Evolving Species</div>
+                <div class="stat-val text-accent" id="hud-species">Protobionts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Complexity</div>
+                <div class="stat-val" id="hud-complexity">3.4%</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- HUD Top Right: Active Visual/Audio Feedback Details -->
+    <div class="hud top-right hud-glass">
+        <div class="flex-col gap-1" style="text-align: right; align-items: flex-end;">
+            <div class="epoch-title" id="active-epoch-name">Abiogenesis</div>
+            <div class="epoch-subtitle" id="active-epoch-desc">Earth cools down. Rich organic compounds accumulate in volatile hydrothermal vents.</div>
+        </div>
+        
+        <div style="border-top: 1px solid rgba(255,255,255,0.08); margin-top: 8px; padding-top: 8px; display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+            <div id="audio-wave-anim" class="audio-indicator" style="display: none;">
+                Synthesizer Active
+                <div class="sound-wave">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+            <div id="fps-counter" style="font-family: monospace; font-size: 0.72rem; color: rgba(255,255,255,0.4);">FPS: --</div>
+        </div>
+    </div>
+
+    <!-- HUD Bottom: Interactive Timeline Scrub & Settings -->
+    <div class="hud-glass bottom-hud flex-col" style="gap: 12px;">
+        <!-- Timeline Bar -->
+        <div class="timeline-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; font-weight: 600;">
+                <span class="text-accent" style="letter-spacing: 1px;">60 SECONDS TIMELINE OF LIFE</span>
+                <span id="timeline-time" style="font-family: monospace;">Time: 0.0s / 60.0s</span>
+            </div>
+            <div class="timeline-ticks-wrapper">
+                <div id="scrub-ticks" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+                <input type="range" class="scrub-bar" id="timeline-scrub" min="0" max="60" step="0.05" value="0" style="position: relative; z-index: 2; background: transparent; margin: 0;">
+            </div>
+            <div class="time-markers">
+                <span id="m0" class="marker-active">
+                    <canvas class="marker-canvas" data-ep="0" data-ty="2" width="36" height="36" style="width: 18px; height: 18px; transition: opacity 0.3s;"></canvas>
+                    <span>Hadean (0s)</span>
+                </span>
+                <span id="m10">
+                    <canvas class="marker-canvas" data-ep="1" data-ty="0" width="36" height="36" style="width: 18px; height: 18px; transition: opacity 0.3s;"></canvas>
+                    <span>Archaean (10s)</span>
+                </span>
+                <span id="m20">
+                    <canvas class="marker-canvas" data-ep="2" data-ty="1" width="36" height="36" style="width: 18px; height: 18px; transition: opacity 0.3s;"></canvas>
+                    <span>Proterozoic (20s)</span>
+                </span>
+                <span id="m30">
+                    <canvas class="marker-canvas" data-ep="3" data-ty="1" width="36" height="36" style="width: 18px; height: 18px; transition: opacity 0.3s;"></canvas>
+                    <span>Cambrian (30s)</span>
+                </span>
+                <span id="m40">
+                    <canvas class="marker-canvas" data-ep="4" data-ty="0" width="36" height="36" style="width: 18px; height: 18px; transition: opacity 0.3s;"></canvas>
+                    <span>Paleozoic (40s)</span>
+                </span>
+                <span id="m50">
+                    <canvas class="marker-canvas" data-ep="5" data-ty="0" width="36" height="36" style="width: 18px; height: 18px; transition: opacity 0.3s;"></canvas>
+                    <span>Mesozoic (50s)</span>
+                </span>
+                <span id="m60">
+                    <canvas class="marker-canvas" data-ep="5" data-ty="2" width="36" height="36" style="width: 18px; height: 18px; transition: opacity 0.3s;"></canvas>
+                    <span>Cenozoic (60s)</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- Controls Row -->
+        <div class="control-row">
+            <div class="btn-panel">
+                <button id="btn-play-pause">
+                    <svg id="play-icon" width="10" height="10" viewBox="0 0 10 10" style="display: none; fill:currentColor;"><polygon points="0,0 10,5 0,10"/></svg>
+                    <svg id="pause-icon" width="10" height="10" viewBox="0 0 10 10" style="fill:currentColor;"><rect x="0" y="0" width="3" height="10"/><rect x="7" y="0" width="3" height="10"/></svg>
+                    <span id="play-text">Pause</span>
+                </button>
+                <button id="btn-audio">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                    Enable Audio Ambient
+                </button>
+                <button id="btn-mutate" style="border-color: rgba(255, 30, 100, 0.4);">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    Trigger Mutation
+                </button>
+            </div>
+
+            <!-- Visualization Presets -->
+            <div class="flex" style="gap: 12px; align-items: center;">
+                <div class="flex" style="gap: 6px; align-items: center;">
+                    <span style="font-size: 0.72rem; color: rgba(255,255,255,0.6);" class="text-accent">Render:</span>
+                    <button class="active" id="btn-preset-glowing" style="padding: 4px 8px; font-size: 0.7rem;">Glowing Helix</button>
+                    <button id="btn-preset-minimal" style="padding: 4px 8px; font-size: 0.7rem;">Vector Line</button>
+                </div>
+                <button id="btn-fullscreen" style="padding: 6px 10px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Science Engine script -->
+    <script>
+        // Epoch Content Database
+        const EPOCHS = [
+            {
+                start: 0, end: 10,
+                num: 1, age: "4.0 B.Y.A.",
+                name: "Primordial Soup",
+                species: "Protobionts",
+                complexity: "3.4%",
+                theme: "#0a0d22",
+                accent: "#00ffcc",
+                desc: "Abundant organic compounds bond randomly in volatile hydrothermal vents. Chemical self-assembly builds self-replicating molecular polymers.",
+                logs: [
+                    "Thermal ocean convection cell active.",
+                    "Random nucleotide polymerization occurring...",
+                    "RNA molecule strands template replication.",
+                    "Chemical proto-membranes locking in fatty acids."
+                ]
+            },
+            {
+                start: 10, end: 20,
+                num: 2, age: "3.5 - 1.5 B.Y.A.",
+                name: "Cellular Life (LUCA)",
+                species: "Prokaryotes",
+                complexity: "15.8%",
+                theme: "#031710",
+                accent: "#33ff55",
+                desc: "LUCA (Last Universal Common Ancestor) emerges in deep hydrothermal systems. Splitting carbon, cyanobacteria cells begin planetary photosynthesis.",
+                logs: [
+                    "LUCA active structural genome detected.",
+                    "Anaerobic metabolic pathway active.",
+                    "Great Oxidation Event triggered.",
+                    "Cyanobacteria cells generating atmospheric O2."
+                ]
+            },
+            {
+                start: 20, end: 30,
+                num: 3, age: "1.5 B.Y.A - 540 M.Y.A.",
+                name: "Cambrian Explosion",
+                species: "Eukaryotes & Metazoa",
+                complexity: "42.1%",
+                theme: "#021220",
+                accent: "#22aaff",
+                desc: "The sea turns biological. Rapid proliferation of complex multi-cellular organisms, hard protective armor shells, eyes, and early nervous systems.",
+                logs: [
+                    "Nucleated eukaryotic cell division multiplying.",
+                    "Arthropods, Trilobite sensory systems active.",
+                    "Chordate nerve cord architecture structured.",
+                    "Bioluminescent deep water survival adapted."
+                ]
+            },
+            {
+                start: 30, end: 40,
+                num: 4, age: "540 - 250 M.Y.A.",
+                name: "Land Invasion",
+                species: "Ferns & Tetrapods",
+                complexity: "65.3%",
+                theme: "#0a1306",
+                accent: "#bbff22",
+                desc: "Vast plant forests generate lush oxygen canopies. Early tetrapods mutate lungs, scurrying ashore to conquer continents of dry rocky land.",
+                logs: [
+                    "Vascular spore-plant cellulose structure active.",
+                    "Skeletal articulation optimized for land locomotion.",
+                    "Atmospheric oxygen levels rise steadily.",
+                    "Early seed foliage covering continental masses."
+                ]
+            },
+            {
+                start: 40, end: 50,
+                num: 5, age: "250 - 66 M.Y.A.",
+                name: "Age of Reptiles",
+                species: "Sauropsids (Dinosaurs)",
+                complexity: "81.9%",
+                theme: "#1f0d04",
+                accent: "#ff9900",
+                desc: "Vast dinosaurs roam warm, massive single continents. Rapid growth of reptiles, birds, gymnosperm trees, and dramatic volcanic activities.",
+                logs: [
+                    "Egg shell calcification gene sequence optimized.",
+                    "Warm-blooded thermoregulation pathways adaptive.",
+                    "Archosaur species apex complexity achieved.",
+                    "Sudden Yucatan bolide impact detected incoming..."
+                ]
+            },
+            {
+                start: 50, end: 60,
+                num: 6, age: "Present & Beyond",
+                name: "Digital Consciousness",
+                species: "Homo Sapiens & AI",
+                complexity: "99.9%",
+                theme: "#110618",
+                accent: "#ee44ff",
+                desc: "Mammals rise, tools create civilizations. The double helix begins scripting logic beyond carbon. DNA code merges directly with silicon logic.",
+                logs: [
+                    "Mammal neocortex synapses firing at scale.",
+                    "Information encoded on mechanical/digital silicon.",
+                    "Artificial neural networks synthesis beginning...",
+                    "Universal cybernetic quantum DNA core operational."
+                ]
+            }
+        ];
+
+        function getEpoch(time) {
+            if (time < 10) return EPOCHS[0];
+            if (time < 20) return EPOCHS[1];
+            if (time < 30) return EPOCHS[2];
+            if (time < 40) return EPOCHS[3];
+            if (time < 50) return EPOCHS[4];
+            return EPOCHS[5];
+        }
+
+        // Setup DOM Nodes
+        const canvas = document.getElementById("screensaver-canvas");
+        const ctx = canvas.getContext("2d");
+        const timelineScrub = document.getElementById("timeline-scrub");
+        const btnPlayPause = document.getElementById("btn-play-pause");
+        const btnAudio = document.getElementById("btn-audio");
+        const btnMutate = document.getElementById("btn-mutate");
+        const playIcon = document.getElementById("play-icon");
+        const pauseIcon = document.getElementById("pause-icon");
+        const playText = document.getElementById("play-text");
+        const timelineTime = document.getElementById("timeline-time");
+        const mutationAlert = document.getElementById("mutation-alert");
+        const audioWaveAnim = document.getElementById("audio-wave-anim");
+        const fpsCounter = document.getElementById("fps-counter");
+
+        // HUD widgets
+        const hhEpoch = document.getElementById("hud-epoch");
+        const hhAge = document.getElementById("hud-age");
+        const hhSpecies = document.getElementById("hud-species");
+        const hhComplexity = document.getElementById("hud-complexity");
+        const hhLog = document.getElementById("hud-log");
+        const activeName = document.getElementById("active-epoch-name");
+        const activeDesc = document.getElementById("active-epoch-desc");
+
+        // Render presets
+        let renderPreset = "glowing"; 
+        document.getElementById("btn-preset-glowing").addEventListener("click", (e) => {
+            renderPreset = "glowing";
+            e.target.classList.add("active");
+            document.getElementById("btn-preset-minimal").classList.remove("active");
+        });
+        document.getElementById("btn-preset-minimal").addEventListener("click", (e) => {
+            renderPreset = "minimal";
+            e.target.classList.add("active");
+            document.getElementById("btn-preset-glowing").classList.remove("active");
+        });
+
+        // App State
+        let currentTime = 0; 
+        let isPlaying = true;
+        let lastTimestamp = 0;
+        let scaleFactor = 1;
+        let rotationAngle = 0;
+        let lastAppliedEpoch = null;
+        let particles = [];
+        let silhouettes = [];
+        let mutations = [];
+        let logQueue = [];
+
+        // Dynamic Timeline Events Array
+        const EVENTS = [
+            { time: 2.5, title: "RNA Self-Replication", desc: "First template-driven molecular copying builds in the volcanic hydrothermal vents." },
+            { time: 7.5, title: "Membrane Encapsulation", desc: "Fatty acid lipid envelopes isolate genetic polymers from primordial soup." },
+            { time: 12.5, title: "Great Oxidation Event", desc: "Cyanobacteria flood global warm seas with biological oxygen." },
+            { time: 17.5, title: "Eukaryotic Organelles", desc: "Mitochondrial cellular symbiosis unlocks higher metabolic energy grids." },
+            { time: 22.5, title: "Bioluminescent Signals", desc: "Deep-sea marine filaments create early metabolic spark triggers." },
+            { time: 27.5, title: "Chordate Nervous Cord", desc: "First organized central sensory strings coordinate rapid aquatic motion." },
+            { time: 32.5, title: "Fern Cellulose Scaling", desc: "Vascular foliage captures dry continent mass margins under open air." },
+            { time: 37.5, title: "Tetrapod Lung Mutation", desc: "Lobe-finned species mutate respiratory mechanics to conquer empty shores." },
+            { time: 42.5, title: "Amniotic Egg Splicing", desc: "Calcified moisture boundaries decouple land reproduction cycles from seawater." },
+            { time: 47.5, title: "Chicxulub Asteroid Impact", desc: "Sudden dust collapse ends Dinosaur era, shifting warm-blooded lineages." },
+            { time: 52.5, title: "Neocortical Synapses", desc: "Laminated neural architecture expands coordinate learning densities scale-up." },
+            { time: 57.5, title: "Silicon Core Convergence", desc: "Carbon logic scripts cybernetic neural arrays, launching universal intelligence." }
+        ];
+
+        let timelineGeometry = { left: 0, width: 800, y: 500 };
+        let activeEventStates = new Array(EVENTS.length).fill(false);
+
+        function updateTimelineGeometry() {
+            const rect = timelineScrub.getBoundingClientRect();
+            timelineGeometry.left = rect.left + window.scrollX;
+            timelineGeometry.width = rect.width;
+            timelineGeometry.y = rect.top + window.scrollY + rect.height / 2;
+        }
+
+        // Math ease helpers
+        function easeOutCubic(t) {
+            return 1 - Math.pow(1 - t, 3);
+        }
+        function easeInCubic(t) {
+            return t * t * t;
+        }
+
+        // Loop-aware timing difference
+        function getWrappedDiff(target, current) {
+            let diff = target - current;
+            if (diff < -30) diff += 60;
+            if (diff > 30) diff -= 60;
+            return diff;
+        }
+
+        // Procedural 3D Perspective Horizon Grid
+        function drawHorizonGrid(ctx) {
+            ctx.save();
+            const w = canvas.width / window.devicePixelRatio;
+            const h = canvas.height / window.devicePixelRatio;
+            const xHz = w / 2;
+            const yHz = h * 0.22;
+
+            // Draw Horizon line
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.08)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, yHz);
+            ctx.lineTo(w, yHz);
+            ctx.stroke();
+
+            // Perspective converging rays
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.035)";
+            ctx.lineWidth = 0.5 * scaleFactor;
+            const numRays = 24;
+            for (let i = 0; i <= numRays; i++) {
+                const ratio = i / numRays;
+                const xBottom = ratio * w;
+                ctx.beginPath();
+                ctx.moveTo(xHz, yHz);
+                ctx.lineTo(xBottom, h);
+                ctx.stroke();
+            }
+
+            // Depth grid lines
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.025)";
+            const numHoriz = 12;
+            for (let i = 0; i < numHoriz; i++) {
+                const Ey = yHz + (h - yHz) * Math.pow(i / numHoriz, 2.2);
+                ctx.beginPath();
+                ctx.moveTo(0, Ey);
+                ctx.lineTo(w, Ey);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function drawTextWrapped(ctx, text, x, y, fontSize, lineHeight, maxWidth, isBold, isItalic) {
+            let fontStr = "";
+            if (isBold) fontStr += "bold ";
+            if (isItalic) fontStr += "italic ";
+            fontStr += `${fontSize}px system-ui, -apple-system, sans-serif`;
+            ctx.font = fontStr.trim();
+            const words = text.split(" ");
+            let lines = [];
+            let currentLine = words[0];
+
+            for (let i = 1; i < words.length; i++) {
+                const word = words[i];
+                const width = ctx.measureText(currentLine + " " + word).width;
+                if (width < maxWidth) {
+                    currentLine += " " + word;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            }
+            lines.push(currentLine);
+
+            const totalHeight = lines.length * lineHeight;
+            const startY = y - totalHeight / 2 + lineHeight / 2;
+            
+            lines.forEach((line, index) => {
+                ctx.fillText(line, x, startY + index * lineHeight);
+            });
+
+            return totalHeight;
+        }
+
+        // Main event transitions rendering block
+        function drawActiveEvents(ctx) {
+            updateTimelineGeometry();
+
+            const duration = 4.0; // Display lifetime in seconds
+            const w = canvas.width / window.devicePixelRatio;
+            const h = canvas.height / window.devicePixelRatio;
+            const xMid = w / 2;
+            const yMid = h / 2;
+            const yHorizon = h * 0.22;
+            const maxWidth = Math.max(w * 0.82, 280);
+
+            EVENTS.forEach(event => {
+                const diff = getWrappedDiff(event.time, currentTime);
+
+                // If event is active
+                if (diff <= 0 && diff >= -duration) {
+                    const age = -diff;
+                    const p = age / duration;
+
+                    let x, y, size, opacity;
+                    const xTimeline = timelineGeometry.left + (event.time / 60) * timelineGeometry.width;
+                    const yTimeline = timelineGeometry.y - 12; // vertical float off track
+
+                    if (p < 0.25) {
+                        // Phase 1: Popping up from timeline (p: 0.0 to 0.25)
+                        const localP = p / 0.25;
+                        const ease = easeOutCubic(localP);
+                        x = xTimeline + (xMid - xTimeline) * ease;
+                        y = yTimeline + (yMid - yTimeline) * ease;
+                        size = 8 + (92 * scaleFactor - 8) * ease;
+                        opacity = ease;
+                    } else if (p < 0.70) {
+                        // Phase 2: Centered large title (p: 0.25 to 0.70)
+                        const localP = (p - 0.25) / 0.45;
+                        x = xMid;
+                        y = yMid;
+                        const pulse = Math.sin(localP * Math.PI * 4) * 4 * scaleFactor;
+                        size = 92 * scaleFactor + pulse;
+                        opacity = 1.0;
+                    } else {
+                        // Phase 3: Transition out to perspective horizon (p: 0.70 to 1.0)
+                        const localP = (p - 0.70) / 0.30;
+                        const ease = easeInCubic(localP);
+                        x = xMid;
+                        y = yMid + (yHorizon - yMid) * ease;
+                        size = (92 * scaleFactor) * Math.pow(1 - ease, 1.6);
+                        opacity = Math.pow(1 - localP, 2.0); // smooth fading out
+                    }
+
+                    if (opacity > 0.01) {
+                        ctx.save();
+
+                        // Radial backing glow to preserve readability over background chaos
+                        if (p >= 0.2 && p <= 0.8) {
+                            const glowP = p < 0.3 ? (p - 0.2) / 0.1 : (p > 0.72 ? (0.8 - p) / 0.08 : 1.0);
+                            ctx.save();
+                            ctx.globalAlpha = 0.22 * glowP * opacity;
+                            const radialGrad = ctx.createRadialGradient(xMid, yMid, 10, xMid, yMid, 240 * scaleFactor);
+                            radialGrad.addColorStop(0, getEpoch(currentTime).accent);
+                            radialGrad.addColorStop(1, "transparent");
+                            ctx.fillStyle = radialGrad;
+                            ctx.beginPath();
+                            ctx.arc(xMid, yMid, 280 * scaleFactor, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.restore();
+                        }
+
+                        ctx.globalAlpha = opacity;
+                        ctx.textAlign = "center";
+
+                        const accentColor = getEpoch(currentTime).accent;
+                        ctx.shadowBlur = 12 * scaleFactor;
+                        ctx.shadowColor = accentColor;
+
+                        // Title Render
+                        ctx.fillStyle = "#ffffff";
+                        const titleHeight = drawTextWrapped(ctx, event.title.toUpperCase(), x, y, size, size * 1.1, maxWidth, true, false);
+
+                        // Description Render
+                        if (size > 16 * scaleFactor && p < 0.75) {
+                            ctx.shadowBlur = 6 * scaleFactor;
+                            ctx.fillStyle = accentColor;
+
+                            let subOpacity = 1;
+                            if (p < 0.35) subOpacity = (p - 0.25) / 0.10;
+                            else if (p > 0.65) subOpacity = (0.75 - p) / 0.10;
+                            ctx.globalAlpha = opacity * Math.max(0, Math.min(1, subOpacity));
+
+                            const yDescription = y + titleHeight / 2 + 18 * scaleFactor;
+                            drawTextWrapped(ctx, event.desc, x, yDescription, size * 0.32, size * 0.32 * 1.3, maxWidth, false, true);
+                        }
+
+                        ctx.restore();
+                    }
+                }
+            });
+        }
+
+        function drawTimelineSilhouettes() {
+            const cans = document.querySelectorAll(".marker-canvas");
+            cans.forEach(can => {
+                const ep = parseInt(can.getAttribute("data-ep"));
+                const ty = parseInt(can.getAttribute("data-ty"));
+                const ctx2 = can.getContext("2d");
+                ctx2.clearRect(0, 0, can.width, can.height);
+                
+                const span = can.closest("span");
+                const isActive = span && (span.className.indexOf("marker-active") !== -1);
+                
+                ctx2.save();
+                if (isActive) {
+                    ctx2.fillStyle = EPOCHS[ep].accent;
+                    ctx2.globalAlpha = 1.0;
+                } else {
+                    ctx2.fillStyle = "rgba(255, 255, 255, 0.4)";
+                    ctx2.globalAlpha = 0.55;
+                }
+                
+                const time = (lastTimestamp ? lastTimestamp * 0.001 : 0);
+                drawSilhouetteVector(ctx2, ep, ty, 18, 18, 0.85, time);
+                ctx2.restore();
+            });
+        }
+
+        function initMarkerClickListeners() {
+            for (let i = 0; i <= 60; i += 10) {
+                const el = document.getElementById("m" + i);
+                if (el) {
+                    el.addEventListener("click", () => {
+                        currentTime = i;
+                        updateEpochTelemetry(currentTime);
+                        if (audio.initialized && audio.ctx.state === 'running') {
+                            audio.playEventActivation();
+                        }
+                    });
+                }
+            }
+        }
+
+        // Initialize ticks DOM list
+        function initTimelineTicks() {
+            const ticksContainer = document.getElementById("scrub-ticks");
+            ticksContainer.innerHTML = "";
+
+            EVENTS.forEach((event, idx) => {
+                const pct = (event.time / 60) * 100;
+                const tick = document.createElement("div");
+                tick.className = "timeline-tick";
+                tick.id = `tick-${idx}`;
+                tick.style.left = `${pct}%`;
+                ticksContainer.appendChild(tick);
+            });
+            updateTimelineGeometry();
+        }
+
+        // Update Anticipation states
+        function updateTimelineTicks(time) {
+            EVENTS.forEach((event, idx) => {
+                const tickEl = document.getElementById(`tick-${idx}`);
+                if (!tickEl) return;
+
+                const diff = getWrappedDiff(event.time, time);
+
+                if (diff < -4.0) {
+                    tickEl.className = "timeline-tick passed";
+                    activeEventStates[idx] = false;
+                } else if (diff <= 0) {
+                    tickEl.className = "timeline-tick anticipated";
+                    if (!activeEventStates[idx]) {
+                        activeEventStates[idx] = true;
+                        addConsoleLog(`EVENT ACTIVE: ${event.title.toUpperCase()}`);
+                        if (audio.initialized && audio.ctx.state === 'running') {
+                            audio.playEventActivation();
+                        }
+                    }
+                } else if (diff <= 2.5) {
+                    tickEl.className = "timeline-tick anticipated";
+                } else {
+                    tickEl.className = "timeline-tick";
+                    activeEventStates[idx] = false;
+                }
+            });
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth * window.devicePixelRatio;
+            canvas.height = window.innerHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            scaleFactor = Math.min(window.innerWidth, window.innerHeight) / 600;
+            updateTimelineGeometry();
+        }
+        window.addEventListener("resize", resize);
+        resize();
+
+        // Background Particles
+        class Particle {
+            constructor(epoch) {
+                this.reset(epoch);
+            }
+
+            reset(epoch) {
+                this.x = Math.random() * window.innerWidth;
+                this.y = Math.random() * window.innerHeight;
+                this.vx = (Math.random() - 0.5) * 0.7;
+                this.vy = (Math.random() - 0.5) * 0.7;
+                this.size = Math.random() * 3 + 1;
+                this.baseOpacity = Math.random() * 0.4 + 0.1;
+                this.opacity = this.baseOpacity;
+                this.color = epoch.accent;
+                this.char = Math.random() > 0.5 ? "0" : "1";
+            }
+
+            update(epoch) {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0) this.x = window.innerWidth;
+                if (this.x > window.innerWidth) this.x = 0;
+                if (this.y < 0) this.y = window.innerHeight;
+                if (this.y > window.innerHeight) this.y = 0;
+
+                this.color = epoch.accent;
+            }
+
+            draw(ctx, renderMode, epochNum) {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.fillStyle = this.color;
+
+                if (renderMode === 'minimal') {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                    return;
+                }
+
+                if (epochNum === 1) {
+                    ctx.shadowBlur = 6;
+                    ctx.shadowColor = this.color;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (epochNum === 2) {
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (epochNum === 3) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size * 1.5, Math.PI, 0); 
+                    ctx.stroke();
+                    ctx.fillRect(this.x - 0.5, this.y, 1, this.size * 1.5);
+                } else if (epochNum === 4) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y - this.size);
+                    ctx.quadraticCurveTo(this.x + this.size, this.y, this.x, this.y + this.size);
+                    ctx.quadraticCurveTo(this.x - this.size, this.y, this.x, this.y - this.size);
+                    ctx.fill();
+                } else if (epochNum === 5) {
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = "#ff3300";
+                    ctx.fillStyle = Math.random() > 0.5 ? "#ffaa00" : "#ff3300";
+                    ctx.fillRect(this.x, this.y, this.size, this.size);
+                } else {
+                    ctx.font = "bold 9px monospace";
+                    ctx.fillText(this.char, this.x, this.y);
+                    if (Math.random() > 0.99) this.char = Math.random() > 0.5 ? "0" : "1";
+                }
+                ctx.restore();
+            }
+        }
+
+        // Procedural Evolving Silhouettes
+        class Silhouette {
+            constructor(spawnOnScreen = false) {
+                this.reset(spawnOnScreen);
+            }
+
+            reset(spawnOnScreen = false) {
+                const weights = [];
+                let totalWeight = 0;
+                for (let i = 0; i < 6; i++) {
+                    const c = 5 + i * 10;
+                    let d = Math.abs(currentTime - c);
+                    if (d > 30) d = 60 - d;
+                    const w = d < 12 ? 0.5 * (1 + Math.cos((d / 12) * Math.PI)) : 0;
+                    weights.push(w);
+                    totalWeight += w;
+                }
+
+                let r = Math.random() * (totalWeight || 1);
+                this.epochIndex = 0;
+                for (let i = 0; i < 6; i++) {
+                    r -= weights[i];
+                    if (r <= 0) {
+                        this.epochIndex = i;
+                        break;
+                    }
+                }
+
+                this.typeIndex = Math.floor(Math.random() * 3);
+                this.scale = 0.35 + Math.random() * 0.95;
+                
+                const yRanges = {
+                    sky: [0.05, 0.30],
+                    mid: [0.35, 0.65],
+                    ground: [0.72, 0.85],
+                    any: [0.10, 0.85]
+                };
+                
+                const rangeTypes = ["any", "any", "any"];
+                if (this.epochIndex === 2) {
+                    rangeTypes[1] = "ground"; rangeTypes[2] = "mid";
+                } else if (this.epochIndex === 3) {
+                    rangeTypes[0] = "ground"; rangeTypes[1] = "sky"; rangeTypes[2] = "ground";
+                } else if (this.epochIndex === 4) {
+                    rangeTypes[0] = "ground"; rangeTypes[1] = "ground"; rangeTypes[2] = "sky";
+                } else if (this.epochIndex === 5) {
+                    rangeTypes[0] = "ground"; rangeTypes[1] = "ground";
+                }
+                
+                const rName = rangeTypes[this.typeIndex] || "any";
+                const bounds = yRanges[rName];
+                
+                this.x = spawnOnScreen 
+                    ? Math.random() * window.innerWidth 
+                    : window.innerWidth + 50 + Math.random() * 180;
+                this.y = (bounds[0] + Math.random() * (bounds[1] - bounds[0])) * window.innerHeight;
+                
+                this.baseSpeed = 16 + Math.random() * 22;
+                this.speed = this.baseSpeed * (0.55 + this.scale * 0.45);
+                this.baseOpacity = 0.08 + Math.random() * 0.14;
+                this.seed = Math.random() * 100;
+            }
+
+            update(delta) {
+                if (isPlaying) {
+                    this.x -= this.speed * delta;
+                }
+                
+                const c = 5 + this.epochIndex * 10;
+                let d = Math.abs(currentTime - c);
+                if (d > 30) d = 60 - d;
+                const weight = d < 12 ? 0.5 * (1 + Math.cos((d / 12) * Math.PI)) : 0;
+                this.opacity = this.baseOpacity * weight;
+
+                const isOutOfSight = this.x < -150 * this.scale;
+                const isTotallyFaded = weight <= 0;
+                
+                if (isOutOfSight || isTotallyFaded) {
+                    const isJump = isTotallyFaded && Math.abs(currentTime - lastTimestamp*0.001) > 1.2;
+                    this.reset(isJump);
+                }
+            }
+
+            draw(ctx) {
+                if (this.opacity <= 0.005) return;
+                ctx.save();
+                ctx.fillStyle = EPOCHS[this.epochIndex].accent;
+                ctx.globalAlpha = this.opacity * (renderPreset === "minimal" ? 0.35 : 1.0);
+                
+                if (renderPreset === "glowing" && Math.random() > 0.4) {
+                    ctx.shadowBlur = 6 * this.scale;
+                    ctx.shadowColor = ctx.fillStyle;
+                }
+                
+                const animTime = (lastTimestamp ? lastTimestamp * 0.001 : 0) + this.seed;
+                drawSilhouetteVector(ctx, this.epochIndex, this.typeIndex, this.x, this.y, this.scale, animTime);
+                ctx.restore();
+            }
+        }
+
+        // Extremely compact mathematical vector drawing for 18 species (6 epochs x 3 creatures)
+        function drawSilhouetteVector(ctx, ep, ty, x, y, size, time) {
+            if (ep === 0) { // Primordial Soup
+                if (ty === 0) { // Coacervate
+                    ctx.beginPath();
+                    const rBase = size * 15;
+                    for (let a = 0; a <= Math.PI * 2 + 0.1; a += 0.3) {
+                        const r = rBase + Math.sin(a * 4 + time * 3) * (size * 2.5);
+                        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+                    }
+                    ctx.closePath(); ctx.fill();
+                } else if (ty === 1) { // Lipid Vesicle
+                    ctx.beginPath(); ctx.arc(x, y, size * 16, 0, Math.PI * 2); ctx.fill();
+                    ctx.save(); ctx.globalAlpha *= 0.5; ctx.beginPath(); ctx.arc(x, y, size * 11, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+                } else { // RNA
+                    const len = 36 * size;
+                    for (let i = 0; i < 8; i++) {
+                        const tr = i / 7;
+                        const nx = x - len / 2 + tr * len;
+                        const ny = y + Math.sin(tr * Math.PI * 2 + time * 4) * (5 * size);
+                        ctx.beginPath(); ctx.arc(nx, ny, size * (3.5 - tr * 1.2), 0, Math.PI * 2); ctx.fill();
+                        if (i % 2 === 0) {
+                            ctx.fillRect(nx - 0.7 * size, ny, 1.4 * size, 8 * size);
+                        }
+                    }
+                }
+            } else if (ep === 1) { // Cellular Life
+                if (ty === 0) { // Bacillus
+                    ctx.beginPath();
+                    ctx.roundRect(x - 12 * size, y - 6 * size, 24 * size, 12 * size, 6 * size);
+                    ctx.fill();
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1 * size;
+                    for (let f = -1; f <= 1; f += 2) {
+                        ctx.beginPath(); ctx.moveTo(x + 12 * size, y + f * 2 * size);
+                        for (let s = 0; s <= 15; s++) {
+                            const r = s / 15;
+                            ctx.lineTo(x + 12 * size + r * 22 * size, y + f * 2 * size + Math.sin(r * 4 - time * 6) * (3 * size));
+                        }
+                        ctx.stroke();
+                    }
+                } else if (ty === 1) { // Cyanobacteria
+                    for (let i = 0; i < 9; i++) {
+                        const tx = x - 20 * size + i * 5 * size;
+                        const ty = y + Math.sin(i * 1.2 + time * 3) * (3.5 * size);
+                        ctx.beginPath(); ctx.arc(tx, ty, size * 3, 0, Math.PI * 2); ctx.fill();
+                    }
+                } else { // Flagellated cell
+                    ctx.beginPath();
+                    ctx.moveTo(x - 10 * size, y);
+                    ctx.quadraticCurveTo(x, y - 7 * size, x + 10 * size, y - 1 * size);
+                    ctx.lineTo(x + 10 * size, y + 1 * size);
+                    ctx.quadraticCurveTo(x, y + 7 * size, x - 10 * size, y);
+                    ctx.fill();
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1 * size;
+                    ctx.beginPath(); ctx.moveTo(x + 10 * size, y);
+                    for (let s = 0; s <= 20; s++) {
+                        const r = s / 20;
+                        ctx.lineTo(x + 10 * size + r * 30 * size, y + Math.sin(r * Math.PI * 2 - time * 7) * (5 * size));
+                    }
+                    ctx.stroke();
+                }
+            } else if (ep === 2) { // Cambrian Explosion
+                if (ty === 0) { // Jellyfish
+                    const pulse = Math.sin(time * 3) * 0.12;
+                    ctx.beginPath();
+                    ctx.ellipse(x, y - 2 * size, 14 * size * (1 + pulse), 11 * size * (1 - pulse), 0, Math.PI, 0);
+                    ctx.closePath(); ctx.fill();
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.8 * size;
+                    for (let t = -2; t <= 2; t++) {
+                        ctx.beginPath(); ctx.moveTo(x + t * 3.5 * size, y);
+                        for (let s = 0; s <= 12; s++) {
+                            const r = s / 12;
+                            ctx.lineTo(x + t * 3.5 * size + r * 20 * size, y + r * 18 * size + Math.sin(r * 3 + time * 3.5 + t) * (2 * size));
+                        }
+                        ctx.stroke();
+                    }
+                } else if (ty === 1) { // Trilobite
+                    ctx.beginPath(); ctx.ellipse(x - 8 * size, y, 5 * size, 8 * size, 0, -Math.PI * 0.5, Math.PI * 0.5); ctx.fill();
+                    for (let s = 0; s < 5; s++) {
+                        const sx = x - 3 * size + s * 3.5 * size;
+                        const sw = 10 * size * (1 - s * 0.1);
+                        ctx.fillRect(sx - 1 * size, y - sw / 2, 2 * size, sw);
+                    }
+                    ctx.beginPath(); ctx.ellipse(x + 14 * size, y, 3 * size, 4 * size, 0, -Math.PI * 0.5, Math.PI * 0.5); ctx.fill();
+                } else { // Anomalocaris
+                    const aL = 28 * size;
+                    for (let b = 0; b < 7; b++) {
+                        const bx = x - aL / 2 + b * 4 * size;
+                        const bw = 8 * size * (1 - (b / 6) * 0.4);
+                        ctx.beginPath(); ctx.ellipse(bx, y, 2 * size, bw, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillRect(bx - 1 * size, y - bw - 1 * size, 2 * size, 3 * size);
+                        ctx.fillRect(bx - 1 * size, y + bw - 2 * size, 2 * size, 3 * size);
+                    }
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.8 * size;
+                    ctx.beginPath(); ctx.moveTo(x - aL / 2, y - 2 * size);
+                    ctx.quadraticCurveTo(x - aL / 2 - 8 * size, y - 10 * size - Math.sin(time) * 3 * size, x - aL / 2 - 6 * size, y - 14 * size);
+                    ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x - aL / 2, y + 2 * size);
+                    ctx.quadraticCurveTo(x - aL / 2 - 8 * size, y + 10 * size + Math.sin(time) * 3 * size, x - aL / 2 - 6 * size, y + 14 * size);
+                    ctx.stroke();
+                }
+            } else if (ep === 3) { // Land Invasion
+                if (ty === 0) { // Early Tetrapod
+                    const wPhase = time * 3.5;
+                    const pts = [];
+                    for (let i = 0; i < 7; i++) {
+                        const tx = x - 20 * size + i * 6 * size;
+                        const ty = y + Math.sin(i * 0.7 - wPhase) * (2.8 * size);
+                        pts.push({ x: tx, y: ty });
+                        ctx.beginPath(); ctx.arc(tx, ty, 6 * size * (1 - (i / 6) * 0.35) * (i === 0 ? 0.3 : 1), 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 2.5 * size;
+                    const lIndices = [2, 5];
+                    lIndices.forEach((idx, k) => {
+                        const pt = pts[idx];
+                        const ls = Math.sin(wPhase + k * Math.PI) * 4 * size;
+                        ctx.beginPath(); ctx.moveTo(pt.x, pt.y - 3 * size); ctx.lineTo(pt.x + ls, pt.y - 7 * size); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(pt.x, pt.y + 3 * size); ctx.lineTo(pt.x - ls, pt.y + 7 * size); ctx.stroke();
+                    });
+                } else if (ty === 1) { // Giant Dragonfly
+                    ctx.beginPath(); ctx.arc(x - 10 * size, y, 3 * size, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillRect(x - 8 * size, y - 1.2 * size, 20 * size, 2.4 * size);
+                    const flap = Math.sin(time * 35) * 14 * size;
+                    ctx.beginPath();
+                    ctx.ellipse(x - 5 * size, y - 1 * size, 1.5 * size, Math.abs(flap), -0.4, 0, Math.PI * 2);
+                    ctx.ellipse(x - 5 * size, y + 1 * size, 1.5 * size, Math.abs(flap), 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                } else { // Arthropleura
+                    const nPlates = 12;
+                    for (let i = 0; i < nPlates; i++) {
+                        const px = x - 25 * size + i * 4.5 * size;
+                        ctx.fillRect(px - 1.5 * size, y - 5 * size, 3 * size, 10 * size);
+                        const legH = 2.5 * size + Math.sin(i * 0.7 - time * 10) * (2 * size);
+                        ctx.fillRect(px - 0.7 * size, y - 7 * size - legH, 1.4 * size, legH);
+                        ctx.fillRect(px - 0.7 * size, y + 7 * size, 1.4 * size, legH);
+                    }
+                }
+            } else if (ep === 4) { // Age of Reptiles
+                if (ty === 0) { // Brachiosaurus
+                    ctx.save();
+                    const cycle = time * 2;
+                    const rSwing = Math.sin(cycle) * 3 * size;
+                    const fSwing = Math.sin(cycle + Math.PI) * 3 * size;
+                    ctx.fillRect(x - 8 * size + rSwing, y, 3.5 * size, 15 * size);
+                    ctx.fillRect(x + 4 * size + fSwing, y, 3.5 * size, 15 * size);
+                    ctx.beginPath(); ctx.ellipse(x, y, 14 * size, 8 * size, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(x - 10 * size, y);
+                    ctx.quadraticCurveTo(x - 22 * size, y - 10 * size, x - 18 * size, y - 24 * size);
+                    ctx.lineTo(x - 14 * size, y - 24 * size);
+                    ctx.quadraticCurveTo(x - 14 * size, y - 8 * size, x - 5 * size, y);
+                    ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.ellipse(x - 19 * size, y - 24 * size, 4 * size, 2 * size, -0.2, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 3 * size;
+                    ctx.beginPath(); ctx.moveTo(x + 12 * size, y);
+                    ctx.quadraticCurveTo(x + 24 * size, y + Math.sin(time) * 3 * size, x + 34 * size, y + Math.sin(time + 1) * 5 * size);
+                    ctx.stroke();
+                    ctx.restore();
+                } else if (ty === 1) { // T-Rex
+                    ctx.save();
+                    const rc = time * 2.5;
+                    const leg1 = Math.sin(rc) * 3.5 * size;
+                    ctx.fillRect(x - 2 * size + leg1, y, 3 * size, 14 * size);
+                    ctx.fillRect(x + 2 * size - leg1, y, 3 * size, 14 * size);
+                    ctx.beginPath(); ctx.ellipse(x, y - 3 * size, 11 * size, 6 * size, -0.2, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.ellipse(x - 12 * size, y - 9 * size, 6 * size, 4.5 * size, -0.1, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillRect(x - 6 * size, y - 4 * size, 2.5 * size, 1.5 * size);
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 3.5 * size;
+                    ctx.beginPath(); ctx.moveTo(x + 10 * size, y - 5 * size);
+                    ctx.quadraticCurveTo(x + 22 * size, y - 4 * size + Math.sin(rc) * 2 * size, x + 32 * size, y - 2 * size + Math.sin(rc + 1) * 3 * size);
+                    ctx.stroke();
+                    ctx.restore();
+                } else { // Pterodactyl
+                    ctx.beginPath(); ctx.ellipse(x, y, 8 * size, 2.5 * size, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(x - 6 * size, y - 1 * size);
+                    ctx.lineTo(x - 16 * size, y - 0.5 * size);
+                    ctx.lineTo(x - 6 * size, y + 1 * size);
+                    ctx.lineTo(x + 5 * size, y - 3 * size);
+                    ctx.closePath(); ctx.fill();
+                    const wingFlap = Math.sin(time * 3.5) * 16 * size;
+                    ctx.beginPath();
+                    ctx.moveTo(x - 2 * size, y);
+                    ctx.quadraticCurveTo(x - 10 * size, y - 12 * size + wingFlap, x - 26 * size, y - 4 * size + wingFlap * 1.2);
+                    ctx.lineTo(x - 15 * size, y - 2 * size);
+                    ctx.closePath(); ctx.fill();
+                }
+            } else { // Digital Consciousness
+                if (ty === 0) { // Human Walk
+                    ctx.save();
+                    const phase = time * 3.2;
+                    const by = y - 14 * size + Math.sin(phase * 2) * 0.7 * size;
+                    ctx.beginPath(); ctx.arc(x, by - 7 * size, 3 * size, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillRect(x - 2 * size, by - 4 * size, 4 * size, 12 * size);
+                    const armA = Math.sin(phase) * 0.65;
+                    const legA = Math.sin(phase + Math.PI) * 0.65;
+                    ctx.save(); ctx.translate(x, by + 8 * size); ctx.rotate(legA); ctx.fillRect(-1.5 * size, 0, 3 * size, 8 * size); ctx.restore();
+                    ctx.save(); ctx.translate(x, by + 8 * size); ctx.rotate(-legA); ctx.fillRect(-1.5 * size, 0, 3 * size, 8 * size); ctx.restore();
+                    ctx.save(); ctx.translate(x, by - 3 * size); ctx.rotate(-armA); ctx.fillRect(-1.2 * size, 0, 2.4 * size, 7 * size); ctx.restore();
+                    ctx.save(); ctx.translate(x, by - 3 * size); ctx.rotate(armA); ctx.fillRect(-1.2 * size, 0, 2.4 * size, 7 * size); ctx.restore();
+                    ctx.restore();
+                } else if (ty === 1) { // Robotic dog
+                    ctx.save();
+                    const rc = time * 3.5;
+                    const cRise = Math.abs(Math.sin(rc * 2)) * 1.5 * size;
+                    ctx.fillRect(x - 10 * size, y - 6 * size - cRise / 2, 20 * size, 8 * size);
+                    for (let l = 0; l < 2; l++) {
+                        const lOff = l === 0 ? -7 * size : 7 * size;
+                        const lPhase = l === 0 ? rc : rc + Math.PI;
+                        const s = Math.sin(lPhase);
+                        ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 2.4 * size;
+                        ctx.beginPath();
+                        ctx.moveTo(x + lOff, y - 1 * size);
+                        ctx.lineTo(x + lOff + s * 3 * size, y + 4 * size);
+                        ctx.lineTo(x + lOff + s * 1.5 * size - 2 * size, y + 10 * size);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                } else { // AI Core Orbiter
+                    ctx.save();
+                    ctx.beginPath(); ctx.arc(x, y, 4.5 * size, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1 * size;
+                    ctx.beginPath(); ctx.ellipse(x, y, 12 * size, 4 * size, time * 0.5, 0, Math.PI * 2); ctx.stroke();
+                    for (let i = 0; i < 3; i++) {
+                        const bAng = time * 1.5 + i * (Math.PI * 2 / 3);
+                        ctx.beginPath(); ctx.arc(x + Math.cos(bAng) * 12 * size, y + Math.sin(bAng) * 4 * size, size * 1.8, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Initialize Particles
+        for (let i = 0; i < 90; i++) {
+            particles.push(new Particle(getEpoch(0)));
+        }
+
+        // Initialize Evolving Silhouettes
+        for (let i = 0; i < 48; i++) {
+            silhouettes.push(new Silhouette(true));
+        }
+
+        // Web Audio Synthesizer Engine
+        class AmbientSynth {
+            constructor() {
+                this.ctx = null;
+                this.initialized = false;
+                this.masterGain = null;
+                this.oscDrone = null;
+                this.oscDrone2 = null;
+                this.lowpass = null;
+                this.scale = [130.81, 146.83, 164.81, 196.00, 220.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // Minor Pentatonic Scale
+            }
+
+            init() {
+                try {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContextClass();
+                    
+                    this.masterGain = this.ctx.createGain();
+                    this.masterGain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+                    this.masterGain.connect(this.ctx.destination);
+                    
+                    // Drone oscillators
+                    this.oscDrone = this.ctx.createOscillator();
+                    this.oscDrone.type = "sine";
+                    this.oscDrone.frequency.value = 65.41;
+                    
+                    this.droneGain = this.ctx.createGain();
+                    this.droneGain.gain.value = 0.35;
+                    
+                    this.oscDrone2 = this.ctx.createOscillator();
+                    this.oscDrone2.type = "triangle";
+                    this.oscDrone2.frequency.value = 98.00; 
+                    
+                    this.drone2Gain = this.ctx.createGain();
+                    this.drone2Gain.gain.value = 0.15;
+
+                    this.lowpass = this.ctx.createBiquadFilter();
+                    this.lowpass.type = "lowpass";
+                    this.lowpass.frequency.value = 350;
+
+                    this.oscDrone.connect(this.droneGain);
+                    this.oscDrone2.connect(this.drone2Gain);
+                    
+                    this.droneGain.connect(this.lowpass);
+                    this.drone2Gain.connect(this.lowpass);
+                    
+                    this.lowpass.connect(this.masterGain);
+
+                    this.oscDrone.start();
+                    this.oscDrone2.start();
+
+                    this.initialized = true;
+                    this.masterGain.gain.linearRampToValueAtTime(0.35, this.ctx.currentTime + 1.5);
+                    return true;
+                } catch (e) {
+                    console.error("Web Audio Support missing or blocked:", e);
+                    return false;
+                }
+            }
+
+            setEpochModifiers(epoch) {
+                if (!this.initialized) return;
+                const time = this.ctx.currentTime;
+                
+                let dronePitch = 65.41; 
+                let lowpassFreq = 300 + epoch.num * 240;
+
+                if (epoch.num === 1) { this.oscDrone.type = "sine"; dronePitch = 65.41; }
+                else if (epoch.num === 2) { this.oscDrone.type = "sine"; dronePitch = 73.42; }
+                else if (epoch.num === 3) { this.oscDrone.type = "triangle"; dronePitch = 81.82; }
+                else if (epoch.num === 4) { this.oscDrone.type = "triangle"; dronePitch = 87.31; }
+                else if (epoch.num === 5) { this.oscDrone.type = "sawtooth"; dronePitch = 98.00; }
+                else if (epoch.num === 6) { this.oscDrone.type = "sine"; dronePitch = 110.00; }
+
+                this.oscDrone.frequency.exponentialRampToValueAtTime(dronePitch, time + 2);
+                this.oscDrone2.frequency.exponentialRampToValueAtTime(dronePitch * 1.5, time + 2);
+                this.lowpass.frequency.exponentialRampToValueAtTime(lowpassFreq, time + 1.5);
+            }
+
+            playBondChime(nodeYRatio) {
+                if (!this.initialized || Math.random() > 0.08) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                const noteIndex = Math.floor(nodeYRatio * this.scale.length);
+                const freq = this.scale[Math.max(0, Math.min(this.scale.length - 1, noteIndex))];
+
+                osc.type = "sine";
+                osc.frequency.value = freq;
+                
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start(now);
+                osc.stop(now + 1.6);
+            }
+
+            playExplosiveMutation() {
+                if (!this.initialized) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const filter = this.ctx.createBiquadFilter();
+                const gain = this.ctx.createGain();
+
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(110, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.3);
+
+                filter.type = "bandpass";
+                filter.frequency.setValueAtTime(450, now);
+                filter.Q.value = 8;
+
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.2, now + 0.04);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.masterGain);
+
+                osc.start(now);
+                osc.stop(now + 0.55);
+            }
+
+            playEventActivation() {
+                if (!this.initialized) return;
+                const now = this.ctx.currentTime;
+                const notes = [261.63, 311.13, 392.00, 523.25]; // C minor pentatonic chord (C4, Eb4, G4, C5)
+                
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    
+                    osc.type = "sine";
+                    osc.frequency.value = freq;
+                    
+                    const noteTime = now + idx * 0.10;
+                    gain.gain.setValueAtTime(0, noteTime);
+                    gain.gain.linearRampToValueAtTime(0.08, noteTime + 0.04);
+                    gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 1.25);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.masterGain);
+                    osc.start(noteTime);
+                    osc.stop(noteTime + 1.30);
+                });
+            }
+
+            suspend() { if (this.ctx) this.ctx.suspend(); }
+            resume() { if (this.ctx) this.ctx.resume(); }
+        }
+
+        const audio = new AmbientSynth();
+
+        // Control Panel Binding
+        btnPlayPause.addEventListener("click", () => {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playIcon.style.display = "none";
+                pauseIcon.style.display = "block";
+                playText.textContent = "Pause";
+                audio.resume();
+            } else {
+                playIcon.style.display = "block";
+                pauseIcon.style.display = "none";
+                playText.textContent = "Play";
+                audio.suspend();
+            }
+        });
+
+        btnAudio.addEventListener("click", () => {
+            if (!audio.initialized) {
+                const ok = audio.init();
+                if (ok) {
+                    btnAudio.textContent = "Audio Engaged";
+                    btnAudio.classList.add("active");
+                    audioWaveAnim.style.display = "inline-flex";
+                    audio.setEpochModifiers(getEpoch(currentTime));
+                }
+            } else {
+                if (audio.ctx.state === 'running') {
+                    audio.suspend();
+                    btnAudio.textContent = "Audio Muted";
+                    btnAudio.classList.remove("active");
+                    audioWaveAnim.style.display = "none";
+                } else {
+                    audio.resume();
+                    btnAudio.textContent = "Audio Engaged";
+                    btnAudio.classList.add("active");
+                    audioWaveAnim.style.display = "inline-flex";
+                }
+            }
+        });
+
+        document.getElementById("btn-fullscreen").addEventListener("click", () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        });
+
+        function triggerMutationNotification(title) {
+            mutationAlert.textContent = title || "MUTATION SPLICED!";
+            mutationAlert.classList.add("show");
+            setTimeout(() => {
+                mutationAlert.classList.remove("show");
+            }, 1200);
+
+            audio.playExplosiveMutation();
+
+            mutations.push({
+                x: window.innerWidth / 2,
+                y: window.innerHeight / 2,
+                radius: 10,
+                maxRadius: 170 * scaleFactor,
+                opacity: 0.9,
+                color: getEpoch(currentTime).accent
+            });
+        }
+
+        btnMutate.addEventListener("click", () => {
+            triggerMutationNotification("GENE MUTATION SPLICE!");
+            addConsoleLog("SPLICER: Active replication helix mutated manually.");
+        });
+
+        timelineScrub.addEventListener("input", (e) => {
+            currentTime = parseFloat(e.target.value);
+            updateEpochTelemetry(currentTime);
+        });
+
+        function addConsoleLog(text) {
+            logQueue.push(`[${currentTime.toFixed(1)}s] ${text}`);
+            if (logQueue.length > 5) logQueue.shift();
+
+            if (hhLog) {
+                hhLog.innerHTML = "";
+                logQueue.forEach(log => {
+                    const div = document.createElement("div");
+                    div.textContent = log;
+                    hhLog.appendChild(div);
+                });
+            }
+        }
+
+        function updateEpochTelemetry(time) {
+            const currentEpoch = getEpoch(time);
+            
+            for (let i = 0; i <= 60; i += 10) {
+                const el = document.getElementById("m" + i);
+                if (el) {
+                    if (time >= i && time < i + 10) el.className = "marker-active";
+                    else el.className = "";
+                }
+            }
+
+            if (lastAppliedEpoch !== currentEpoch.num) {
+                lastAppliedEpoch = currentEpoch.num;
+                hhEpoch.textContent = `${currentEpoch.num} / 6`;
+                hhAge.textContent = currentEpoch.age;
+                hhSpecies.textContent = currentEpoch.species;
+                hhComplexity.textContent = currentEpoch.complexity;
+                if (activeName) activeName.textContent = currentEpoch.name;
+                if (activeDesc) activeDesc.textContent = currentEpoch.desc;
+                
+                document.body.style.backgroundImage = `radial-gradient(circle at 50% 50%, ${currentEpoch.theme} 0%, rgba(3,3,8,1) 100%)`;
+                
+                addConsoleLog(`Epoch Shift: ${currentEpoch.name.toUpperCase()}`);
+                currentEpoch.logs.forEach(log => {
+                    setTimeout(() => {
+                        addConsoleLog(log);
+                    }, Math.random() * 800 + 300);
+                });
+
+                audio.setEpochModifiers(currentEpoch);
+            }
+
+            updateTimelineTicks(time);
+            timelineTime.textContent = `Time: ${time.toFixed(1)}s / 60.0s`;
+            timelineScrub.value = time.toFixed(2);
+        }
+
+        let framesThisSecond = 0;
+        let lastFpsUpdate = 0;
+
+        function renderScene(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const delta = (timestamp - lastTimestamp) * 0.001;
+            lastTimestamp = timestamp;
+
+            framesThisSecond++;
+            if (timestamp > lastFpsUpdate + 1000) {
+                fpsCounter.textContent = `FPS: ${framesThisSecond}`;
+                framesThisSecond = 0;
+                lastFpsUpdate = timestamp;
+            }
+
+            if (isPlaying) {
+                currentTime += delta;
+                if (currentTime >= 60) currentTime = 0;
+                updateEpochTelemetry(currentTime);
+            }
+
+            const activeEpoch = getEpoch(currentTime);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw 3D Perspective Horizon Grid background
+            drawHorizonGrid(ctx);
+
+            particles.forEach(p => {
+                p.update(activeEpoch);
+                p.draw(ctx, renderPreset, activeEpoch.num);
+            });
+
+            // Draw Background Silhouettes (scale < 0.78)
+            silhouettes.forEach(s => {
+                s.update(delta);
+                if (s.scale < 0.78) s.draw(ctx);
+            });
+
+            mutations.forEach((mut, index) => {
+                mut.radius += 2.5;
+                mut.opacity = 1 - (mut.radius / mut.maxRadius);
+                if (mut.radius >= mut.maxRadius || mut.opacity <= 0) {
+                    mutations.splice(index, 1);
+                    return;
+                }
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(mut.x, mut.y, mut.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = mut.color;
+                ctx.globalAlpha = mut.opacity;
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+                ctx.restore();
+            });
+
+            // 3D Double Helix Render Formulas
+            const dCenter = { x: canvas.width / (2 * window.devicePixelRatio), y: canvas.height / (2 * window.devicePixelRatio) };
+            const helixHeight = Math.min(canvas.height / window.devicePixelRatio - 160, 480 * scaleFactor);
+            const yStart = dCenter.y - helixHeight / 2 - 30;
+            const numNodes = 26; 
+            
+            if (isPlaying) {
+                rotationAngle += delta * 1.35;
+            }
+
+            const strand1Points = [];
+            const strand2Points = [];
+
+            for (let i = 0; i < numNodes; i++) {
+                const nodeRatio = i / (numNodes - 1);
+                const nodeY = yStart + nodeRatio * helixHeight;
+                
+                const waveOffset = Math.sin(nodeRatio * Math.PI * 4.2 + rotationAngle) * (42 * scaleFactor);
+                const depth1 = Math.cos(nodeRatio * Math.PI * 4.2 + rotationAngle); 
+                const depth2 = Math.cos(nodeRatio * Math.PI * 4.2 + rotationAngle + Math.PI); 
+
+                const x1 = dCenter.x + waveOffset;
+                const x2 = dCenter.x - waveOffset;
+
+                strand1Points.push({ x: x1, y: nodeY, z: depth1 });
+                strand2Points.push({ x: x2, y: nodeY, z: depth2 });
+                
+                const zAvg = (depth1 + depth2) / 2;
+                ctx.save();
+                
+                if (renderPreset === "glowing") {
+                    ctx.shadowBlur = Math.abs(depth1) * 7 * scaleFactor;
+                    ctx.shadowColor = activeEpoch.accent;
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(x1, nodeY);
+                ctx.lineTo(x2, nodeY);
+                
+                const grad = ctx.createLinearGradient(x1, nodeY, x2, nodeY);
+                const colS1 = activeEpoch.accent;
+                const colS2 = "#ffffff";
+                
+                grad.addColorStop(0, colS1);
+                grad.addColorStop(0.5, "rgba(255, 255, 255, 0.15)");
+                grad.addColorStop(1, colS2);
+                
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = Math.max(0.4, (zAvg + 1.25) * 1.8) * scaleFactor;
+                ctx.stroke();
+
+                const midX = (x1 + x2) / 2;
+                ctx.beginPath();
+                ctx.arc(midX, nodeY, 2 * scaleFactor, 0, Math.PI*2);
+                ctx.fillStyle = activeEpoch.accent;
+                ctx.fill();
+
+                ctx.restore();
+
+                if (isPlaying && Math.abs(waveOffset) < 1.4) {
+                    audio.playBondChime(nodeRatio);
+                }
+            }
+
+            // Draw Strand 1 Nodes
+            for (let i = 0; i < strand1Points.length; i++) {
+                const pt = strand1Points[i];
+                ctx.save();
+                const nodeSize = Math.max(3.5, (pt.z + 1.5) * 5.5) * scaleFactor;
+                
+                if (renderPreset === "glowing") {
+                    ctx.shadowBlur = nodeSize * 1.5;
+                    ctx.shadowColor = activeEpoch.accent;
+                }
+
+                ctx.fillStyle = activeEpoch.accent;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, nodeSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(pt.x - nodeSize*0.3, pt.y - nodeSize*0.3, nodeSize * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw Strand 2 Nodes
+            for (let i = 0; i < strand2Points.length; i++) {
+                const pt = strand2Points[i];
+                ctx.save();
+                const nodeSize = Math.max(3.5, (pt.z + 1.5) * 5.5) * scaleFactor;
+                
+                if (renderPreset === "glowing") {
+                    ctx.shadowBlur = nodeSize * 1.5;
+                    ctx.shadowColor = "#ffffff";
+                }
+
+                ctx.fillStyle = "#e5e5ff";
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, nodeSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(pt.x - nodeSize*0.3, pt.y - nodeSize*0.3, nodeSize * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw Foreground Silhouettes (scale >= 0.78)
+            silhouettes.forEach(s => {
+                if (s.scale >= 0.78) s.draw(ctx);
+            });
+
+            // Draw Popping-up Spatial Timeline Events
+            drawActiveEvents(ctx);
+
+            // Draw Animated Period Silhouettes on the Bottom Timeline
+            drawTimelineSilhouettes();
+
+            requestAnimationFrame(renderScene);
+        }
+
+        canvas.addEventListener("click", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            mutations.push({
+                x: clickX,
+                y: clickY,
+                radius: 10,
+                maxRadius: 170 * scaleFactor,
+                opacity: 0.9,
+                color: getEpoch(currentTime).accent
+            });
+
+            const mutTexts = [
+                "REPLICATION CODON DEVIATION!",
+                "SENSORY EYE RECEPTOR MUTATION!",
+                "AMINO ACID CONVERSION ACTIVE!",
+                "CYBERNETIC BINARY INTEGRATION!",
+                "CHLOROPLAST SPLICING SUCCESS!"
+            ];
+
+            const rndText = mutTexts[Math.floor(Math.random() * mutTexts.length)];
+            triggerMutationNotification(rndText);
+            addConsoleLog(`MUTATION: Spliced codon sequence: '${rndText}'`);
+        });
+
+        initTimelineTicks();
+        initMarkerClickListeners();
+        updateEpochTelemetry(0);
+        requestAnimationFrame(renderScene);
+    </script>
+</body>
+</html>

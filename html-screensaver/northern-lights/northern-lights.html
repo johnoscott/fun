@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Northern Lights</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  canvas { display: block; width: 100vw; height: 100vh; cursor: none; }
+  #hint {
+    position: fixed; bottom: 14px; left: 0; right: 0; text-align: center;
+    font: 12px/1.4 -apple-system, system-ui, sans-serif; color: rgba(255,255,255,.35);
+    letter-spacing: .12em; text-transform: uppercase; pointer-events: none;
+    transition: opacity 2s ease;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">move mouse to steer &middot; aurora borealis</div>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl', { antialias: false });
+
+const VERT = `
+attribute vec2 p;
+void main() { gl_Position = vec4(p, 0.0, 1.0); }
+`;
+
+const FRAG = `
+precision highp float;
+uniform vec2  uRes;
+uniform float uTime;
+uniform vec2  uMouse;
+
+mat2 rot(float a){ float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+
+// --- hash / noise -----------------------------------------------------------
+float hash21(vec2 p){
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1,0)), u.x),
+             mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), u.x), u.y);
+}
+float fbm(vec2 p){
+  float v = 0.0, a = 0.5;
+  mat2 m = rot(0.6);
+  for(int i = 0; i < 5; i++){
+    v += a * noise(p);
+    p = m * p * 2.02;
+    a *= 0.5;
+  }
+  return v;
+}
+
+// --- stars ------------------------------------------------------------------
+vec3 stars(vec3 rd){
+  vec3 col = vec3(0.0);
+  // project onto a sky sphere-ish plane
+  vec2 uv = rd.xz / (rd.y + 0.6);
+  for(float layer = 0.0; layer < 3.0; layer++){
+    vec2 grid = uv * (30.0 + layer * 25.0) + layer * 17.3;
+    vec2 id = floor(grid);
+    vec2 gv = fract(grid) - 0.5;
+    float h = hash21(id + layer * 91.7);
+    if(h > 0.92){
+      vec2 offs = vec2(hash21(id + 3.1), hash21(id + 7.7)) - 0.5;
+      float d = length(gv - offs * 0.8);
+      float tw = 0.6 + 0.4 * sin(uTime * (1.0 + h * 3.0) + h * 40.0);
+      float star = smoothstep(0.06, 0.0, d) * tw;
+      // subtle colour temperature variation
+      vec3 tint = mix(vec3(0.7, 0.8, 1.0), vec3(1.0, 0.9, 0.75), fract(h * 13.7));
+      col += star * tint * (h - 0.92) * 14.0;
+    }
+  }
+  return col * smoothstep(-0.05, 0.25, rd.y);
+}
+
+// --- aurora -----------------------------------------------------------------
+// raymarch translucent curtains: for each step sample a height band whose
+// horizontal shape is warped fbm, accumulate emissive colour
+vec4 aurora(vec3 ro, vec3 rd){
+  vec4 sum = vec4(0.0);
+  float t = 0.0;
+  for(int i = 0; i < 40; i++){
+    float fi = float(i);
+    // march distances biased so more samples land in the curtain band
+    t += 0.04 + fi * 0.004;
+    vec3 pos = ro + rd * t * 22.0;
+    if(pos.y < 1.0 || pos.y > 14.0) continue;
+
+    // curtain shape: vertical sheets waving in x/z
+    vec2 q = pos.xz * 0.14;
+    float wave = fbm(q + vec2(uTime * 0.05, uTime * 0.023));
+    wave += 0.5 * fbm(q * 2.7 - vec2(uTime * 0.09, 0.0));
+    // distance from the sheet
+    float sheet = abs(fract(wave * 1.4 + pos.x * 0.02) - 0.5) * 2.0;
+    float density = smoothstep(0.55, 0.0, sheet);
+
+    // fade with altitude: bright base, wispy top
+    float hNorm = clamp((pos.y - 1.0) / 13.0, 0.0, 1.0);
+    density *= smoothstep(0.0, 0.15, hNorm) * smoothstep(1.0, 0.35, hNorm);
+
+    // shimmer
+    density *= 0.75 + 0.25 * sin(uTime * 1.4 + pos.x * 0.4 + wave * 9.0);
+
+    // green base -> teal -> violet crown
+    vec3 c = mix(vec3(0.05, 0.9, 0.35), vec3(0.05, 0.65, 0.65), hNorm);
+    c = mix(c, vec3(0.55, 0.15, 0.85), smoothstep(0.5, 1.0, hNorm));
+
+    float a = density * 0.055;
+    sum.rgb += c * a * (1.0 - sum.a);
+    sum.a   += a * (1.0 - sum.a);
+    if(sum.a > 0.95) break;
+  }
+  return sum;
+}
+
+// --- mountains --------------------------------------------------------------
+float ridge(vec2 dir, float freq, float amp, float base){
+  float x = atan(dir.x, dir.y + 1e-4);
+  return base + amp * fbm(vec2(x * freq, freq * 3.1));
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+  float T = uTime;
+
+  // camera: slow drift + gentle mouse steer
+  float yaw = T * 0.02 + (uMouse.x - 0.5) * 1.2;
+  float pitch = 0.12 + (uMouse.y - 0.5) * 0.35;
+
+  vec3 rd = normalize(vec3(uv.x, uv.y + pitch, 1.0));
+  rd.xz = rot(yaw) * rd.xz;
+  vec3 ro = vec3(0.0, 0.0, T * 0.35);
+
+  // sky gradient: deep indigo night
+  float horizon = smoothstep(-0.1, 0.5, rd.y);
+  vec3 col = mix(vec3(0.05, 0.06, 0.12), vec3(0.005, 0.008, 0.03), horizon);
+
+  // faint moonlit glow near horizon
+  col += vec3(0.06, 0.08, 0.12) * pow(1.0 - abs(rd.y), 6.0) * 0.6;
+
+  col += stars(rd);
+
+  vec4 au = aurora(ro + vec3(0.0, 0.0, 0.0), rd);
+  col = col * (1.0 - au.a * 0.6) + au.rgb * 1.6;
+
+  // water/ice reflection of the aurora below the horizon
+  if(rd.y < 0.0){
+    vec3 rrd = vec3(rd.x, -rd.y, rd.z);
+    vec4 rau = aurora(ro, rrd);
+    float fres = pow(1.0 + rd.y, 3.0);
+    col += rau.rgb * 0.5 * fres;
+    // dark water base
+    col = mix(vec3(0.01, 0.015, 0.03), col, 0.35 + 0.65 * fres);
+  }
+
+  // mountain silhouettes (two ridgelines)
+  float m1 = ridge(rd.xz, 2.0, 0.10, 0.02);
+  float m2 = ridge(rd.xz + vec2(3.7, 1.3), 3.5, 0.06, -0.01);
+  float mountains = max(smoothstep(m1 + 0.004, m1 - 0.004, rd.y),
+                        smoothstep(m2 + 0.003, m2 - 0.003, rd.y) * 0.9);
+  vec3 mCol = vec3(0.008, 0.012, 0.022);
+  // snow-cap hint lit by the aurora
+  mCol += au.rgb * 0.08 * smoothstep(m1 - 0.01, m1, rd.y);
+  col = mix(col, mCol, mountains * step(0.0, 1.0));
+
+  // vignette + subtle grain
+  vec2 vg = gl_FragCoord.xy / uRes;
+  col *= 0.55 + 0.45 * pow(16.0 * vg.x * vg.y * (1.0 - vg.x) * (1.0 - vg.y), 0.35);
+  col += (hash21(gl_FragCoord.xy + fract(T) * 100.0) - 0.5) * 0.015;
+
+  // tonemap
+  col = 1.0 - exp(-col * 1.8);
+  col = pow(col, vec3(0.9));
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'p');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+const uRes = gl.getUniformLocation(prog, 'uRes');
+const uTime = gl.getUniformLocation(prog, 'uTime');
+const uMouse = gl.getUniformLocation(prog, 'uMouse');
+
+let mouse = [0.5, 0.5], mouseTarget = [0.5, 0.5];
+addEventListener('mousemove', e => {
+  mouseTarget = [e.clientX / innerWidth, 1.0 - e.clientY / innerHeight];
+});
+
+function resize(){
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+addEventListener('resize', resize);
+resize();
+
+const hint = document.getElementById('hint');
+setTimeout(() => hint.style.opacity = '0', 6000);
+
+const t0 = performance.now();
+function frame(){
+  const t = (performance.now() - t0) / 1000;
+  // ease the mouse for a floaty, screensaver feel
+  mouse[0] += (mouseTarget[0] - mouse[0]) * 0.03;
+  mouse[1] += (mouseTarget[1] - mouse[1]) * 0.03;
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uTime, t);
+  gl.uniform2f(uMouse, mouse[0], mouse[1]);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Cyber Rain · Styles</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: #eaffe6;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; }
+
+  #hud {
+    position: fixed;
+    top: 12px;
+    left: 14px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+    text-shadow: 0 0 8px currentColor;
+    opacity: 0.85;
+  }
+  #hud .row { line-height: 1.55; }
+  #hud b { font-weight: 500; }
+
+  #keys {
+    position: fixed;
+    bottom: 12px;
+    left: 14px;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.55;
+    line-height: 1.7;
+    text-shadow: 0 0 6px currentColor;
+  }
+  #keys kbd {
+    display: inline-block;
+    min-width: 12px;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    margin-right: 4px;
+    font-family: inherit;
+    font-size: 9px;
+    opacity: 0.8;
+  }
+
+  #chips {
+    position: fixed;
+    top: 12px;
+    right: 14px;
+    display: flex;
+    gap: 6px;
+    user-select: none;
+  }
+  #chips .chip {
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 120ms ease, background 120ms ease;
+    text-shadow: 0 0 6px currentColor;
+    font-family: inherit;
+  }
+  #chips .chip:hover { opacity: 1; }
+  #chips .chip.active {
+    opacity: 1;
+    background: currentColor;
+  }
+  #chips .chip.active span { color: #000; mix-blend-mode: normal; }
+  #chips .chip span { display: block; }
+
+  #banner {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 42px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    font-weight: 300;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0;
+    transition: opacity 250ms ease;
+    text-shadow: 0 0 18px currentColor, 0 0 42px currentColor;
+    white-space: nowrap;
+  }
+  #banner.show { opacity: 0.92; }
+  #banner small {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.5em;
+    opacity: 0.7;
+    margin-top: 10px;
+    font-weight: 400;
+  }
+</style>
+</head>
+<body tabindex="0">
+  <canvas id="rain"></canvas>
+  <div id="chips"></div>
+  <div id="hud">
+    <div class="row"><b>▚ <span id="styleName">MATRIX</span></b> <span id="styleIdx">[1/9]</span></div>
+    <div class="row">fps <span id="fps">--</span> · glyphs <span id="glyphs">0</span> · streams <span id="streams">0</span></div>
+    <div class="row" id="autoRow" style="opacity:0.6">auto-cycle <span id="autoState">off</span></div>
+  </div>
+
+  <div id="banner"></div>
+
+  <div id="keys">
+    <div><kbd>1</kbd>–<kbd>9</kbd> style · <kbd>0</kbd> auto-cycle · <kbd>N</kbd> next · <kbd>P</kbd> prev</div>
+    <div>click bloom · move mouse to disturb</div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("rain");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  // ---------- glyph sets ----------
+  const SETS = {
+    kana: [..."アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンー0123456789<>[]{}/=+*#$%&@?!:;"],
+    binary: [..."01"],
+    hex: [..."0123456789ABCDEF"],
+    runes: [..."ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟᛦᛨᛰᚫ"],
+    block: [..."░▒▓█▚▙▟◢◣◤◥▲▼◆◇◉○●■□▪▫◊◈◇◆∎"],
+    ascii: [..."!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"],
+    circuit: [..."┌┐└┘├┤┬┴┼─│╔╗╚╝╠╣╦╩╬═║▲▼◀▶◆◇○●"],
+    math: [..."∑∏∫∮∞≈≠≡≤≥∈∉∪∩∀∃∇∂∆Ωαβγδεζηθλμπσφψω"],
+  };
+
+  // ---------- style presets ----------
+  // head: hot color for the leading glyph
+  // body: base rgb for the fading trail (alpha applied at draw)
+  // glow: shadow color for head glow
+  // bg: fade rect color per frame — lower alpha = longer trail
+  // speed: {min,max} baseline px/frame at 60fps
+  // len: {min,max} trail length in glyphs
+  // fontSize: px
+  // font: css font family
+  // flicker: probability per glyph per frame of mutation
+  // rare: probability a stream picks the accent palette
+  // accent: optional {head, body, glow} for the rare streams
+  // set: which glyph set
+  // background: solid background color
+  // extraGlow: head shadowBlur
+  const STYLES = [
+    {
+      name: "MATRIX",
+      set: "kana",
+      background: "#000",
+      bg: "rgba(0,0,0,0.09)",
+      head: "#eaffe6",
+      body: "60, 240, 140",
+      glow: "rgba(180,255,200,0.9)",
+      extraGlow: 8,
+      speed: [1.0, 3.4], len: [8, 34], fontSize: 16,
+      flicker: 0.015, rare: 0.03,
+      accent: { head: "#c4faff", body: "90, 210, 255", glow: "rgba(140,230,255,0.9)" },
+    },
+    {
+      name: "ICE",
+      set: "kana",
+      background: "#010613",
+      bg: "rgba(1,6,19,0.07)",
+      head: "#ffffff",
+      body: "120, 200, 255",
+      glow: "rgba(160,220,255,0.95)",
+      extraGlow: 14,
+      speed: [0.5, 1.8], len: [16, 48], fontSize: 16,
+      flicker: 0.006, rare: 0.05,
+      accent: { head: "#e8f4ff", body: "200, 240, 255", glow: "rgba(220,240,255,1)" },
+    },
+    {
+      name: "BLOOD",
+      set: "circuit",
+      background: "#050000",
+      bg: "rgba(5,0,0,0.13)",
+      head: "#ffe4c8",
+      body: "255, 70, 40",
+      glow: "rgba(255,120,60,0.95)",
+      extraGlow: 10,
+      speed: [1.6, 4.2], len: [6, 20], fontSize: 15,
+      flicker: 0.028, rare: 0.04,
+      accent: { head: "#fff5b0", body: "255, 180, 40", glow: "rgba(255,210,80,0.95)" },
+    },
+    {
+      name: "AMBER CRT",
+      set: "ascii",
+      background: "#0d0500",
+      bg: "rgba(13,5,0,0.06)",
+      head: "#fff2b8",
+      body: "255, 176, 40",
+      glow: "rgba(255,190,80,0.9)",
+      extraGlow: 12,
+      speed: [0.4, 1.4], len: [10, 28], fontSize: 18,
+      flicker: 0.004, rare: 0.0,
+      font: 'ui-monospace, "Courier New", monospace',
+    },
+    {
+      name: "VAPORWAVE",
+      set: "block",
+      background: "#0a0018",
+      bg: "rgba(10,0,24,0.08)",
+      head: "#ffe4ff",
+      body: "255, 90, 220",
+      glow: "rgba(255,150,240,0.95)",
+      extraGlow: 12,
+      speed: [0.8, 2.4], len: [12, 32], fontSize: 17,
+      flicker: 0.010, rare: 0.12,
+      accent: { head: "#c8f0ff", body: "90, 200, 255", glow: "rgba(150,220,255,0.95)" },
+    },
+    {
+      name: "BINARY STORM",
+      set: "binary",
+      background: "#000",
+      bg: "rgba(0,0,0,0.14)",
+      head: "#ffffff",
+      body: "80, 255, 200",
+      glow: "rgba(180,255,220,0.95)",
+      extraGlow: 6,
+      speed: [2.2, 5.5], len: [4, 14], fontSize: 12,
+      flicker: 0.05, rare: 0.02,
+      accent: { head: "#fff", body: "255, 80, 120", glow: "rgba(255,140,170,0.9)" },
+    },
+    {
+      name: "RUNIC",
+      set: "runes",
+      background: "#08000f",
+      bg: "rgba(8,0,15,0.05)",
+      head: "#f0e0ff",
+      body: "180, 130, 255",
+      glow: "rgba(200,160,255,0.95)",
+      extraGlow: 16,
+      speed: [0.3, 1.1], len: [18, 44], fontSize: 20,
+      flicker: 0.003, rare: 0.06,
+      accent: { head: "#fff6d0", body: "255, 210, 120", glow: "rgba(255,220,150,0.95)" },
+    },
+    {
+      name: "HEX DUMP",
+      set: "hex",
+      background: "#000308",
+      bg: "rgba(0,3,8,0.10)",
+      head: "#f0faff",
+      body: "120, 180, 240",
+      glow: "rgba(180,220,255,0.9)",
+      extraGlow: 5,
+      speed: [1.2, 2.8], len: [10, 26], fontSize: 14,
+      flicker: 0.018, rare: 0.0,
+    },
+    {
+      name: "PRISM",
+      set: "math",
+      background: "#000",
+      bg: "rgba(0,0,0,0.07)",
+      head: "#ffffff",
+      body: "PRISM", // sentinel: color by column hue
+      glow: "rgba(255,255,255,0.95)",
+      extraGlow: 10,
+      speed: [0.9, 2.8], len: [12, 30], fontSize: 16,
+      flicker: 0.012, rare: 0.0,
+    },
+  ];
+
+  const STYLE_UI_COLOR = {
+    MATRIX: "#43ffb2",
+    ICE: "#a0d4ff",
+    BLOOD: "#ff8a5a",
+    "AMBER CRT": "#ffc266",
+    VAPORWAVE: "#ff8ae0",
+    "BINARY STORM": "#7dffd6",
+    RUNIC: "#c8a0ff",
+    "HEX DUMP": "#a8c8ff",
+    PRISM: "#e0e0ff",
+  };
+
+  // ---------- state ----------
+  let styleIdx = 0;
+  let S = STYLES[0];
+  let W = 0, H = 0, DPR = 1;
+  let cols = 0;
+  let streams = [];
+  const mouse = { x: -9999, y: -9999, active: false };
+  const bursts = [];
+
+  let autoCycle = false;
+  let autoCycleAt = 0;
+  const AUTO_INTERVAL_MS = 8000;
+
+  const styleNameEl = document.getElementById("styleName");
+  const styleIdxEl = document.getElementById("styleIdx");
+  const fpsEl = document.getElementById("fps");
+  const glyphsEl = document.getElementById("glyphs");
+  const streamsEl = document.getElementById("streams");
+  const autoStateEl = document.getElementById("autoState");
+  const bannerEl = document.getElementById("banner");
+  const hudEl = document.getElementById("hud");
+  const keysEl = document.getElementById("keys");
+  const chipsEl = document.getElementById("chips");
+
+  // build clickable style chips (1..9)
+  STYLES.forEach((st, i) => {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.dataset.idx = i;
+    chip.title = st.name;
+    chip.innerHTML = `<span>${i + 1}</span>`;
+    chip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      autoCycle = false; autoStateEl.textContent = "off";
+      setStyle(i);
+    });
+    chipsEl.appendChild(chip);
+  });
+  const chipEls = [...chipsEl.querySelectorAll(".chip")];
+  function markActiveChip() {
+    chipEls.forEach((c, i) => c.classList.toggle("active", i === styleIdx));
+  }
+
+  let bannerHideAt = 0;
+
+  function pick() {
+    const arr = SETS[S.set];
+    return arr[(Math.random() * arr.length) | 0];
+  }
+
+  function applyStyleUIColor() {
+    const c = STYLE_UI_COLOR[S.name] || "#eaffe6";
+    hudEl.style.color = c;
+    keysEl.style.color = c;
+    bannerEl.style.color = c;
+    chipsEl.style.color = c;
+  }
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    applyFont();
+    hardClear();
+    rebuildStreams();
+  }
+
+  function applyFont() {
+    ctx.font = `${S.fontSize}px ${S.font || 'ui-monospace, "SF Mono", Menlo, Consolas, monospace'}`;
+    ctx.textBaseline = "top";
+  }
+
+  function hardClear() {
+    ctx.fillStyle = S.background;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function rebuildStreams() {
+    const colW = S.fontSize;
+    cols = Math.ceil(W / colW);
+    streams = new Array(cols).fill(0).map((_, i) => makeStream(i));
+    streamsEl.textContent = cols;
+  }
+
+  function makeStream(i) {
+    const colW = S.fontSize;
+    const [smin, smax] = S.speed;
+    const [lmin, lmax] = S.len;
+    const useAccent = S.accent && Math.random() < S.rare;
+    return {
+      x: i * colW,
+      y: -Math.random() * H,
+      speed: smin + Math.random() * (smax - smin),
+      length: (lmin + Math.random() * (lmax - lmin)) | 0,
+      trail: [],
+      lastEmit: -99999,
+      accent: useAccent,
+      // per-column hue for PRISM
+      hue: (i / Math.max(1, cols)) * 360,
+      restartAt: H + Math.random() * 400,
+    };
+  }
+
+  function setStyle(idx, { showBanner = true } = {}) {
+    styleIdx = ((idx % STYLES.length) + STYLES.length) % STYLES.length;
+    S = STYLES[styleIdx];
+    styleNameEl.textContent = S.name;
+    styleIdxEl.textContent = `[${styleIdx + 1}/${STYLES.length}]`;
+    applyStyleUIColor();
+    applyFont();
+    hardClear();
+    rebuildStreams();
+    markActiveChip();
+    if (showBanner) flashBanner(S.name, `style ${styleIdx + 1} of ${STYLES.length}`);
+    autoCycleAt = performance.now() + AUTO_INTERVAL_MS;
+  }
+
+  function flashBanner(title, sub) {
+    bannerEl.innerHTML = `${title}<small>${sub || ""}</small>`;
+    bannerEl.classList.add("show");
+    bannerHideAt = performance.now() + 900;
+  }
+
+  // ---------- main loop ----------
+  let last = performance.now();
+  let frames = 0, fpsAccum = 0;
+  let glyphCount = 0;
+
+  function step(now) {
+    const dt = Math.min(48, now - last);
+    last = now;
+    frames++; fpsAccum += dt;
+    if (fpsAccum >= 500) {
+      fpsEl.textContent = Math.round((frames * 1000) / fpsAccum);
+      frames = 0; fpsAccum = 0;
+    }
+
+    if (bannerHideAt && now > bannerHideAt) {
+      bannerEl.classList.remove("show");
+      bannerHideAt = 0;
+    }
+
+    if (autoCycle && now >= autoCycleAt) {
+      setStyle(styleIdx + 1);
+    }
+
+    // trail fade
+    ctx.fillStyle = S.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    const timeScale = dt / (1000 / 60);
+    glyphCount = 0;
+
+    const FS = S.fontSize;
+    const isPrism = S.body === "PRISM";
+
+    for (let i = 0; i < streams.length; i++) {
+      const s = streams[i];
+
+      let boost = 1;
+      if (mouse.active) {
+        const dx = s.x - mouse.x;
+        const dy = s.y - mouse.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 180 * 180) {
+          const f = 1 - Math.sqrt(d2) / 180;
+          boost = 1 + f * 2.2;
+        }
+      }
+
+      s.y += s.speed * boost * timeScale;
+
+      const headRow = Math.floor(s.y / FS);
+      if (headRow !== s.lastEmit) {
+        s.lastEmit = headRow;
+        s.trail.push({ ch: pick(), row: headRow });
+        if (s.trail.length > s.length) s.trail.shift();
+      }
+
+      // choose palette for this stream
+      let headColor, bodyRGB, glowColor;
+      if (isPrism) {
+        headColor = "#ffffff";
+        bodyRGB = `${Math.round(200 + 55 * Math.sin(s.hue * Math.PI / 180))}, ${Math.round(150 + 100 * Math.sin((s.hue + 120) * Math.PI / 180))}, ${Math.round(200 + 55 * Math.sin((s.hue + 240) * Math.PI / 180))}`;
+        // simpler: rotate hue via HSL — precompute below
+        bodyRGB = null;
+        glowColor = `hsla(${s.hue}, 90%, 70%, 0.9)`;
+      } else if (s.accent && S.accent) {
+        headColor = S.accent.head;
+        bodyRGB = S.accent.body;
+        glowColor = S.accent.glow;
+      } else {
+        headColor = S.head;
+        bodyRGB = S.body;
+        glowColor = S.glow;
+      }
+
+      for (let t = 0; t < s.trail.length; t++) {
+        const g = s.trail[t];
+        const y = g.row * FS;
+        if (y < -FS || y > H + FS) continue;
+
+        if (Math.random() < S.flicker) g.ch = pick();
+
+        const isHead = t === s.trail.length - 1;
+        const age = (s.trail.length - 1 - t) / Math.max(1, s.trail.length - 1);
+
+        if (isHead) {
+          ctx.fillStyle = headColor;
+          ctx.shadowColor = glowColor;
+          ctx.shadowBlur = S.extraGlow;
+        } else {
+          const alpha = Math.max(0.05, 1 - age * 1.15);
+          if (isPrism) {
+            ctx.fillStyle = `hsla(${s.hue}, 90%, ${65 - age * 30}%, ${alpha})`;
+          } else {
+            ctx.fillStyle = `rgba(${bodyRGB}, ${alpha})`;
+          }
+          ctx.shadowBlur = 0;
+        }
+        ctx.fillText(g.ch, s.x, y);
+        glyphCount++;
+      }
+      ctx.shadowBlur = 0;
+
+      const topY = (s.trail.length ? s.trail[0].row : headRow) * FS;
+      if (topY > s.restartAt) {
+        s.y = -Math.random() * H * 0.5 - FS * 4;
+        s.trail.length = 0;
+        s.speed = S.speed[0] + Math.random() * (S.speed[1] - S.speed[0]);
+        s.length = (S.len[0] + Math.random() * (S.len[1] - S.len[0])) | 0;
+        s.accent = S.accent && Math.random() < S.rare;
+        s.lastEmit = -99999;
+        s.restartAt = H + Math.random() * 400;
+      }
+    }
+
+    // click bursts
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i];
+      const life = (now - b.born) / b.dur;
+      if (life >= 1) { bursts.splice(i, 1); continue; }
+      const r = life * b.radius;
+      const alpha = (1 - life) * 0.9;
+      const count = 22;
+      ctx.shadowColor = S.glow;
+      ctx.shadowBlur = 12;
+      const headC = S.head;
+      for (let k = 0; k < count; k++) {
+        const ang = (k / count) * Math.PI * 2 + b.rot;
+        const x = b.x + Math.cos(ang) * r;
+        const y = b.y + Math.sin(ang) * r;
+        ctx.fillStyle = k % 3 === 0 ? headC : `rgba(${S.body === "PRISM" ? "255,255,255" : S.body}, ${alpha})`;
+        ctx.fillText(pick(), x, y);
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    glyphsEl.textContent = glyphCount;
+    requestAnimationFrame(step);
+  }
+
+  // ---------- input ----------
+  window.addEventListener("resize", resize);
+  window.addEventListener("mousemove", (e) => {
+    mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true;
+  });
+  window.addEventListener("mouseleave", () => { mouse.active = false; });
+  window.addEventListener("click", (e) => {
+    bursts.push({
+      x: e.clientX, y: e.clientY,
+      born: performance.now(),
+      dur: 700,
+      radius: 180 + Math.random() * 60,
+      rot: Math.random() * Math.PI,
+    });
+  });
+  window.addEventListener("touchmove", (e) => {
+    if (!e.touches[0]) return;
+    mouse.x = e.touches[0].clientX;
+    mouse.y = e.touches[0].clientY;
+    mouse.active = true;
+  }, { passive: true });
+
+  // grab focus so keyboard input is delivered to this iframe/pane
+  const grabFocus = () => { try { window.focus(); document.body.focus(); } catch {} };
+  grabFocus();
+  window.addEventListener("load", grabFocus);
+  window.addEventListener("pointerdown", grabFocus);
+
+  document.addEventListener("keydown", (e) => {
+    const k = e.key;
+    if (k >= "1" && k <= "9") {
+      const idx = parseInt(k, 10) - 1;
+      if (idx < STYLES.length) {
+        autoCycle = false; autoStateEl.textContent = "off";
+        setStyle(idx);
+      }
+      return;
+    }
+    if (k === "0") {
+      autoCycle = !autoCycle;
+      autoStateEl.textContent = autoCycle ? "on" : "off";
+      if (autoCycle) {
+        autoCycleAt = performance.now() + AUTO_INTERVAL_MS;
+        flashBanner("AUTO CYCLE", "every 8s");
+      } else {
+        flashBanner("AUTO CYCLE", "off");
+      }
+      return;
+    }
+    if (k === "n" || k === "N") {
+      autoCycle = false; autoStateEl.textContent = "off";
+      setStyle(styleIdx + 1);
+      return;
+    }
+    if (k === "p" || k === "P") {
+      autoCycle = false; autoStateEl.textContent = "off";
+      setStyle(styleIdx - 1);
+      return;
+    }
+  });
+
+  // ---------- boot ----------
+  setStyle(0, { showBanner: false });
+  resize();
+  flashBanner(S.name, `press 1-9 to switch · 0 to auto-cycle`);
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

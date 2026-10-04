@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tear-Off Calendar</title>
+<style>
+  :root {
+    --ink: #1a1712;
+    --paper: #f4ecdc;
+    --paper-shade: #e8ddc4;
+    --paper-fold: #d6c8a8;
+    --accent: #c8321c;
+    --muted: #8b7c5f;
+    --binding: #2b2620;
+    --ring: #b8a878;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background:
+      radial-gradient(ellipse at 30% 20%, #3a3428 0%, #1c1a15 60%, #0e0d0a 100%);
+    font-family: "Georgia", "Times New Roman", serif;
+    color: var(--ink);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+  }
+
+  .stage {
+    position: relative;
+    width: min(88vmin, 620px);
+    aspect-ratio: 5 / 6;
+    perspective: 1800px;
+  }
+
+  /* Wooden backer / desk feel */
+  .backer {
+    position: absolute;
+    inset: -6% -4% -8% -4%;
+    background:
+      repeating-linear-gradient(90deg,
+        #3d2a1a 0px, #4a3421 3px, #3d2a1a 6px, #372515 9px),
+      linear-gradient(180deg, #4a3421, #2a1c10);
+    border-radius: 12px;
+    box-shadow:
+      0 30px 60px rgba(0,0,0,.6),
+      inset 0 0 60px rgba(0,0,0,.5);
+    transform: rotateX(4deg);
+  }
+
+  /* Binding at top with rings */
+  .binding {
+    position: absolute;
+    top: -3%;
+    left: 6%;
+    right: 6%;
+    height: 5%;
+    background:
+      linear-gradient(180deg, #1a1510 0%, #3a2f22 50%, #1a1510 100%);
+    border-radius: 4px 4px 8px 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,.5), inset 0 -2px 4px rgba(0,0,0,.4);
+    z-index: 20;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 4%;
+  }
+  .ring {
+    width: 14px;
+    height: 22px;
+    border-radius: 50%;
+    background:
+      radial-gradient(ellipse at 40% 30%, #f0e2b8, #b8a878 45%, #6b5c3a 80%);
+    box-shadow:
+      inset -2px -2px 3px rgba(0,0,0,.5),
+      inset 1px 1px 2px rgba(255,255,255,.4),
+      0 2px 3px rgba(0,0,0,.4);
+    position: relative;
+    top: 4px;
+  }
+  .ring::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: -12px;
+    width: 3px;
+    height: 18px;
+    background: linear-gradient(180deg, #f0e2b8, #6b5c3a);
+    border-radius: 2px;
+    transform: translateX(-50%);
+    box-shadow: 0 1px 2px rgba(0,0,0,.5);
+  }
+
+  /* Page stack (behind pages you see peek) */
+  .page-stack {
+    position: absolute;
+    inset: 4% 3% 3% 3%;
+    top: 3%;
+    background: var(--paper-shade);
+    border-radius: 4px;
+    box-shadow:
+      0 2px 0 -0.5px #cfc1a0,
+      0 4px 0 -1px #d8caa8,
+      0 6px 0 -1.5px #cfc1a0,
+      0 8px 0 -2px #d8caa8,
+      0 22px 40px rgba(0,0,0,.4);
+  }
+
+  /* Perforation strip near top */
+  .perforation {
+    position: absolute;
+    top: 6%;
+    left: 3%;
+    right: 3%;
+    height: 8px;
+    background-image:
+      radial-gradient(circle, transparent 2.5px, var(--paper) 2.5px);
+    background-size: 12px 8px;
+    background-repeat: repeat-x;
+    background-position: center;
+    z-index: 15;
+    pointer-events: none;
+  }
+
+  /* Pages container - each page tears off */
+  .pages {
+    position: absolute;
+    inset: 4% 3% 3% 3%;
+    top: 3%;
+  }
+
+  .page {
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(90deg,
+        rgba(255,255,255,0) 0px,
+        rgba(255,255,255,0) 40px,
+        rgba(200,180,140,.06) 40px,
+        rgba(200,180,140,.06) 80px),
+      radial-gradient(ellipse at 30% 20%, #faf3e2 0%, var(--paper) 60%, var(--paper-shade) 100%);
+    border-radius: 4px 4px 6px 6px;
+    box-shadow:
+      inset 0 2px 4px rgba(255,255,255,.6),
+      inset 0 -2px 6px rgba(120,100,60,.15),
+      0 8px 20px rgba(0,0,0,.25);
+    transform-origin: top center;
+    transition: transform 1.4s cubic-bezier(.55,.05,.35,1),
+                opacity 1.4s ease;
+    padding: 46px 32px 24px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* subtle paper grain */
+  .page::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(0,0,0,.02) 0.5px, transparent 1px),
+      radial-gradient(circle at 70% 60%, rgba(0,0,0,.02) 0.5px, transparent 1px),
+      radial-gradient(circle at 40% 80%, rgba(0,0,0,.015) 0.5px, transparent 1px);
+    background-size: 8px 8px, 11px 11px, 6px 6px;
+    pointer-events: none;
+    opacity: .6;
+  }
+
+  /* Torn edge at top of page */
+  .page::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 14px;
+    background: var(--paper);
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 14' preserveAspectRatio='none'><path d='M0 14 L0 4 L3 6 L6 3 L10 7 L14 2 L18 6 L22 4 L26 8 L30 3 L34 6 L38 2 L42 7 L46 4 L50 6 L54 3 L58 7 L62 4 L66 8 L70 3 L74 6 L78 2 L82 7 L86 4 L90 8 L94 3 L98 6 L100 4 L100 14 Z' fill='black'/></svg>") no-repeat center / 100% 100%;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 14' preserveAspectRatio='none'><path d='M0 14 L0 4 L3 6 L6 3 L10 7 L14 2 L18 6 L22 4 L26 8 L30 3 L34 6 L38 2 L42 7 L46 4 L50 6 L54 3 L58 7 L62 4 L66 8 L70 3 L74 6 L78 2 L82 7 L86 4 L90 8 L94 3 L98 6 L100 4 L100 14 Z' fill='black'/></svg>") no-repeat center / 100% 100%;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.15));
+  }
+
+  .page.tearing {
+    transform: rotateX(-155deg) translateY(-10px);
+    opacity: 0;
+    box-shadow:
+      inset 0 2px 4px rgba(255,255,255,.6),
+      0 30px 40px rgba(0,0,0,.35);
+  }
+
+  .page.behind {
+    transform: scale(.985) translateY(6px);
+    filter: brightness(.94);
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(26,23,18,.15);
+    position: relative;
+    z-index: 2;
+  }
+  .month-name {
+    font-family: "Georgia", serif;
+    font-size: clamp(28px, 5.5vmin, 46px);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .month-name .accent {
+    color: var(--accent);
+  }
+  .year {
+    font-family: "Georgia", serif;
+    font-size: clamp(14px, 2.4vmin, 18px);
+    font-weight: 400;
+    color: var(--muted);
+    letter-spacing: 0.3em;
+  }
+
+  /* Weekday labels */
+  .weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    padding: 14px 0 8px;
+    font-size: clamp(9px, 1.6vmin, 12px);
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    position: relative;
+    z-index: 2;
+  }
+  .weekdays span {
+    text-align: center;
+    padding-bottom: 4px;
+    border-bottom: 1px dotted rgba(26,23,18,.2);
+  }
+  .weekdays span.sun { color: var(--accent); }
+
+  /* Day grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-auto-rows: 1fr;
+    gap: 4px;
+    flex: 1;
+    position: relative;
+    z-index: 2;
+  }
+
+  .day {
+    position: relative;
+    display: grid;
+    place-items: center;
+    font-family: "Georgia", serif;
+    font-size: clamp(16px, 3vmin, 22px);
+    color: var(--ink);
+    border-radius: 4px;
+    transition: background .35s ease, color .35s ease, transform .35s ease;
+  }
+  .day.blank { color: transparent; pointer-events: none; }
+  .day.sun { color: var(--accent); }
+
+  .day .num {
+    position: relative;
+    z-index: 2;
+    transition: transform .3s ease;
+  }
+
+  .day.active {
+    color: #faf3e2;
+    transform: scale(1.05);
+  }
+  .day.active::before {
+    content: "";
+    position: absolute;
+    inset: 4%;
+    background:
+      radial-gradient(circle at 35% 30%, #e04a30, var(--accent) 70%);
+    border-radius: 50%;
+    box-shadow:
+      0 3px 8px rgba(200,50,28,.5),
+      inset 0 2px 3px rgba(255,255,255,.25),
+      inset 0 -3px 5px rgba(0,0,0,.2);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .day.past {
+    color: rgba(26,23,18,.35);
+    text-decoration: line-through;
+    text-decoration-color: rgba(200,50,28,.4);
+    text-decoration-thickness: 1.5px;
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 3px 8px rgba(200,50,28,.5), inset 0 2px 3px rgba(255,255,255,.25), inset 0 -3px 5px rgba(0,0,0,.2); }
+    50% { box-shadow: 0 4px 14px rgba(200,50,28,.7), inset 0 2px 3px rgba(255,255,255,.3), inset 0 -3px 5px rgba(0,0,0,.2); }
+  }
+
+  /* Footer note */
+  .footer {
+    padding-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: clamp(9px, 1.5vmin, 11px);
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    border-top: 1px solid rgba(26,23,18,.12);
+    position: relative;
+    z-index: 2;
+  }
+  .footer .brand {
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0.05em;
+  }
+
+  /* Controls */
+  .controls {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 100;
+    background: rgba(20,18,14,.7);
+    backdrop-filter: blur(8px);
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .controls button {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    color: #e8ddc4;
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: background .2s;
+  }
+  .controls button:hover { background: rgba(255,255,255,.14); }
+  .controls .speed {
+    color: #e8ddc4;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .controls input[type=range] {
+    width: 90px;
+    accent-color: var(--accent);
+  }
+
+  /* Falling torn page */
+  .fallen {
+    position: absolute;
+    inset: 4% 3% 3% 3%;
+    top: 3%;
+    pointer-events: none;
+    z-index: 30;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="backer"></div>
+    <div class="page-stack"></div>
+
+    <div class="binding" id="binding"></div>
+
+    <div class="pages" id="pages"></div>
+    <div class="perforation"></div>
+  </div>
+
+  <div class="controls">
+    <button id="pause">Pause</button>
+    <button id="tear">Tear now</button>
+    <div class="speed">
+      Speed
+      <input type="range" id="speed" min="1" max="10" value="6" />
+    </div>
+  </div>
+
+<script>
+(() => {
+  const MONTHS = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December"
+  ];
+  const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  const pagesEl = document.getElementById("pages");
+  const bindingEl = document.getElementById("binding");
+  const pauseBtn = document.getElementById("pause");
+  const tearBtn = document.getElementById("tear");
+  const speedEl = document.getElementById("speed");
+
+  // Build rings inside binding
+  for (let i = 0; i < 12; i++) {
+    const r = document.createElement("div");
+    r.className = "ring";
+    bindingEl.appendChild(r);
+  }
+
+  let year = 2026;
+  let monthIdx = 6; // July - matches "today" context
+  let currentDay = 1;
+  let paused = false;
+  let tickHandle = null;
+
+  function daysInMonth(y, m) {
+    return new Date(y, m + 1, 0).getDate();
+  }
+  function firstWeekday(y, m) {
+    return new Date(y, m, 1).getDay();
+  }
+
+  function buildPage(y, m) {
+    const page = document.createElement("div");
+    page.className = "page";
+
+    const header = document.createElement("div");
+    header.className = "header";
+    const mn = document.createElement("div");
+    mn.className = "month-name";
+    mn.innerHTML = MONTHS[m].slice(0,1) + '<span class="accent">' + MONTHS[m].slice(1) + '</span>';
+    const yr = document.createElement("div");
+    yr.className = "year";
+    yr.textContent = y;
+    header.appendChild(mn);
+    header.appendChild(yr);
+    page.appendChild(header);
+
+    const wk = document.createElement("div");
+    wk.className = "weekdays";
+    WEEKDAYS.forEach((d, i) => {
+      const s = document.createElement("span");
+      s.textContent = d;
+      if (i === 0) s.classList.add("sun");
+      wk.appendChild(s);
+    });
+    page.appendChild(wk);
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+
+    const start = firstWeekday(y, m);
+    const total = daysInMonth(y, m);
+
+    for (let i = 0; i < start; i++) {
+      const blank = document.createElement("div");
+      blank.className = "day blank";
+      grid.appendChild(blank);
+    }
+    for (let d = 1; d <= total; d++) {
+      const cell = document.createElement("div");
+      cell.className = "day";
+      cell.dataset.day = d;
+      const dow = (start + d - 1) % 7;
+      if (dow === 0) cell.classList.add("sun");
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = d;
+      cell.appendChild(num);
+      grid.appendChild(cell);
+    }
+
+    // fill trailing to complete last row (nice grid symmetry)
+    const totalCells = start + total;
+    const trailing = (7 - (totalCells % 7)) % 7;
+    for (let i = 0; i < trailing; i++) {
+      const blank = document.createElement("div");
+      blank.className = "day blank";
+      grid.appendChild(blank);
+    }
+
+    page.appendChild(grid);
+
+    const footer = document.createElement("div");
+    footer.className = "footer";
+    const brand = document.createElement("span");
+    brand.className = "brand";
+    brand.textContent = "— Ephemera Press —";
+    const w = document.createElement("span");
+    w.textContent = `Week ${Math.ceil((currentDay + start) / 7)}`;
+    w.dataset.week = "true";
+    footer.appendChild(brand);
+    footer.appendChild(w);
+    page.appendChild(footer);
+
+    return page;
+  }
+
+  function highlightDay(page, day) {
+    const cells = page.querySelectorAll(".day:not(.blank)");
+    cells.forEach(c => {
+      const d = Number(c.dataset.day);
+      c.classList.remove("active", "past");
+      if (d < day) c.classList.add("past");
+      else if (d === day) c.classList.add("active");
+    });
+    const wk = page.querySelector('.footer [data-week="true"]');
+    if (wk) {
+      const start = firstWeekday(year, monthIdx);
+      wk.textContent = `Week ${Math.ceil((day + start) / 7)}`;
+    }
+  }
+
+  let currentPage = null;
+  let nextPage = null;
+
+  function mountMonth() {
+    pagesEl.innerHTML = "";
+    // Preview of next month peeks behind
+    const nextM = (monthIdx + 1) % 12;
+    const nextY = monthIdx === 11 ? year + 1 : year;
+    nextPage = buildPage(nextY, nextM);
+    nextPage.classList.add("behind");
+    pagesEl.appendChild(nextPage);
+
+    currentPage = buildPage(year, monthIdx);
+    pagesEl.appendChild(currentPage);
+    highlightDay(currentPage, currentDay);
+  }
+
+  function tearPage() {
+    if (!currentPage) return;
+    const old = currentPage;
+    old.classList.add("tearing");
+    // Advance
+    monthIdx = (monthIdx + 1) % 12;
+    if (monthIdx === 0) year += 1;
+    currentDay = 1;
+
+    // Promote next page
+    if (nextPage) nextPage.classList.remove("behind");
+    currentPage = nextPage;
+
+    // Build the following month behind
+    const followM = (monthIdx + 1) % 12;
+    const followY = monthIdx === 11 ? year + 1 : year;
+    nextPage = buildPage(followY, followM);
+    nextPage.classList.add("behind");
+    pagesEl.insertBefore(nextPage, currentPage);
+
+    highlightDay(currentPage, currentDay);
+
+    setTimeout(() => old.remove(), 1500);
+  }
+
+  function tick() {
+    if (paused) return;
+    const total = daysInMonth(year, monthIdx);
+    if (currentDay >= total) {
+      // Reached last day — tear!
+      highlightDay(currentPage, currentDay);
+      setTimeout(tearPage, 700);
+    } else {
+      currentDay += 1;
+      highlightDay(currentPage, currentDay);
+    }
+  }
+
+  function scheduleTick() {
+    if (tickHandle) clearInterval(tickHandle);
+    const s = Number(speedEl.value);
+    // speed 1..10 → interval 1400ms..180ms
+    const interval = 1400 - (s - 1) * 135;
+    tickHandle = setInterval(tick, interval);
+  }
+
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? "Play" : "Pause";
+  });
+  tearBtn.addEventListener("click", () => {
+    currentDay = daysInMonth(year, monthIdx);
+    highlightDay(currentPage, currentDay);
+    setTimeout(tearPage, 400);
+  });
+  speedEl.addEventListener("input", scheduleTick);
+
+  mountMonth();
+  scheduleTick();
+})();
+</script>
+</body>
+</html>

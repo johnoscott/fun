@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tear-Away Calendar</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .calendar-container {
+            perspective: 1000px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .calendar {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .calendar-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .month-year {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .weekday-header {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0;
+            padding: 10px;
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #666;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .weekday-header div {
+            padding: 8px;
+        }
+
+        .days-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0;
+            padding: 10px;
+            min-height: 300px;
+            position: relative;
+        }
+
+        .day-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            border: 1px solid #eee;
+        }
+
+        .day-cell.empty {
+            background: #fafafa;
+            cursor: default;
+        }
+
+        .day-cell.today {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+        }
+
+        .day-cell:hover:not(.empty) {
+            background: #f0f0f0;
+            transform: scale(1.05);
+        }
+
+        /* Torn page effect at month end */
+        .tear-effect {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background:
+                linear-gradient(45deg, transparent 0%, transparent calc(50% - 10px),
+                              white 50%, transparent calc(50% + 10px), transparent 100%);
+            background-size: 20px 40px;
+            background-position: 0 -10px;
+            pointer-events: none;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #eee;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .current-date {
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .tear-indicator {
+            position: absolute;
+            bottom: 15px;
+            right: 20px;
+            font-size: 24px;
+            animation: flutter 2s infinite;
+        }
+
+        @keyframes flutter {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-2deg); }
+            75% { transform: rotate(2deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="calendar-container">
+        <div class="calendar">
+            <div class="calendar-header">
+                <div class="month-year" id="monthYear"></div>
+                <div style="font-size: 12px; opacity: 0.9;" id="todayDate"></div>
+            </div>
+
+            <div class="weekday-header">
+                <div>Sun</div>
+                <div>Mon</div>
+                <div>Tue</div>
+                <div>Wed</div>
+                <div>Thu</div>
+                <div>Fri</div>
+                <div>Sat</div>
+            </div>
+
+            <div class="days-grid" id="daysGrid">
+                <!-- Calendar days will be inserted here -->
+                <div class="tear-effect" id="tearEffect"></div>
+            </div>
+
+            <div class="controls">
+                <button onclick="previousMonth()">← Previous</button>
+                <div class="current-date" id="currentDateDisplay"></div>
+                <button onclick="nextMonth()">Next →</button>
+            </div>
+        </div>
+        <div class="tear-indicator" id="tearIndicator">📄</div>
+    </div>
+
+    <script>
+        let currentDate = new Date();
+
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            // Set header
+            const options = { year: 'numeric', month: 'long' };
+            document.getElementById('monthYear').textContent =
+                currentDate.toLocaleDateString('en-US', options).toUpperCase();
+
+            const today = new Date();
+            document.getElementById('todayDate').textContent =
+                today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+            document.getElementById('currentDateDisplay').textContent =
+                currentDate.toLocaleDateString('en-US', options);
+
+            // Clear previous days
+            const daysGrid = document.getElementById('daysGrid');
+            const tearEffect = daysGrid.querySelector('.tear-effect');
+            daysGrid.innerHTML = '';
+
+            // Get first day of month and number of days
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+            // Previous month's days
+            for (let i = firstDay - 1; i >= 0; i--) {
+                const dayCell = document.createElement('div');
+                dayCell.className = 'day-cell empty';
+                dayCell.textContent = daysInPrevMonth - i;
+                daysGrid.appendChild(dayCell);
+            }
+
+            // Current month's days
+            const today_date = new Date();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayCell = document.createElement('div');
+                dayCell.className = 'day-cell';
+                dayCell.textContent = day;
+
+                // Highlight today
+                if (year === today_date.getFullYear() &&
+                    month === today_date.getMonth() &&
+                    day === today_date.getDate()) {
+                    dayCell.classList.add('today');
+                }
+
+                dayCell.addEventListener('click', () => selectDay(day, year, month));
+                daysGrid.appendChild(dayCell);
+            }
+
+            // Next month's days
+            const totalCells = daysGrid.children.length;
+            const remainingCells = 42 - totalCells;
+            for (let day = 1; day <= remainingCells; day++) {
+                const dayCell = document.createElement('div');
+                dayCell.className = 'day-cell empty';
+                dayCell.textContent = day;
+                daysGrid.appendChild(dayCell);
+            }
+
+            // Reattach tear effect
+            daysGrid.appendChild(tearEffect);
+
+            // Animate tear effect
+            animateTear();
+        }
+
+        function selectDay(day, year, month) {
+            const selectedDate = new Date(year, month, day);
+            currentDate = selectedDate;
+            renderCalendar();
+        }
+
+        function previousMonth() {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderCalendar();
+        }
+
+        function nextMonth() {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderCalendar();
+        }
+
+        function animateTear() {
+            const tear = document.getElementById('tearEffect');
+            tear.style.animation = 'none';
+            setTimeout(() => {
+                tear.style.animation = 'tearAnimation 0.6s ease-out';
+            }, 10);
+        }
+
+        // Add tear animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes tearAnimation {
+                0% {
+                    opacity: 0;
+                    transform: scaleY(0);
+                }
+                100% {
+                    opacity: 1;
+                    transform: scaleY(1);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Initial render
+        renderCalendar();
+    </script>
+</body>
+</html>

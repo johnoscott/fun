@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USS Antigravity - Starship Bridge Simulator</title>
+  <!-- Google Fonts for futuristic look -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- Screen Flash Alert Overlay -->
+  <div id="screen-flash" class="flash-red pointer-none"></div>
+  <div id="hyperspace-overlay" class="flash-blue pointer-none"></div>
+
+  <!-- Main Cockpit Layout -->
+  <div id="cockpit-container" class="dashboard-grid">
+    
+    <!-- Top Status Bar Info -->
+    <header class="panel top-bar header-info">
+      <div id="ship-name" class="glow-text-cyan font-orbitron">USS ANTIGRAVITY // DECK-01</div>
+      <div class="system-status">
+        <span class="status-indicator online"></span> CORE LIFE SUPPORT: ONLINE
+      </div>
+      <div class="nav-stardate font-mono">STARDATE: <span id="stardate-val">58214.28</span></div>
+    </header>
+
+    <!-- Side Left Panel: Tactical & Radar -->
+    <aside class="panel left-panel display-panel">
+      <h3 class="panel-header font-orbitron">TACTICAL PROXIMITY</h3>
+      <div class="radar-container">
+        <!-- Canvas for interactive radar scan -->
+        <canvas id="radar-canvas" width="160" height="160"></canvas>
+      </div>
+      <div class="radar-info font-mono">
+        <div>OBJECTS tracked: <span id="radar-count" class="glow-text-amber">0</span></div>
+        <div>CRYSTAL CARGO: <span id="hud-crystals-collected" class="glow-text-cyan">0</span></div>
+        <div class="hazard-level">ZONE DETECTED: <span id="field-intensity" class="glow-text-red">LOW</span></div>
+      </div>
+      
+      <!-- Sub-system checklist -->
+      <div class="system-status-list font-mono">
+        <div class="chk-status"><span class="chk-dot green"></span> PROPULSION: ACTIVE</div>
+        <div class="chk-status"><span id="warp-fuel-dot" class="chk-dot green"></span> WARP CELLS: OK</div>
+        <div class="chk-status"><span class="chk-dot green"></span> AM DEFLECT: ONLINE</div>
+        <div class="chk-status"><span class="chk-dot green"></span> AUD-SYNTH: ON</div>
+      </div>
+    </aside>
+
+    <!-- Central Viewport: Main 3D Space Action -->
+    <main class="panel viewport-panel">
+      <!-- Cockpit Window Frames -->
+      <div class="cockpit-frame-top"></div>
+      <div class="cockpit-frame-left"></div>
+      <div class="cockpit-frame-right"></div>
+      <div class="cockpit-frame-bottom"></div>
+
+      <!-- Canvas for 3D Starfield & Space Debris -->
+      <canvas id="viewport-canvas"></canvas>
+
+      <!-- Holographic HUD Overlay on top of canvas -->
+      <div class="hud-overlay pointer-none">
+        <!-- Targeting Crosshairs -->
+        <div class="hud-reticle">
+          <div class="reticle-ring-outer"></div>
+          <div class="reticle-ring-inner"></div>
+          <div class="reticle-bars"></div>
+          <div class="reticle-coordinates font-mono">
+            <span>YAW: <span id="hud-yaw">0.0°</span></span>
+            <span>PITCH: <span id="hud-pitch">0.0°</span></span>
+          </div>
+        </div>
+
+        <!-- Flying Warnings and Alerts -->
+        <div id="hud-alert-banner" class="hud-alert-box font-orbitron hide">
+          <div class="alert-border"></div>
+          <div id="hud-alert-text">COLLISION ALERT!</div>
+        </div>
+
+        <!-- Control overlays (Visible when steering, etc.) -->
+        <div class="steering-hint font-mono">STEER: [WASD] | BLASTER: [SPACEBAR] | LOCK & LAUNCH TORPEDO: [F]</div>
+      </div>
+
+      <!-- Welcome / Start Overlay screen inside viewport -->
+      <div id="start-overlay" class="overlay-modal">
+        <h1 class="glow-text-cyan font-orbitron">WARP DRIVE ENGINE SIMULATOR</h1>
+        <p class="font-mono modal-desc">Configure velocities, evade hostile intercept fighters, target singularities, and salvage anti-matter crystals from the bridge of the starship USS Antigravity.</p>
+        
+        <div class="overlay-divided-container font-mono">
+          <!-- Left side: Ship Setup & Identification -->
+          <div class="overlay-panel-half">
+            <h3 class="panel-subheader font-orbitron">PILOT SELECTION</h3>
+            <div class="form-group font-mono">
+              <label for="captain-name-input">ENTER CAPTAIN ID:</label>
+              <input type="text" id="captain-name-input" value="Capt. Picard" maxlength="20">
+            </div>
+            
+            <div class="audio-agreement font-mono">
+              <p class="sparking-warning">⚠️ WARNING: Real-time neural oscillators synthesise raw space engines, photon blasts, and alarms</p>
+              <div class="checkbox-container">
+                <input type="checkbox" id="audio-opt-in" checked>
+                <label for="audio-opt-in">ENABLE HELM SYNTH AUDIO DRIVE</label>
+              </div>
+            </div>
+            
+            <button id="btn-start" class="btn-primary font-orbitron" style="margin-top: 15px;">INITIALIZE ENGINES</button>
+          </div>
+
+          <!-- Divider line -->
+          <div class="overlay-panel-divider"></div>
+
+          <!-- Right side: Upgrades & Customization Bay -->
+          <div class="overlay-panel-half upgrade-bay">
+            <h3 class="panel-subheader font-orbitron">ENGINEERING REFIT BAY</h3>
+            <div class="crystal-balance">
+              CARGO VALUATION: <span id="shop-crystal-count" class="glow-text-cyan">0</span> 💎 CRYSTALS
+            </div>
+            <div class="upgrade-row-list" id="upgrade-items-list">
+              <!-- Rendered via JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Over / Ship Obliterated screen -->
+      <div id="gameover-overlay" class="overlay-modal hide">
+        <h1 class="glow-text-red font-orbitron" id="gameover-title">HULL OBLITERATED</h1>
+        <p class="font-mono modal-desc" id="gameover-desc">A critical collision overloaded the anti-matter shields. The vessel was destroyed in secondary core detonations.</p>
+        
+        <!-- Score and analysis summary -->
+        <div class="telemetry-grid font-mono">
+          <div class="tel-card">SCORE: <span id="end-score" class="glow-text-cyan">0</span></div>
+          <div class="tel-card">SECTOR TRAVEL: <span id="end-distance" class="glow-text-cyan">0.0 LY</span></div>
+          <div class="tel-card">WARP STEPS: <span id="end-jumps" class="glow-text-cyan">0</span></div>
+          <div class="tel-card">SURVIVAL TCK: <span id="end-time" class="glow-text-cyan">0s</span></div>
+          <div class="tel-card">LASERS HIT: <span id="end-lasers-hit" class="glow-text-red">0</span></div>
+          <div class="tel-card">LASERS DODGED: <span id="end-lasers-dodged" class="glow-text-green">0</span></div>
+          <div class="tel-card">SHOTS FIRED: <span id="end-shots-fired" class="glow-text-pink">0</span></div>
+          <div class="tel-card">DESTROYED: <span id="end-enemies-destroyed" class="glow-text-green">0</span></div>
+        </div>
+
+        <!-- Captain's Log Result Section -->
+        <div class="captains-log-box">
+          <h4 class="font-orbitron log-header glow-text-amber">> TRANSMITTING CAPTAIN'S LOG...</h4>
+          <pre id="captains-log-text" class="font-mono">Decrypting file storage tape...</pre>
+        </div>
+
+        <button id="btn-restart" class="btn-primary font-orbitron">RELOAD SIMULATION</button>
+      </div>
+    </main>
+
+    <!-- Side Right Panel: Flight Controls & Stats -->
+    <aside class="panel right-panel display-panel">
+      <h3 class="panel-header font-orbitron">ENGINE TELEMETRY</h3>
+      
+      <!-- Primary numbers readout -->
+      <div class="nav-metrics font-mono">
+        <div class="metric-block">
+          <div class="metric-label">SCORE</div>
+          <div id="metric-score" class="metric-value glow-text-cyan">000000</div>
+        </div>
+        <div class="metric-block">
+          <div class="metric-label">DISTANCE</div>
+          <div id="metric-distance" class="metric-value">0.00 LY</div>
+        </div>
+      </div>
+
+      <!-- Speed progress element -->
+      <div class="speed-readout font-mono">
+        <div class="speed-label font-orbitron">VELOCITY: <span id="velocity-num" class="glow-text-pink">0.10 c</span></div>
+        <div class="speedbar-track">
+          <div id="speedbar-fill" class="speedbar-fill glow-bg-pink"></div>
+        </div>
+      </div>
+
+      <!-- Shield Integrity Shield Progress Circle -->
+      <div class="shield-section font-mono">
+        <div class="shield-title font-orbitron">SHIELD INTEGRITY: <span id="shield-num" class="glow-text-green">100%</span></div>
+        <div class="shieldbar-track">
+          <div id="shield-fill" class="shield-fill glow-bg-green" style="width: 100%;"></div>
+        </div>
+      </div>
+
+      <!-- Warp Charger section -->
+      <div id="warp-drive-panel" class="warp-drive-panel font-mono">
+        <div class="warp-charge-label font-orbitron">WARP CORES CHARGE: <span id="warp-charge-val" class="glow-text-cyan">0%</span></div>
+        <div class="warpbar-track">
+          <div id="warp-charge-fill" class="warpbar-fill glow-bg-cyan"></div>
+        </div>
+        <div class="warp-status-text glow-text-cyan font-orbitron" id="warp-status-text">HOLDING</div>
+        <button id="btn-warp" class="btn-warp glow-text-cyan font-orbitron disabled" disabled>ENGAGE JUMP DRIVE</button>
+      </div>
+
+      <!-- Weapons System panel -->
+      <div id="weapons-system-panel" class="weapons-system-panel font-mono">
+        <div class="weapons-heat-label font-orbitron">CANON MATRIX HEAT: <span id="weapons-heat-val" class="glow-text-green">0%</span></div>
+        <div class="heatbar-track">
+          <div id="weapons-heat-fill" class="heatbar-fill glow-bg-green" style="width: 0%;"></div>
+        </div>
+        <div class="weapons-status-text glow-text-green font-orbitron" id="weapons-status-text">COIL STABLE</div>
+      </div>
+
+      <!-- Torpedo System panel -->
+      <div id="torpedo-system-panel" class="torpedo-system-panel font-mono">
+        <div class="torpedo-label font-orbitron">SEEKER ORDNANCE: <span id="torpedo-count-val" class="glow-text-pink">3 / 3</span></div>
+        <div class="torpedo-bar-track">
+          <div id="torpedo-reload-fill" class="torpedo-fill glow-bg-pink" style="width: 100%;"></div>
+        </div>
+        <div class="torpedo-status-text glow-text-pink font-orbitron" id="torpedo-status-text">TUBES LOADED</div>
+      </div>
+
+      <!-- Audio Mute Control -->
+      <div class="sound-control">
+        <button id="btn-sound" class="btn-secondary font-mono">🔊 AUDIO HELM: ON</button>
+      </div>
+    </aside>
+
+    <!-- Bottom Panel: Scrollable Bridge Logs & High Scores -->
+    <footer class="panel bottom-panel display-panel">
+      <div class="bottom-grid">
+        <!-- Log sub-terminal -->
+        <div class="sub-log-terminal">
+          <h4 class="sub-header font-orbitron">COCKPIT SUBSYSTEM MESSAGES</h4>
+          <div id="subsystem-log" class="terminal-feed font-mono">
+            <div class="log-entry system"><span class="log-time">[00:00:01]</span> SIMULATOR BOOT SEQUENCING LOADED (AGY_v3.1.2)</div>
+            <div class="log-entry system"><span class="log-time">[00:00:02]</span> CALIBRATING NAV-AID STEERING MATRIX... READY</div>
+          </div>
+        </div>
+
+        <!-- High score list server side -->
+        <div class="sub-high-scores">
+          <h4 class="sub-header font-orbitron">FLEET COMMAND HIGH RECORDS</h4>
+          <div id="high-scores-list" class="score-feed font-mono">
+            <!-- Loaded dynamically from API -->
+            <div class="score-row loading">FETCHING SECURE DATA CELLS...</div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

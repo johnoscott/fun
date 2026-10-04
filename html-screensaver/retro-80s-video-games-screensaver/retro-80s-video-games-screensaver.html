@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retro Arcade Screensaver</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none;}
+  #stage{position:fixed;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;}
+  #hud{
+    position:fixed;left:0;right:0;bottom:14px;text-align:center;
+    font-family:"Courier New",monospace;color:#fff;letter-spacing:3px;
+    font-size:13px;text-shadow:0 0 6px rgba(0,255,255,.8);opacity:.85;
+    pointer-events:none;user-select:none;
+  }
+  #scan{position:fixed;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0px,rgba(0,0,0,0) 2px,rgba(0,0,0,.18) 3px,rgba(0,0,0,.18) 4px);
+    mix-blend-mode:multiply;}
+  #vig{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%);}
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="scan"></div>
+<div id="vig"></div>
+<div id="hud"></div>
+<script>
+"use strict";
+/* ============================================================
+   RETRO ARCADE SCREENSAVER
+   - Pixelated 80s video-game characters & environments
+   - Scenes cycle: Space Invaders, Pac-Man, Galaga,
+     Frogger, Asteroids, Donkey Kong (with crossfades)
+   - Weather system (clear / rain / snow / storm / fog)
+   - 24h day compressed to 60s (day/night lighting cycle)
+   ============================================================ */
+
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
+
+// Internal low-res buffer for crunchy pixels; scaled up to screen.
+const VW = 320, VH = 200;         // virtual resolution
+let buf = document.createElement('canvas');
+buf.width = VW; buf.height = VH;
+const b = buf.getContext('2d');
+b.imageSmoothingEnabled = false;
+
+let scaleX=1, scaleY=1, offX=0, offY=0;
+function resize(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  ctx.imageSmoothingEnabled = false;
+  // preserve aspect, letterbox
+  const s = Math.min(canvas.width/VW, canvas.height/VH);
+  scaleX = VW*s; scaleY = VH*s;
+  offX = (canvas.width-scaleX)/2;
+  offY = (canvas.height-scaleY)/2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ---------- Time: 24h compressed into 60s ---------- */
+const DAY_SECONDS = 60;
+let startT = performance.now();
+function dayFraction(now){ return ((now-startT)/1000 % DAY_SECONDS)/DAY_SECONDS; } // 0..1
+function hoursOf(f){ return f*24; }
+
+/* ---------- Sky palette by time of day ---------- */
+// keyframes: hour -> [topColor, bottomColor, light 0..1]
+const skyKeys = [
+  {h:0,  top:[6,6,26],   bot:[10,4,40],  light:0.12},  // midnight
+  {h:5,  top:[20,18,60], bot:[70,40,90], light:0.25},  // pre-dawn
+  {h:6.5,top:[250,140,90],bot:[255,200,120],light:0.55},// dawn
+  {h:9,  top:[90,160,235],bot:[180,220,255],light:0.95},// morning
+  {h:13, top:[70,150,240],bot:[200,230,255],light:1.0}, // noon
+  {h:17, top:[95,140,210],bot:[230,220,190],light:0.9}, // afternoon
+  {h:19, top:[240,120,70],bot:[255,170,90], light:0.55},// sunset
+  {h:20.5,top:[60,40,90], bot:[150,70,90], light:0.3},  // dusk
+  {h:22, top:[12,10,40],  bot:[20,10,55],  light:0.16}, // night
+  {h:24, top:[6,6,26],    bot:[10,4,40],   light:0.12}, // wrap
+];
+function lerp(a,b,t){return a+(b-a)*t;}
+function lerpC(c1,c2,t){return [lerp(c1[0],c2[0],t),lerp(c1[1],c2[1],t),lerp(c1[2],c2[2],t)];}
+function skyAt(hour){
+  for(let i=0;i<skyKeys.length-1;i++){
+    const k0=skyKeys[i],k1=skyKeys[i+1];
+    if(hour>=k0.h && hour<=k1.h){
+      const t=(hour-k0.h)/(k1.h-k0.h);
+      return {top:lerpC(k0.top,k1.top,t),bot:lerpC(k0.bot,k1.bot,t),light:lerp(k0.light,k1.light,t)};
+    }
+  }
+  return {top:skyKeys[0].top,bot:skyKeys[0].bot,light:skyKeys[0].light};
+}
+const rgb=c=>`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+
+/* ---------- Weather system ---------- */
+const WEATHERS = ["CLEAR","RAIN","SNOW","STORM","FOG"];
+let weather = "CLEAR";
+let weatherTimer = 0;
+let nextWeatherIn = 8 + Math.random()*8; // seconds
+let particles = [];
+let lightning = 0;
+
+function pickWeather(){
+  // weight so CLEAR shows a bit more
+  const bag = ["CLEAR","CLEAR","RAIN","SNOW","STORM","FOG"];
+  weather = bag[(Math.random()*bag.length)|0];
+  nextWeatherIn = 7 + Math.random()*9;
+  weatherTimer = 0;
+  particles = [];
+  const count = weather==="RAIN"?140:weather==="SNOW"?110:weather==="STORM"?170:0;
+  for(let i=0;i<count;i++){
+    particles.push({x:Math.random()*VW,y:Math.random()*VH,
+      s:weather==="SNOW"?(0.3+Math.random()*0.5):(2+Math.random()*2.5),
+      w:Math.random()*2});
+  }
+}
+pickWeather();
+
+function updateWeather(dt){
+  weatherTimer+=dt;
+  if(weatherTimer>nextWeatherIn) pickWeather();
+  if(weather==="RAIN"||weather==="STORM"){
+    for(const p of particles){
+      p.y += p.s*90*dt*4; p.x += 10*dt*4;
+      if(p.y>VH){p.y=-4;p.x=Math.random()*VW;}
+    }
+  } else if(weather==="SNOW"){
+    for(const p of particles){
+      p.y += p.s*30*dt*4; p.x += Math.sin((p.y+p.w*30)/20)*8*dt*4;
+      if(p.y>VH){p.y=-4;p.x=Math.random()*VW;}
+    }
+  }
+  if(weather==="STORM"){
+    if(lightning>0) lightning-=dt*3;
+    if(Math.random()<0.008){ lightning=1; }
+  } else lightning=0;
+}
+
+function drawWeather(light){
+  if(weather==="RAIN"||weather==="STORM"){
+    b.strokeStyle="rgba(150,190,255,0.5)";b.lineWidth=1;
+    b.beginPath();
+    for(const p of particles){b.moveTo(p.x,p.y);b.lineTo(p.x-2,p.y-6);}
+    b.stroke();
+  } else if(weather==="SNOW"){
+    b.fillStyle="rgba(255,255,255,0.9)";
+    for(const p of particles){b.fillRect(p.x|0,p.y|0,1,1);}
+  } else if(weather==="FOG"){
+    b.fillStyle="rgba(200,205,220,0.22)";
+    b.fillRect(0,0,VW,VH);
+    b.fillStyle="rgba(210,215,230,0.14)";
+    for(let i=0;i<4;i++){
+      const yy = (VH*0.5)+i*18;
+      b.fillRect(0,yy,VW,10);
+    }
+  }
+  if(lightning>0.05){
+    b.fillStyle=`rgba(255,255,255,${lightning*0.55})`;
+    b.fillRect(0,0,VW,VH);
+  }
+}
+
+/* ---------- Pixel drawing helper ---------- */
+// draw a sprite from a string map; palette maps chars->color; px = pixel size
+function sprite(map, palette, x, y, px, flip=false){
+  for(let row=0;row<map.length;row++){
+    const line=map[row];
+    for(let col=0;col<line.length;col++){
+      const ch=line[col];
+      if(ch===' '||ch==='.') continue;
+      const c=palette[ch]; if(!c) continue;
+      const cx = flip ? (x + (line.length-1-col)*px) : (x + col*px);
+      b.fillStyle=c;
+      b.fillRect(cx, y+row*px, px, px);
+    }
+  }
+}
+
+/* ============================================================
+   SPRITES
+   ============================================================ */
+const invaderA=[
+  "..X.....X..",
+  "...X...X...",
+  "..XXXXXXX..",
+  ".XX.XXX.XX.",
+  "XXXXXXXXXXX",
+  "X.XXXXXXX.X",
+  "X.X.....X.X",
+  "...XX.XX...",
+];
+const invaderB=[
+  "..X.....X..",
+  "X..X...X..X",
+  "X.XXXXXXX.X",
+  "XXX.XXX.XXX",
+  "XXXXXXXXXXX",
+  ".XXXXXXXXX.",
+  "..X.....X..",
+  ".X.......X.",
+];
+const player=[
+  ".....X.....",
+  "....XXX....",
+  "....XXX....",
+  ".XXXXXXXXX.",
+  "XXXXXXXXXXX",
+  "XXXXXXXXXXX",
+];
+const ufo=[
+  "...XXXXX...",
+  ".XXXXXXXXX.",
+  "XXXXXXXXXXX",
+  ".XX.XX.XX..",
+];
+const pacman=[
+  "..XXXX..",
+  ".XXXXXX.",
+  "XXXX....",
+  "XXX.....",
+  "XXXX....",
+  ".XXXXXX.",
+  "..XXXX..",
+];
+const pacClosed=[
+  "..XXXX..",
+  ".XXXXXX.",
+  "XXXXXXXX",
+  "XXXXXXXX",
+  "XXXXXXXX",
+  ".XXXXXX.",
+  "..XXXX..",
+];
+const ghost=[
+  "..XXXX..",
+  ".XXXXXX.",
+  "XeXXXeX.".replace(/e/g,'e'),
+  "XwXXXwX.".replace(/w/g,'w'),
+  "XXXXXXXX",
+  "XXXXXXXX",
+  "X.X.X.X.",
+];
+const galagaBee=[
+  "..X...X..",
+  "..XX.XX..",
+  ".XXYXYXX.",
+  "XXXYYYXXX",
+  "X.XXXXX.X",
+  "..X.X.X..",
+];
+const galagaBoss=[
+  "X...X...X",
+  ".X.XXX.X.",
+  ".XXpppXX.",
+  "XXpPPPpXX",
+  "XX.XXX.XX",
+  ".X.X.X.X.",
+];
+const galShip=[
+  "....X....",
+  "...XXX...",
+  "...XXX...",
+  ".XXXXXXX.",
+  "XXXXXXXXX",
+  "X.X.X.X.X",
+];
+// FROGGER
+const frog=[
+  "X.....X",
+  "X.....X",
+  ".XX.XX.",
+  ".XeXeX.",
+  "XXXXXXX",
+  "X.XXX.X",
+  "X.....X",
+];
+const car=[
+  ".XXXXXX.",
+  "XXXXXXXX",
+  "XXwXXwXX",
+  "oXXXXXXo",
+];
+const truck=[
+  ".XXXXXXXXXX.",
+  "XXXXXXXXXXXX",
+  "XXXXXXXXXXXX",
+  "oXXoXXXXoXXo",
+];
+// ASTEROIDS
+const astShip=[
+  "...X...",
+  "..XXX..",
+  ".XXXXX.",
+  "XXfXfXX",
+  "X.X.X.X",
+];
+const rock=[
+  ".XXXXX.",
+  "XXXXXXX",
+  "XXXXXXX",
+  "XXXXXXX",
+  "XXXXXXX",
+  ".XXXXX.",
+];
+// DONKEY KONG
+const dk=[
+  ".XXX..XXX.",
+  "XwwXXXXwwX",
+  "XwbXXXXbwX",
+  "XXXmmmmXXX",
+  ".XXXXXXXX.",
+  "bXXXXXXXXb",
+  "bXX.XX.XXb",
+  ".X.X..X.X.",
+];
+const mario=[
+  "..RRR.",
+  ".sssS.",
+  ".sSSs.",
+  "..RRR.",
+  ".BRBR.",
+  "sBBBBs",
+  ".B..B.",
+  ".Y..Y.",
+];
+const barrel=[
+  ".XXXX.",
+  "XoXXoX",
+  "XXooXX",
+  "XoXXoX",
+  ".XXXX.",
+];
+
+/* ---------- Scenes ---------- */
+let sceneIndex=0;
+const SCENES=["SPACE INVADERS","PAC-MAN","GALAGA","FROGGER","ASTEROIDS","DONKEY KONG"];
+let sceneTimer=0;
+const SCENE_LEN=18; // seconds each
+
+// entity state per scene
+let invaders=[], invDir=1, invStep=0, invShots=[], playerX=VW/2, ufoX=-20;
+let pac={x:40,y:120,dir:1,mouth:0}, dots=[], ghosts=[];
+let gal=[], galShipX=VW/2, galShots=[], galDiveT=0;
+let frogger={x:VW/2,y:VH-14,tx:VW/2,ty:VH-14,hop:0}, lanes=[];
+let ast={x:VW/2,y:VH/2,vx:20,vy:12,ang:0}, rocks=[], astShots=[];
+let dkBarrels=[], dkMario={x:24,y:VH-24,climb:false,foot:0}, dkAnim=0;
+
+function initInvaders(){
+  invaders=[];
+  for(let r=0;r<4;r++)for(let c=0;c<9;c++){
+    invaders.push({x:40+c*26,y:34+r*20,alive:true,type:r%2});
+  }
+  invDir=1;invShots=[];ufoX=-30;playerX=VW/2;
+}
+function initPac(){
+  dots=[];
+  for(let i=0;i<VW;i+=16){dots.push({x:i+8,y:120,on:true});}
+  pac={x:20,y:120,dir:1,mouth:0};
+  ghosts=[
+    {x:VW-40,y:120,dir:-1,col:'#ff5555'},
+    {x:VW-70,y:120,dir:-1,col:'#ffb8ff'},
+    {x:VW-100,y:120,dir:-1,col:'#00ffff'},
+  ];
+}
+function initGalaga(){
+  gal=[];
+  for(let r=0;r<3;r++)for(let c=0;c<8;c++){
+    gal.push({hx:50+c*28,hy:30+r*20,x:50+c*28,y:30+r*20,type:r===0?2:(r===1?1:0),
+      diving:false,dt:Math.random()*6,ang:0});
+  }
+  galShipX=VW/2;galShots=[];galDiveT=0;
+}
+function initFrogger(){
+  lanes=[];
+  // 5 road lanes between y=110 and y=180
+  const cols=['#ff3333','#ffcc00','#33ccff','#ff66cc','#66ff66'];
+  for(let i=0;i<5;i++){
+    const y=112+i*14, dir=i%2?1:-1, sp=(18+i*7);
+    const arr=[];
+    const heavy=i%2===0;
+    for(let k=0;k<3;k++) arr.push({x:Math.random()*VW, kind:heavy?'truck':'car', col:cols[i]});
+    lanes.push({y,dir,sp,arr,heavy});
+  }
+  frogger={x:VW/2,y:VH-14,tx:VW/2,ty:VH-14,hop:0,waitT:0};
+}
+function initAsteroids(){
+  rocks=[];
+  for(let i=0;i<6;i++){
+    rocks.push({x:Math.random()*VW,y:Math.random()*VH,
+      vx:(Math.random()-0.5)*40,vy:(Math.random()-0.5)*40,
+      sz:2+((Math.random()*2)|0),spin:Math.random()*6});
+  }
+  ast={x:VW/2,y:VH/2,vx:15,vy:8,ang:0};astShots=[];
+}
+function initDK(){
+  dkBarrels=[];
+  dkMario={x:24,y:VH-24,climb:false,foot:0,dir:1,platform:0};
+  dkAnim=0;
+}
+function initScene(i){
+  if(i===0)initInvaders();
+  else if(i===1)initPac();
+  else if(i===2)initGalaga();
+  else if(i===3)initFrogger();
+  else if(i===4)initAsteroids();
+  else if(i===5)initDK();
+}
+initScene(0);
+
+/* ---------- Star / background field ---------- */
+const stars=[];
+for(let i=0;i<70;i++)stars.push({x:Math.random()*VW,y:Math.random()*VH*0.7,z:Math.random()});
+
+/* ============================================================
+   SCENE RENDERERS
+   ============================================================ */
+function drawStars(light){
+  const twinkle = 1-light; // stars visible at night
+  if(twinkle<=0.02) return;
+  for(const s of stars){
+    const a=(0.3+0.7*Math.sin((performance.now()/400)+s.x))*twinkle*(0.4+s.z);
+    b.fillStyle=`rgba(255,255,255,${Math.max(0,a)})`;
+    b.fillRect(s.x|0,s.y|0,s.z>0.7?2:1,s.z>0.7?2:1);
+  }
+}
+
+function drawMoonSun(hour,light){
+  // Sun arc daytime, moon nighttime
+  const isDay = hour>6 && hour<19;
+  if(isDay){
+    const t=(hour-6)/13; // 0..1 across sky
+    const x=t*VW, y=VH*0.6 - Math.sin(t*Math.PI)*VH*0.5;
+    b.fillStyle="#fff2b0"; b.beginPath();b.arc(x,y,10,0,7);b.fill();
+    b.fillStyle="rgba(255,230,120,0.25)";b.beginPath();b.arc(x,y,16,0,7);b.fill();
+  } else {
+    const nh = hour<6? hour+ (24-19) : hour-19;
+    const t = nh/11;
+    const x=t*VW, y=VH*0.55 - Math.sin(t*Math.PI)*VH*0.45;
+    b.fillStyle="#e8e8ff";b.beginPath();b.arc(x,y,8,0,7);b.fill();
+    b.fillStyle="#c8c8e0";b.beginPath();b.arc(x+3,y-2,7,0,7);b.fill();
+    b.fillStyle=rgb([skyKeys[0].top[0],skyKeys[0].top[1],skyKeys[0].top[2]]);
+  }
+}
+
+// SPACE INVADERS
+function sceneInvaders(dt){
+  // ground
+  b.fillStyle="#101820";b.fillRect(0,VH-20,VW,20);
+  b.fillStyle="#00ff66";b.fillRect(0,VH-21,VW,1);
+  // move invaders
+  invStep+=dt;
+  let stepInterval=0.02;
+  let dx=invDir*18*dt;
+  let edge=false;
+  for(const iv of invaders){if(!iv.alive)continue;iv.x+=dx;if(iv.x<8||iv.x>VW-24)edge=true;}
+  if(edge){invDir*=-1;for(const iv of invaders){iv.y+=6;}}
+  const pal={X:'#00ee55'};
+  const pal2={X:'#33ddff'};
+  const frame=(performance.now()/500|0)%2;
+  for(const iv of invaders){
+    if(!iv.alive)continue;
+    const map = iv.type? (frame?invaderB:invaderA):(frame?invaderA:invaderB);
+    sprite(map, iv.type?pal2:pal, iv.x, iv.y, 2);
+    if(Math.random()<0.004)invShots.push({x:iv.x+10,y:iv.y+16});
+  }
+  // player auto-track lowest alive column & shoot
+  let target=null,minx=1e9;
+  for(const iv of invaders){if(iv.alive&&Math.abs(iv.x-playerX)<minx){minx=Math.abs(iv.x-playerX);target=iv;}}
+  if(target){playerX += Math.sign(target.x+8-playerX)*40*dt;}
+  playerX=Math.max(8,Math.min(VW-24,playerX));
+  sprite(player,{X:'#ffff00'},playerX,VH-38,2);
+  // player shots
+  if(Math.random()<0.08)invShots.push({x:playerX+10,y:VH-40,up:true});
+  b.fillStyle="#ffffff";
+  for(let i=invShots.length-1;i>=0;i--){
+    const s=invShots[i];
+    s.y += (s.up?-1:1)*120*dt;
+    b.fillStyle=s.up?'#ffff66':'#ff5566';
+    b.fillRect(s.x,s.y,1,4);
+    // hit detection (player shots vs invaders)
+    if(s.up){
+      for(const iv of invaders){
+        if(iv.alive&&s.x>iv.x&&s.x<iv.x+22&&s.y>iv.y&&s.y<iv.y+16){iv.alive=false;s.dead=true;}
+      }
+    }
+    if(s.y<0||s.y>VH||s.dead)invShots.splice(i,1);
+  }
+  // ufo
+  ufoX+=25*dt; if(ufoX>VW+30)ufoX=-30;
+  sprite(ufo,{X:'#ff44ff'},ufoX,16,2);
+  // respawn wave
+  if(invaders.every(iv=>!iv.alive))initInvaders();
+}
+
+// PAC-MAN
+function scenePac(dt){
+  // maze walls (simple)
+  b.fillStyle="#0000aa";
+  b.fillRect(10,90,VW-20,3); b.fillRect(10,150,VW-20,3);
+  b.fillStyle="#2121ff";
+  b.fillRect(10,90,3,63);b.fillRect(VW-13,90,3,63);
+  // dots
+  b.fillStyle="#ffb897";
+  for(const d of dots){if(d.on)b.fillRect(d.x-1,d.y-1,3,3);}
+  // move pac
+  pac.x+=pac.dir*55*dt; pac.mouth+=dt*10;
+  if(pac.x>VW-30)pac.dir=-1; if(pac.x<20)pac.dir=1;
+  for(const d of dots){if(d.on&&Math.abs(d.x-pac.x-8)<8)d.on=false;}
+  if(dots.every(d=>!d.on))dots.forEach(d=>d.on=true);
+  const open=(Math.sin(pac.mouth)>0);
+  sprite(open?pacman:pacClosed,{X:'#ffff00'},pac.x,pac.y-24,3,pac.dir<0);
+  // ghosts chase
+  const gpal=col=>({X:col,e:'#ffffff',w:'#2121ff'});
+  for(const g of ghosts){
+    g.x += Math.sign(pac.x-g.x)*35*dt + g.dir*2*dt;
+    sprite(ghost,gpal(g.col),g.x,pac.y-24,3);
+  }
+}
+
+// GALAGA
+function sceneGalaga(dt){
+  b.fillStyle="#080810";b.fillRect(0,VH-14,VW,14);
+  galDiveT+=dt;
+  const t=performance.now()/1000;
+  const palBee={X:'#ffee00',Y:'#ff5500'};
+  const palBoss={X:'#00ddff',p:'#ff33cc',P:'#ffffff'};
+  const palShip={X:'#ffee44'};
+  for(const e of gal){
+    if(!e.diving){
+      // hover with slight sway
+      e.x = e.hx + Math.sin(t*1.5+e.hy)*4;
+      e.y = e.hy;
+      if(Math.random()<0.0012){e.diving=true;e.ang=0;e.sx=e.x;}
+    } else {
+      e.ang+=dt*2.2;
+      e.x = e.sx + Math.sin(e.ang)*40;
+      e.y += 55*dt;
+      if(Math.random()<0.02)galShots.push({x:e.x+8,y:e.y+10});
+      if(e.y>VH+10){e.diving=false;e.y=e.hy;e.x=e.hx;}
+    }
+    const map = e.type===2?galagaBoss:(e.type===1?galagaBee:galagaBee);
+    sprite(map, e.type===2?palBoss:palBee, e.x, e.y, 2);
+  }
+  // ship tracks nearest diver else center
+  let tgt=VW/2,md=1e9;
+  for(const e of gal){if(e.diving){const d=Math.abs(e.x-galShipX);if(d<md){md=d;tgt=e.x;}}}
+  galShipX+=Math.sign(tgt-galShipX)*50*dt;
+  galShipX=Math.max(8,Math.min(VW-24,galShipX));
+  sprite(galShip,palShip,galShipX,VH-34,2);
+  if(Math.random()<0.1)galShots.push({x:galShipX+8,y:VH-36,up:true});
+  for(let i=galShots.length-1;i>=0;i--){
+    const s=galShots[i];s.y+=(s.up?-1:1)*140*dt;
+    b.fillStyle=s.up?'#66ffff':'#ff6666';b.fillRect(s.x,s.y,2,4);
+    if(s.y<0||s.y>VH)galShots.splice(i,1);
+  }
+}
+
+// FROGGER
+function sceneFrogger(dt){
+  // zones: goal water strip on top, road, safe start
+  b.fillStyle="#0a1a0a";b.fillRect(0,0,VW,VH);
+  b.fillStyle="#123a12";b.fillRect(0,VH-18,VW,18);      // start bank
+  b.fillStyle="#0d2e5c";b.fillRect(0,96,VW,10);          // goal water
+  b.fillStyle="#1c1c1c";b.fillRect(0,106,VW,VH-124);     // road
+  // lane markings
+  b.fillStyle="#3a3a10";
+  for(const ln of lanes){for(let x=(performance.now()/40%16);x<VW;x+=16)b.fillRect(x,ln.y+6,6,1);}
+  // vehicles
+  for(const ln of lanes){
+    for(const v of ln.arr){
+      v.x += ln.dir*ln.sp*dt;
+      if(ln.dir>0&&v.x>VW+14)v.x=-20;
+      if(ln.dir<0&&v.x<-20)v.x=VW+14;
+      const pal={X:v.col,w:'#222',o:'#111'};
+      sprite(ln.heavy?truck:car, pal, v.x, ln.y, 2, ln.dir<0);
+    }
+  }
+  // frog AI: hop upward when its target row is clear
+  const fr=frogger;
+  fr.hop=Math.max(0,fr.hop-dt*6);
+  if(fr.waitT>0)fr.waitT-=dt;
+  if(fr.hop<=0 && fr.waitT<=0){
+    // find lane just above
+    const nextY=fr.y-14;
+    let clear=true;
+    for(const ln of lanes){
+      if(Math.abs(ln.y+3-(nextY))<8){
+        for(const v of ln.arr){const w=ln.heavy?26:18;if(fr.x>v.x-6&&fr.x<v.x+w)clear=false;}
+      }
+    }
+    if(clear){fr.ty=Math.max(96,fr.y-14);fr.hop=1;fr.y=fr.ty;
+      if(fr.y<=98){fr.waitT=0.6;fr.y=VH-14;fr.ty=VH-14;} // reached goal, reset
+    } else fr.waitT=0.15;
+  }
+  const yoff=fr.hop>0?-Math.sin(fr.hop*Math.PI)*5:0;
+  sprite(frog,{X:'#33dd22',e:'#ffffff'},fr.x-7,fr.y+yoff-7,2);
+}
+
+// ASTEROIDS
+function sceneAsteroids(dt){
+  b.fillStyle="#000008";b.fillRect(0,0,VW,VH);
+  const wrap=(o)=>{if(o.x<-8)o.x=VW+8;if(o.x>VW+8)o.x=-8;if(o.y<-8)o.y=VH+8;if(o.y>VH+8)o.y=-8;};
+  // ship drifts & slowly rotates toward nearest rock
+  let near=null,nd=1e9;
+  for(const r of rocks){const d=(r.x-ast.x)**2+(r.y-ast.y)**2;if(d<nd){nd=d;near=r;}}
+  if(near){const wa=Math.atan2(near.y-ast.y,near.x-ast.x)-Math.PI/2;
+    let da=((wa-ast.ang+Math.PI*3)%(Math.PI*2))-Math.PI;ast.ang+=da*dt*2;}
+  ast.x+=ast.vx*dt;ast.y+=ast.vy*dt;wrap(ast);
+  // shoot occasionally
+  if(Math.random()<0.05){astShots.push({x:ast.x,y:ast.y,
+    vx:Math.sin(ast.ang)*150,vy:-Math.cos(ast.ang)*150,life:1.2});}
+  for(let i=astShots.length-1;i>=0;i--){
+    const s=astShots[i];s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt;wrap(s);
+    b.fillStyle="#ffffff";b.fillRect(s.x|0,s.y|0,2,2);
+    for(let j=rocks.length-1;j>=0;j--){const r=rocks[j];
+      if(Math.abs(r.x-s.x)<r.sz*3&&Math.abs(r.y-s.y)<r.sz*3){
+        s.life=0;
+        if(r.sz>2){for(let k=0;k<2;k++)rocks.push({x:r.x,y:r.y,
+          vx:(Math.random()-0.5)*60,vy:(Math.random()-0.5)*60,sz:r.sz-1,spin:Math.random()*6});}
+        rocks.splice(j,1);break;
+      }}
+    if(s.life<=0)astShots.splice(i,1);
+  }
+  if(rocks.length===0)initAsteroids();
+  // draw rocks
+  for(const r of rocks){r.x+=r.vx*dt;r.y+=r.vy*dt;wrap(r);
+    sprite(rock,{X:'#bbccdd'},r.x-r.sz*3,r.y-r.sz*3,r.sz);}
+  // draw ship (rotated) via temp transform on buffer
+  b.save();b.translate(ast.x,ast.y);b.rotate(ast.ang);
+  sprite(astShip,{X:'#eeeeff',f:'#ff8800'},-7,-6,2);b.restore();
+}
+
+// DONKEY KONG
+function sceneDK(dt){
+  dkAnim+=dt;
+  b.fillStyle="#000000";b.fillRect(0,0,VW,VH);
+  // 4 slanted girders (red)
+  const plats=[VH-16,VH-52,VH-88,VH-124];
+  b.fillStyle="#ee3333";
+  for(let i=0;i<plats.length;i++){
+    const y=plats[i];
+    for(let x=0;x<VW;x+=8){b.fillRect(x, y + (i%2? (x*0.03):(-(x-VW)*0.03)), VW+2>x?8:0,4);}
+  }
+  // ladders (cyan)
+  b.fillStyle="#33ddff";
+  const ladders=[{x:VW-40,a:0,b:1},{x:60,a:1,b:2},{x:VW-70,a:2,b:3}];
+  for(const l of ladders){b.fillRect(l.x,plats[l.b],2,plats[l.a]-plats[l.b]);
+    b.fillRect(l.x+6,plats[l.b],2,plats[l.a]-plats[l.b]);
+    for(let y=plats[l.b];y<plats[l.a];y+=6)b.fillRect(l.x,y,8,1);}
+  // DK top-left
+  sprite(dk,{X:'#8a4b1e',w:'#ffffff',b:'#000000',m:'#c86a2a'},14,plats[3]-40,3);
+  // princess top-right
+  b.fillStyle="#ff66cc";b.fillRect(VW-40,plats[3]-14,8,12);
+  b.fillStyle="#ffdd88";b.fillRect(VW-40,plats[3]-20,8,6);
+  // spawn barrels
+  if(Math.random()<0.02*(1+dt))dkBarrels.push({x:40,y:plats[3]-8,vx:40,plat:3,roll:0});
+  for(let i=dkBarrels.length-1;i>=0;i--){
+    const br=dkBarrels[i];br.roll+=dt*8;
+    const py=plats[br.plat];
+    br.x+=br.vx*dt;
+    br.y=py-8 + (br.plat%2? (br.x*0.03):(-(br.x-VW)*0.03));
+    // drop to next platform at edges
+    if(br.vx>0&&br.x>VW-12&&br.plat>0){br.plat--;br.vx*=-1;}
+    else if(br.vx<0&&br.x<12&&br.plat>0){br.plat--;br.vx*=-1;}
+    if(br.plat<=0&&(br.x<0||br.x>VW)){dkBarrels.splice(i,1);continue;}
+    sprite(barrel,{X:'#d98a3a',o:'#7a4510'},br.x-6,br.y-6,2);
+  }
+  // Mario hops along bottom & climbs
+  const m=dkMario;m.foot+=dt*8;
+  m.x+=m.dir*24*dt;
+  if(m.x>VW-60)m.dir=-1;if(m.x<20)m.dir=1;
+  const bob=Math.abs(Math.sin(m.foot))*2;
+  sprite(mario,{R:'#ff2200',s:'#ffcc99',S:'#ffe0bb',B:'#2244ff',Y:'#553311'},
+    m.x, VH-30-bob, 2, m.dir<0);
+}
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+
+  const f=dayFraction(now);
+  const hour=hoursOf(f);
+  const sky=skyAt(hour);
+
+  // scene cycling
+  sceneTimer+=dt;
+  if(sceneTimer>SCENE_LEN){sceneTimer=0;sceneIndex=(sceneIndex+1)%SCENES.length;initScene(sceneIndex);}
+
+  updateWeather(dt);
+
+  // ---- draw sky gradient ----
+  const grd=b.createLinearGradient(0,0,0,VH);
+  grd.addColorStop(0,rgb(sky.top));
+  grd.addColorStop(1,rgb(sky.bot));
+  b.fillStyle=grd;b.fillRect(0,0,VW,VH);
+
+  drawStars(sky.light);
+  drawMoonSun(hour,sky.light);
+
+  // ---- scene ----
+  const renderers=[sceneInvaders,scenePac,sceneGalaga,sceneFrogger,sceneAsteroids,sceneDK];
+  renderers[sceneIndex](dt);
+
+  // ---- scene crossfade (fade out last 1.2s, fade in first 1.2s) ----
+  const FADE=1.2;
+  let fade=0;
+  if(sceneTimer<FADE)fade=1-sceneTimer/FADE;
+  else if(sceneTimer>SCENE_LEN-FADE)fade=(sceneTimer-(SCENE_LEN-FADE))/FADE;
+  if(fade>0){b.fillStyle=`rgba(0,0,0,${fade})`;b.fillRect(0,0,VW,VH);}
+
+  // ---- night darkening overlay ----
+  const darkness = 1-sky.light;
+  if(darkness>0){
+    b.fillStyle=`rgba(6,4,30,${darkness*0.55})`;
+    b.fillRect(0,0,VW,VH);
+  }
+
+  // ---- weather on top ----
+  drawWeather(sky.light);
+
+  // ---- blit to screen ----
+  ctx.fillStyle="#000";ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(buf,offX,offY,scaleX,scaleY);
+
+  // ---- HUD ----
+  const hh=(hour|0).toString().padStart(2,'0');
+  const mm=(((hour%1)*60)|0).toString().padStart(2,'0');
+  const icons={CLEAR:"☀ CLEAR",RAIN:"☂ RAIN",SNOW:"❄ SNOW",STORM:"⚡ STORM",FOG:"≈ FOG"};
+  hud.textContent = `${SCENES[sceneIndex]}   ·   ${hh}:${mm}   ·   ${icons[weather]}`;
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* wake on any activity is unnecessary; it's a screensaver. Allow ESC-like exit via click to fullscreen */
+document.addEventListener('dblclick',()=>{
+  if(!document.fullscreenElement)document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();
+  else document.exitFullscreen&&document.exitFullscreen();
+});
+</script>
+</body>
+</html>
