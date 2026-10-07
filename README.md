@@ -2,6 +2,31 @@
 
 Self-contained single-file HTML toys — open any `.html` file directly in a browser.
 
+**[Explore the gallery →](https://johnoscott.github.io/fun/)**
+
+## GitHub Pages
+
+The gallery is published automatically on every push to `main` by
+[Publish artefact gallery](.github/workflows/pages.yml). It can also be run manually
+from the Actions tab. The repository's Pages publishing source is **GitHub Actions**.
+
+The build discovers HTML artefacts in `html-screensaver/` and `experiments/`, groups
+versions into project cards, and copies the artefacts and their supporting files.
+New HTML files appear automatically. Experiments with server templates or missing
+assets link to their source instead of offering a broken launch button.
+
+To preview locally with Node.js 22 or later:
+
+```sh
+node scripts/build-pages.mjs
+python3 -m http.server 8000 --directory _site
+```
+
+Open `http://localhost:8000`. Edit `site/index.html` to change the gallery design,
+or `scripts/build-pages.mjs` to change project names and descriptions. Generated
+`_site/` files are ignored by Git.
+
+
 ## `html-screensaver/`
 
 | Project | Files |
