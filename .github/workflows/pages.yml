@@ -27,7 +27,7 @@ jobs:
       - name: Build gallery and collect artefacts
         run: node scripts/build-pages.mjs
       - name: Upload site
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
           include-hidden-files: true
