@@ -6,6 +6,7 @@ Self-contained single-file HTML toys — open any `.html` file directly in a bro
 
 | Project | Files |
 |---|---|
+| aquarium | [aquarium-v1.html](html-screensaver/aquarium/aquarium-v1.html) ([changelog](html-screensaver/aquarium/CHANGELOG.md)) |
 | dna-screensaver | [dna-screensaver-v1.html](html-screensaver/dna-screensaver/dna-screensaver-v1.html), [dna-screensaver-v2.html](html-screensaver/dna-screensaver/dna-screensaver-v2.html) |
 | evolution-screensaver | [evolution-screensaver-zoom-track.html](html-screensaver/evolution-screensaver/evolution-screensaver-zoom-track.html), [evolution-screensaver.html](html-screensaver/evolution-screensaver/evolution-screensaver.html) |
 | lawnmower-screensaver | [lawnmower-screensaver.html](html-screensaver/lawnmower-screensaver/lawnmower-screensaver.html) |
