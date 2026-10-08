@@ -5,7 +5,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, '_site');
 const ignored = new Set(['.git', '.DS_Store', '.idea', 'node_modules', 'ai', '__pycache__']);
 const descriptions = {
- aquarium: 'A little ocean, a whole world. Cruise a cartoon reef through sun, moon, and underwater weather.',
+ aquarium: 'Schools of fish, grazing turtles, glowing caves, and a sleeping shipwreck. An ocean day in sixty seconds.',
  'dna-screensaver': 'A twisting double helix, rendered in glowing colour.',
  'evolution-screensaver': 'Watch a miniature ecosystem find its own way.',
  'lawnmower-screensaver': 'The quiet satisfaction of a perfectly cut lawn.',
@@ -74,7 +74,7 @@ for (const category of ['html-screensaver', 'experiments']) {
 groups.sort((a,b) => (a.slug === 'aquarium' ? -1 : b.slug === 'aquarium' ? 1 : (a.category === b.category ? 0 : a.category === 'Screensavers' ? -1 : 1) || a.name.localeCompare(b.name)));
 const template = await readFile(join(root, 'site/index.html'), 'utf8');
 const json = JSON.stringify(groups).replace(/</g, '\\u003c');
-await writeFile(join(out, 'index.html'), template.replace('/* ARTEFACT_DATA */[]', json));
+await writeFile(join(out, 'index.html'), template.replace('/* ARTEFACT_DATA */[]', json).replaceAll('__FEATURED_ARTEFACT__', groups.find(g => g.slug === 'aquarium').primary.path.split('/').map(encodeURIComponent).join('/')));
 await writeFile(join(out, '.nojekyll'), '');
 await writeFile(join(out, 'catalogue.json'), JSON.stringify(groups, null, 2));
 // Verify every generated launch/download target exists in the published tree.
