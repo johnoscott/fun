@@ -5,6 +5,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, '_site');
 const ignored = new Set(['.git', '.DS_Store', '.idea', 'node_modules', 'ai', '__pycache__']);
 const descriptions = {
+ 'paper-savanna': 'An origami flyover of the African savanna. Sun, moon and weather over a day in sixty seconds.',
  cmatrix: 'The terminal classic of falling green code, ported from its C source.',
  aquarium: 'Schools of fish, grazing turtles, glowing caves, and a sleeping shipwreck. An ocean day in sixty seconds.',
  'dna-screensaver': 'A twisting double helix, rendered in glowing colour.',
@@ -21,7 +22,7 @@ const descriptions = {
  'swiss-station-clock': 'A beautifully precise moment of stillness.',
  'vector-combat-screensaver': 'Neon vectors and an old-school arcade atmosphere.'
 };
-const names = { aquarium: 'Aquarium', cmatrix: 'cmatrix', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
+const names = { aquarium: 'Aquarium', cmatrix: 'cmatrix', 'paper-savanna': 'Paper Savanna', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
 const titleCase = s => s.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 async function walk(dir) {
  let files = [];
