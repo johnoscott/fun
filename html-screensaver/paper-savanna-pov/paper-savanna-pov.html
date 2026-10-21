@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paper Savanna POV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Familjen+Grotesk:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Full-bleed first-person canvas; a folded paper flight card floats bottom-left and hides when idle */
+:root {
+  --paper: #f6efe0;
+  --paper-fold: #e3d6bb;
+  --ink: #2d2418;
+  --ink-soft: #6b5a43;
+  --sun: #e8902f;
+  --moon: #7d8bb0;
+  --night: #0c1230;
+  --display: "Young Serif", Georgia, serif;
+  --body: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--night);
+  color: var(--ink);
+  font-family: var(--body);
+  overflow: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+body.idle, body.idle canvas { cursor: none; }
+
+#hud {
+  position: fixed;
+  left: max(20px, calc(env(safe-area-inset-left, 0px) + 16px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  width: min(340px, calc(100vw - 40px));
+  background:
+    linear-gradient(225deg, var(--paper-fold) 0 18px, transparent 18px),
+    var(--paper);
+  clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 0 100%);
+  padding: 16px 18px 14px;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  transition: opacity .8s ease, transform .8s ease;
+}
+body.idle #hud { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.eyebrow {
+  font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-soft); font-weight: 600;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.clock { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+#time { font-family: var(--display); font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
+#phase { font-size: 15px; font-weight: 600; }
+#wx { font-size: 13px; color: var(--ink-soft); margin-top: -4px; }
+
+.flight { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.flight div { display: grid; gap: 1px; background: var(--paper-fold); padding: 5px 7px; }
+.flight span { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+.flight b { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
+
+.strip { position: relative; height: 22px; }
+.strip .lane { position: absolute; left: 0; right: 0; height: 6px; background: var(--paper-fold); }
+.strip .lane.sun { top: 2px; } .strip .lane.moon { top: 12px; }
+.strip .band { position: absolute; top: 0; bottom: 0; }
+.strip .sun .band { background: var(--sun); }
+.strip .moon .band { background: var(--moon); }
+#now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); }
+.ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--ink-soft); margin-top: -4px; }
+
+dl { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin: 0; }
+dl div { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; border-top: 1px solid var(--paper-fold); padding-top: 4px; }
+dt { color: var(--ink-soft); }
+dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-soft); }
+button {
+  font: 600 11px var(--body); letter-spacing: .08em; text-transform: uppercase;
+  background: var(--ink); color: var(--paper); border: 0; padding: 6px 10px; cursor: pointer;
+}
+button:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="First-person flight over an origami savanna: one day passes every 60 seconds"></canvas>
+
+<section id="hud" aria-live="off">
+  <div class="eyebrow"><span>Maasai Mara · 1.5°S</span><span id="day">Day 1</span></div>
+  <div class="clock"><span id="time">05:00</span><span id="phase">Before dawn</span></div>
+  <div id="wx">Clear skies</div>
+  <div class="flight">
+    <div><span>Altitude</span><b id="alt">0 m</b></div>
+    <div><span>Speed</span><b id="spd">0 km/h</b></div>
+    <div><span>Bank</span><b id="bank">0°</b></div>
+  </div>
+  <div>
+    <div class="strip" aria-hidden="true">
+      <div class="lane sun" id="sunLane"></div>
+      <div class="lane moon" id="moonLane"></div>
+      <div id="now"></div>
+    </div>
+    <div class="ticks" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+  </div>
+  <dl>
+    <div><dt>Sunrise</dt><dd id="sr">06:22</dd></div>
+    <div><dt>Sunset</dt><dd id="ss">18:34</dd></div>
+    <div><dt>Moonrise</dt><dd id="mr">--:--</dd></div>
+    <div><dt>Moonset</dt><dd id="ms">--:--</dd></div>
+  </dl>
+  <div class="foot"><span id="moonName">Waxing gibbous</span><button id="fs" type="button">Full screen</button></div>
+</section>
+
+<script>
+(() => {
+const DAY_MS = 60000;            // one savanna day per minute
+const SUNRISE = 6 + 22/60, SUNSET = 18 + 34/60;
+const LUNAR = 29.53;
+const CELL = 16, VIEW = 520, OBJ_VIEW = 360, CLOUD_CELL = 130, CLOUD_VIEW = 820, WL = -15, NEAR = 1.2;
+const SPEED = 30;                // metres per second, about 108 km/h
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// preview params: ?t=<seconds into the day, 0-60>&w=<storm|clear|cumulus|showers>
+const qs = new URLSearchParams(location.search);
+const START_H = qs.has('t') ? clamp(+qs.get('t') || 0, 0, 60) / 60 * 24 : 4.6;
+const W_FORCE = { storm: 0, clear: 1, cumulus: 2, showers: 3 }[qs.get('w')];
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let W, H, F, DPR, R, skyGrid = [], noisePat;
+
+function hash(a, b) { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+const lerp = (a, b, t) => a + (b - a) * t;
+const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const mixC = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const hex = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+const rgb = (c, a = 1) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+const bell = (h, a, b, f) => sstep(a - f, a, h) * (1 - sstep(b, b + f, h));
+const fmt = h => { h = ((h % 24) + 24) % 24; const m = Math.round(h * 60) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+const norm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  F = H * .5 / Math.tan(31 * Math.PI / 180);
+  R = Math.hypot(W, H) * .6;
+  skyGrid = [];
+  const n = 6, step = R * 2 / n;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const x = -R + c * step, y = -R + r * step, j = () => (Math.random() - .5) * step * .2;
+    const a = [x, y], b = [x + step, y + j()], d = [x + j(), y + step], e = [x + step, y + step];
+    skyGrid.push([[a, b, d], Math.random()], [[b, e, d], Math.random()]);
+  }
+  const nc = document.createElement('canvas'); nc.width = nc.height = 180;
+  const g = nc.getContext('2d'), id = g.createImageData(180, 180);
+  for (let i = 0; i < id.data.length; i += 4) {
+    const v = Math.random() < .5 ? 255 : 0;
+    id.data[i] = id.data[i+1] = id.data[i+2] = v; id.data[i+3] = Math.random() * 14;
+  }
+  g.putImageData(id, 0, 0);
+  noisePat = ctx.createPattern(nc, 'repeat');
+}
+addEventListener('resize', resize); resize();
+
+// ---------- sky, light and weather (shared with Paper Savanna) ----------
+const SKY = [
+  [0,    '#0b1030', '#1a2350'],
+  [4.6,  '#0e1638', '#24305e'],
+  [5.6,  '#2b2f63', '#b5607e'],
+  [6.3,  '#4c5c9c', '#f2a35e'],
+  [7.4,  '#6fa3d8', '#f6d29a'],
+  [9.5,  '#4b98df', '#c3e3f1'],
+  [15.5, '#3f8fdc', '#bfe0ef'],
+  [17.6, '#5a7fc4', '#f4c27c'],
+  [18.5, '#4a3f7a', '#ee7a4c'],
+  [19.3, '#22285a', '#6a3d6a'],
+  [20.2, '#0f1538', '#1d2652'],
+  [24,   '#0b1030', '#1a2350'],
+].map(k => [k[0], hex(k[1]), hex(k[2])]);
+function skyAt(h) {
+  for (let i = 0; i < SKY.length - 1; i++) {
+    const a = SKY[i], b = SKY[i + 1];
+    if (h >= a[0] && h <= b[0]) { const t = sstep(0, 1, (h - a[0]) / (b[0] - a[0])); return [mixC(a[1], b[1], t), mixC(a[2], b[2], t)]; }
+  }
+  return [SKY[0][1], SKY[0][2]];
+}
+const WEATHER = [
+  { name: 'Afternoon thunderstorm', f: h => ({ cover: .12 + .78 * bell(h, 12, 16.8, 2), storm: bell(h, 13.4, 16.4, 1), rain: bell(h, 14, 16.2, .6) }) },
+  { name: 'Clear skies',            f: h => ({ cover: .12 + .1 * bell(h, 10, 16, 2), storm: 0, rain: 0 }) },
+  { name: 'Scattered cumulus',      f: h => ({ cover: .12 + .45 * bell(h, 10, 17, 2.5), storm: 0, rain: 0 }) },
+  { name: 'Grey with showers',      f: h => ({ cover: .12 + .62 * bell(h, 7, 17.5, 2), storm: .4 * bell(h, 8, 16.5, 1), rain: .7 * (bell(h, 9, 10.6, .5) + bell(h, 14.6, 16, .5)) }) },
+];
+function moonInfo(day) {
+  const phase = (0.36 + day / LUNAR) % 1;
+  const rise = (SUNRISE + phase * 24.84) % 24;
+  return { phase, rise, set: (rise + 12.4) % 24, illum: (1 - Math.cos(phase * Math.PI * 2)) / 2 };
+}
+function moonName(p) {
+  if (p < .03 || p > .97) return 'New moon';
+  if (p < .22) return 'Waxing crescent'; if (p < .28) return 'First quarter';
+  if (p < .47) return 'Waxing gibbous';  if (p < .53) return 'Full moon';
+  if (p < .72) return 'Waning gibbous';  if (p < .78) return 'Last quarter';
+  return 'Waning crescent';
+}
+function sunState(h) {
+  if (h >= SUNRISE && h <= SUNSET) { const p = (h - SUNRISE) / (SUNSET - SUNRISE); return { p, alt: Math.sin(Math.PI * p) }; }
+  const night = 24 - (SUNSET - SUNRISE), q = ((h - SUNSET + 24) % 24) / night;
+  return { p: q < .5 ? 1 + q * .3 : -(1 - q) * .3, alt: -Math.sin(Math.PI * q) };
+}
+function moonState(h, m) {
+  const q = ((h - m.rise + 24) % 24) / 12.4;
+  if (q <= 1) return { p: q, alt: Math.sin(Math.PI * q) };
+  const r = (q - 1) / ((24 - 12.4) / 12.4);
+  return { p: r < .5 ? 1 + r * .3 : -(1 - r) * .3, alt: -Math.sin(Math.PI * r) };
+}
+// sun and moon rise ahead-left of the flight line and set ahead-right
+const skyDir = (st, spread) => {
+  const az = lerp(-spread, spread, st.p), el = st.alt * .38;
+  return [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
+};
+
+// ---------- world ----------
+const hs = (x, z) => 14 * Math.sin(x * .0105 + 1.3) * Math.sin(z * .0087) + 7 * Math.sin(x * .026 + z * .018) + 4 * Math.sin(z * .043 - x * .012 + 2);
+const hv = (i, j) => hs(i * CELL, j * CELL) + (hash(i, j) - .5) * 3.2;
+function groundAt(x, z) {
+  const i = Math.floor(x / CELL), j = Math.floor(z / CELL), u = x / CELL - i, v = z / CELL - j;
+  const h = lerp(lerp(hv(i, j), hv(i + 1, j), u), lerp(hv(i, j + 1), hv(i + 1, j + 1), u), v);
+  return Math.max(h, WL);
+}
+const pathX = z => 110 * Math.sin(z / 650) + 45 * Math.sin(z / 240 + 1);
+
+const C = {
+  gold: hex('#d4ac5e'), green: hex('#8f9a48'), burnt: hex('#a8763c'), sand: hex('#dcc48c'), water: hex('#4f7f92'),
+  trunk: hex('#5a3a22'), leaf: hex('#5f7d3a'), giraffe: hex('#d99a42'), girLeg: hex('#ead2a2'),
+  ele: hex('#968f8a'), tusk: hex('#f2ede0'), rock: hex('#958676'), mound: hex('#b8704a'),
+  crane: hex('#f3efe6'), craneWing: hex('#d9d2c4'), cloud: hex('#fcf9f3'), storm: hex('#565c6c'),
+  mountain: hex('#7d84a6'), snow: hex('#f4f2ee'),
+};
+
+// ---------- camera + per-frame state ----------
+let cam = { x: 0, y: 40, z: 0 }, yaw = 0, pitch = -.16, roll = 0;
+let cY = 1, sY = 0, cP = 1, sP = 0;
+let tint = [1, 1, 1], haze = [0, 0, 0], light = [0, 1, 0], kd = .6, amb = .5;
+let polys = [];
+
+function toCam(x, y, z) {
+  const dx = x - cam.x, dy = y - cam.y, dz = z - cam.z;
+  const x1 = dx * cY - dz * sY, z1 = dx * sY + dz * cY;
+  return [x1, dy * cP - z1 * sP, z1 * cP + dy * sP];
+}
+function dirToScreen(d) {
+  const x1 = d[0] * cY - d[2] * sY, z1 = d[0] * sY + d[2] * cY;
+  const y2 = d[1] * cP - z1 * sP, z2 = z1 * cP + d[1] * sP;
+  return z2 > .02 ? [x1 / z2 * F, -y2 / z2 * F] : null;
+}
+const tanH = () => (W / 2) / F;
+
+// clip a camera-space polygon against the near plane, project, and queue it for the painter
+function queue(cs, fill, bias = 0, alpha = 1, stroke = false) {
+  let inFront = 0;
+  for (const p of cs) if (p[2] > NEAR) inFront++;
+  if (!inFront) return;
+  let pts = cs;
+  if (inFront < cs.length) {
+    pts = [];
+    for (let k = 0; k < cs.length; k++) {
+      const a = cs[k], b = cs[(k + 1) % cs.length], ai = a[2] > NEAR, bi = b[2] > NEAR;
+      if (ai) pts.push(a);
+      if (ai !== bi) { const t = (NEAR - a[2]) / (b[2] - a[2]); pts.push([lerp(a[0], b[0], t), lerp(a[1], b[1], t), NEAR]); }
+    }
+  }
+  const scr = [], lim = R * 3;
+  let d = 0, left = 0, right = 0, below = 0;
+  for (const p of pts) {
+    const sx = p[0] / p[2] * F, sy = -p[1] / p[2] * F;
+    scr.push([clamp(sx, -lim, lim), clamp(sy, -lim, lim)]);
+    if (sx < -R) left++; if (sx > R) right++; if (sy > R) below++;
+    d += p[2];
+  }
+  if (left === scr.length || right === scr.length || below === scr.length) return;
+  polys.push({ p: scr, c: fill, d: d / pts.length + bias, a: alpha, s: stroke });
+}
+
+// flat-shade a world triangle as two-sided paper, fogged toward the horizon
+function face(a, b, c, base, jit = 0, alpha = 1, fogK = 1) {
+  const ca = toCam(...a), cb = toCam(...b), cc = toCam(...c);
+  const z = (ca[2] + cb[2] + cc[2]) / 3;
+  if (z < -4) return;
+  let n = norm(cross(sub(b, a), sub(c, a)));
+  const mid = [(a[0] + b[0] + c[0]) / 3 - cam.x, (a[1] + b[1] + c[1]) / 3 - cam.y, (a[2] + b[2] + c[2]) / 3 - cam.z];
+  if (n[0] * mid[0] + n[1] * mid[1] + n[2] * mid[2] > 0) n = [-n[0], -n[1], -n[2]];
+  const dif = Math.max(0, n[0] * light[0] + n[1] * light[1] + n[2] * light[2]);
+  const k = amb + kd * dif + jit;
+  const fog = Math.pow(clamp((z - 70) / (VIEW - 70), 0, 1), 1.3) * .95 * fogK;
+  const col = mixC([base[0] * tint[0] * k, base[1] * tint[1] * k, base[2] * tint[2] * k], haze, fog);
+  queue([ca, cb, cc], rgb(col), 0, alpha);
+}
+
+// local-space builders: X maps a local point to world
+function xform(px, py, pz, rot, s) {
+  const c = Math.cos(rot), si = Math.sin(rot);
+  return p => [px + (p[0] * c + p[2] * si) * s, py + p[1] * s, pz + (-p[0] * si + p[2] * c) * s];
+}
+function beam(X, p0, p1, w, base, h = w, caps = false) {
+  const d = norm(sub(p1, p0)), ref = Math.abs(d[1]) < .9 ? [0, 1, 0] : [1, 0, 0];
+  const u = norm(cross(d, ref)), v = cross(u, d);
+  const corner = (p, su, sv) => [p[0] + u[0] * w / 2 * su + v[0] * h / 2 * sv, p[1] + u[1] * w / 2 * su + v[1] * h / 2 * sv, p[2] + u[2] * w / 2 * su + v[2] * h / 2 * sv];
+  const sq = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+  const A = sq.map(s => X(corner(p0, ...s))), B = sq.map(s => X(corner(p1, ...s)));
+  for (let k = 0; k < 4; k++) {
+    const n = (k + 1) % 4, j = (k % 2) * -.06;
+    face(A[k], A[n], B[n], base, j); face(A[k], B[n], B[k], base, j);
+  }
+  if (caps) { face(B[0], B[1], B[2], base); face(B[0], B[2], B[3], base); }
+}
+
+function acacia(X, seed, far) {
+  const r = k => hash(seed, k);
+  const ht = 5.5 + r(1) * 2.5, rad = 4 + r(2) * 2, lean = (r(3) - .5) * 1.4;
+  beam(X, [0, -.3, 0], [lean * .6, ht * .62, 0], .5, C.trunk);
+  if (!far) {
+    beam(X, [lean * .6, ht * .6, 0], [lean + rad * .45, ht - .3, rad * .15], .3, C.trunk);
+    beam(X, [lean * .6, ht * .6, 0], [lean - rad * .4, ht - .2, -rad * .2], .3, C.trunk);
+  }
+  const n = 6, top = [], bot = [], rot0 = r(4) * 6;
+  for (let k = 0; k < n; k++) {
+    const a = rot0 + k / n * Math.PI * 2, rr = rad * (.8 + .35 * r(10 + k));
+    bot.push(X([lean + Math.cos(a) * rr, ht + (r(20 + k) - .5) * .5, Math.sin(a) * rr]));
+    top.push(X([lean + Math.cos(a) * rr * .72, ht + 1.1 + (r(30 + k) - .5) * .4, Math.sin(a) * rr * .72]));
+  }
+  const apex = X([lean, ht + 1.45, 0]), under = X([lean, ht - .1, 0]);
+  for (let k = 0; k < n; k++) {
+    const m = (k + 1) % n, j = (k % 2) * .05;
+    face(top[k], top[m], apex, C.leaf, j);
+    face(bot[k], bot[m], top[m], C.leaf, -.06);
+    face(bot[k], top[m], top[k], C.leaf, -.02);
+    if (!far) face(bot[k], bot[m], under, C.leaf, -.22);
+  }
+}
+
+function giraffe(X, ph, seed) {
+  const bob = Math.sin(ph * .5 + seed) * .25;
+  for (const [hx, hz, o] of [[.32, .85, 0], [-.32, .85, Math.PI], [.32, -.85, Math.PI], [-.32, -.85, 0]]) {
+    const sw = Math.sin(ph + o) * .35;
+    beam(X, [hx, 2.5, hz], [hx, 0, hz + sw], .2, C.girLeg);
+  }
+  beam(X, [0, 2.7, -1.1], [0, 3.0, 1.1], .9, C.giraffe, .85, true);
+  beam(X, [0, 3.0, .85], [0, 5.1 + bob, 1.7], .34, C.giraffe);
+  beam(X, [0, 5.05 + bob, 1.55], [0, 4.85 + bob, 2.35], .3, C.giraffe, .32, true);
+  beam(X, [0, 2.9, -1.1], [0, 2.0, -1.4], .08, C.trunk);
+}
+
+function elephant(X, ph, seed) {
+  const sway = Math.sin(ph * .6 + seed);
+  for (const [hx, hz, o] of [[.65, 1, 0], [-.65, 1, Math.PI], [.65, -1, Math.PI], [-.65, -1, 0]]) {
+    const sw = Math.sin(ph + o) * .25;
+    beam(X, [hx, 1.8, hz], [hx, 0, hz + sw], .62, C.ele);
+  }
+  beam(X, [0, 2.3, -1.5], [0, 2.45, 1.3], 2.0, C.ele, 1.8, true);
+  beam(X, [0, 2.75, 1.35], [0, 2.45, 2.2], 1.3, C.ele, 1.3, true);
+  beam(X, [0, 2.1, 2.3], [0, 1.2, 2.65 + sway * .15], .34, C.ele);
+  beam(X, [0, 1.2, 2.65 + sway * .15], [0, .45, 2.55 + sway * .35], .26, C.ele);
+  for (const s of [1, -1]) {
+    const e = [[s * .6, 3.15, 1.6], [s * 1.55, 2.6, 1.25], [s * 1.3, 1.45, 1.35], [s * .62, 1.85, 1.75]].map(X);
+    face(e[0], e[1], e[2], C.ele, -.08); face(e[0], e[2], e[3], C.ele, -.14);
+    beam(X, [s * .32, 1.95, 2.3], [s * .3, 1.55, 2.85], .12, C.tusk);
+  }
+}
+
+function kopje(px, pz, seed) {
+  const n = 3 + Math.floor(hash(seed, 1) * 3);
+  for (let b = 0; b < n; b++) {
+    const ox = px + (hash(seed, b + 10) - .5) * 12, oz = pz + (hash(seed, b + 20) - .5) * 12, s = 2.5 + hash(seed, b + 30) * 4;
+    const gy = groundAt(ox, oz), rot = hash(seed, b + 40) * 6;
+    const X = xform(ox, gy, oz, rot, s);
+    const top = X([(hash(seed, b + 50) - .5) * .4, 1.3, 0]), ring = [];
+    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; ring.push(X([Math.cos(a) * (.8 + hash(seed, b * 9 + k) * .4), .45 + hash(seed, b * 7 + k) * .3, Math.sin(a)])); }
+    const foot = ring.map((p, k) => X([Math.cos(k / 5 * Math.PI * 2) * 1.05, -.2, Math.sin(k / 5 * Math.PI * 2) * 1.05]));
+    for (let k = 0; k < 5; k++) {
+      const m = (k + 1) % 5;
+      face(ring[k], ring[m], top, C.rock, (k % 2) * .05);
+      face(foot[k], foot[m], ring[m], C.rock, -.06);
+      face(foot[k], ring[m], ring[k], C.rock, -.1);
+    }
+  }
+}
+
+function mound(X) {
+  const tip = X([0, 2.6, 0]), ring = [];
+  for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; ring.push(X([Math.cos(a), -.2, Math.sin(a)])); }
+  for (let k = 0; k < 5; k++) face(ring[k], ring[(k + 1) % 5], tip, C.mound, (k % 2) * .06);
+}
+
+function drawTerrain(now, objects) {
+  const fx = sY, fz = cY, rx = cY, rz = -sY, spread = VIEW * tanH() * 1.35 + CELL * 3;
+  const xs = [cam.x - rx * CELL * 3, cam.x + fx * VIEW + rx * spread, cam.x + fx * VIEW - rx * spread];
+  const zs = [cam.z - rz * CELL * 3 - fz * CELL * 2, cam.z + fz * VIEW + rz * spread, cam.z + fz * VIEW - rz * spread];
+  const i0 = Math.floor(Math.min(...xs) / CELL) - 1, i1 = Math.ceil(Math.max(...xs) / CELL) + 1;
+  const j0 = Math.floor(Math.min(...zs) / CELL) - 1, j1 = Math.ceil(Math.max(...zs) / CELL) + 1;
+  const ni = i1 - i0 + 2, hts = new Float32Array(ni * (j1 - j0 + 2));
+  for (let j = j0; j <= j1 + 1; j++) for (let i = i0; i <= i1 + 1; i++) hts[(j - j0) * ni + (i - i0)] = hv(i, j);
+  const hAt = (i, j) => hts[(j - j0) * ni + (i - i0)];
+  const shimmer = Math.floor(now / 350), th = tanH() * 1.45;
+  const watCol = mixC(C.water, haze, .35);
+
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const x0 = i * CELL, z0 = j * CELL, mx = x0 + CELL / 2 - cam.x, mz = z0 + CELL / 2 - cam.z;
+    const cz = mx * fx + mz * fz, cx = mx * rx + mz * rz;
+    if (cz < -CELL * 2 || cz > VIEW || Math.abs(cx) > Math.max(cz, 0) * th + CELL * 3) continue;
+    const raw = [hAt(i, j), hAt(i + 1, j), hAt(i + 1, j + 1), hAt(i, j + 1)];
+    const P = [[x0, raw[0], z0], [x0 + CELL, raw[1], z0], [x0 + CELL, raw[2], z0 + CELL], [x0, raw[3], z0 + CELL]].map(p => [p[0], Math.max(p[1], WL), p[2]]);
+    const tris = hash(i, j + 77) < .5 ? [[0, 1, 2], [0, 2, 3]] : [[0, 1, 3], [1, 2, 3]];
+    for (let t = 0; t < 2; t++) {
+      const idx = tris[t], wet = idx.filter(k => raw[k] < WL).length;
+      const A = P[idx[0]], B = P[idx[1]], Cc = P[idx[2]];
+      const ca = toCam(...A), cb = toCam(...B), cc = toCam(...Cc);
+      const z = (ca[2] + cb[2] + cc[2]) / 3, fog = Math.pow(clamp((z - 70) / (VIEW - 70), 0, 1), 1.3) * .95;
+      let col;
+      if (wet === 3) {
+        const k = .86 + hash(i * 2 + t, j + shimmer) * .14;
+        col = mixC(watCol.map((v, q) => v * tint[q] * k), haze, fog * .8);
+      } else {
+        let base;
+        if (wet) base = C.sand;
+        else {
+          const patch = Math.sin(x0 * .006 + z0 * .002) * Math.cos(z0 * .005 - x0 * .003) + (hash(i, j) - .5) * .5;
+          base = patch > .42 ? C.green : patch < -.5 ? C.burnt : C.gold;
+        }
+        const n = norm(cross(sub(Cc, A), sub(B, A)));
+        const up = n[1] < 0 ? [-n[0], -n[1], -n[2]] : n;
+        const k = amb + kd * Math.max(0, up[0] * light[0] + up[1] * light[1] + up[2] * light[2]) + (hash(i + t * 13, j) - .5) * .06;
+        col = mixC([base[0] * tint[0] * k, base[1] * tint[1] * k, base[2] * tint[2] * k], haze, fog);
+      }
+      queue([ca, cb, cc], rgb(col), CELL * .7, 1, true);
+    }
+
+    if (!objects || cz > OBJ_VIEW || cz < -CELL) continue;
+    if (Math.min(...raw) < WL + 1) continue;
+    const far = cz > 200;
+    if (hash(i, j + 500) < .075) {
+      const px = x0 + CELL * (.2 + .6 * hash(i, j + 501)), pz = z0 + CELL * (.2 + .6 * hash(i, j + 502));
+      acacia(xform(px, groundAt(px, pz), pz, hash(i, j + 503) * 6, .9 + hash(i, j + 504) * .4), i * 917 + j, far);
+    }
+    if (hash(i + 300, j) < .01) kopje(x0 + CELL / 2, z0 + CELL / 2, i * 31 + j);
+    if (hash(i + 700, j) < .025) {
+      const px = x0 + CELL * hash(i + 701, j), pz = z0 + CELL * hash(i + 702, j);
+      mound(xform(px, groundAt(px, pz), pz, hash(i + 703, j) * 6, .8 + hash(i + 704, j) * .6));
+    }
+    if (hash(i + 900, j) < .012) {
+      const kind = hash(i + 901, j) < .5 ? giraffe : elephant, n = 2 + Math.floor(hash(i + 902, j) * 3);
+      const dir = hash(i + 903, j) * Math.PI * 2, walk = ((now / 1000 * 1.3 + hash(i + 904, j) * 20) % 24) - 12;
+      for (let a = 0; a < n; a++) {
+        const ox = (hash(i + 910 + a, j) - .5) * 14, oz = (hash(i + 920 + a, j) - .5) * 14 + walk;
+        const px = x0 + CELL / 2 + ox * Math.cos(dir) + oz * Math.sin(dir), pz = z0 + CELL / 2 - ox * Math.sin(dir) + oz * Math.cos(dir);
+        const ph = now / (kind === giraffe ? 260 : 330) + a * 1.7;
+        kind(xform(px, groundAt(px, pz), pz, dir, 1 - a * .08), ph, a);
+      }
+    }
+  }
+}
+
+function drawClouds(wx, now) {
+  const fx = sY, fz = cY, drift = now * .004;
+  const i0 = Math.floor((cam.x - CLOUD_VIEW) / CLOUD_CELL), i1 = Math.ceil((cam.x + CLOUD_VIEW) / CLOUD_CELL);
+  const j0 = Math.floor((cam.z - drift - CLOUD_CELL) / CLOUD_CELL), j1 = Math.ceil((cam.z - drift + CLOUD_VIEW) / CLOUD_CELL);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const a = clamp((wx.cover - hash(i + 40, j)) * 6, 0, 1);
+    if (a <= 0) continue;
+    const cx = (i + hash(i, j + 41)) * CLOUD_CELL, cz = (j + hash(i, j + 42)) * CLOUD_CELL + drift;
+    const dz = (cx - cam.x) * fx + (cz - cam.z) * fz;
+    if (dz < -60 || dz > CLOUD_VIEW) continue;
+    const st = wx.storm * (.6 + .4 * hash(i, j + 43)), base = mixC(C.cloud, C.storm, st);
+    const cy = 150 + hash(i, j + 44) * 45 - st * 15, n = 3 + Math.floor(hash(i, j + 45) * 3);
+    for (let p = 0; p < n; p++) {
+      const mid = 1 - Math.abs(p - (n - 1) / 2) / n;
+      const r = (16 + 16 * hash(i * 7 + p, j) + 14 * mid) * (1 + st * .6 * mid);
+      const px = cx + (p - (n - 1) / 2) * 26, pz = cz + (hash(i + p, j + 46) - .5) * 24;
+      const ring = [], rot = hash(i + p, j + 47) * 3;
+      for (let k = 0; k < 6; k++) { const an = rot + k / 6 * Math.PI * 2; ring.push([px + Math.cos(an) * r, cy, pz + Math.sin(an) * r * .8]); }
+      const lift = 1 + st * .7, upper = ring.map(q => [px + (q[0] - px) * .62, cy + r * .5 * lift, pz + (q[2] - pz) * .62]);
+      const top = [px, cy + r * .82 * lift, pz], bot = [px, cy - r * .2, pz];
+      for (let k = 0; k < 6; k++) {
+        const m = (k + 1) % 6;
+        face(upper[k], upper[m], top, base, .1 + (k % 2) * .04, a, .55);
+        face(ring[k], ring[m], upper[m], base, (k % 2) * .05, a, .55);
+        face(ring[k], upper[m], upper[k], base, .02, a, .55);
+        face(ring[k], ring[m], bot, base, -.14, a, .55);
+      }
+    }
+  }
+}
+
+function drawCranes(h, now) {
+  for (const [start, len] of [[6.7, 1.8], [17.1, 1.7]]) {
+    const p = (h - start) / len;
+    if (p < 0 || p > 1) continue;
+    const ahead = lerp(110, -25, p), fx = sY, fz = cY, rx = cY, rz = -sY;
+    const bx = cam.x + fx * ahead + rx * 9, bz = cam.z + fz * ahead + rz * 9, by = cam.y + 7 + Math.sin(p * 5) * 2;
+    for (let k = 0; k < 9; k++) {
+      const row = Math.ceil(k / 2), side = k % 2 ? 1 : -1;
+      const X = xform(bx + rx * side * row * 3.4 - fx * row * 4, by + Math.sin(now / 900 + k) * .4, bz + rz * side * row * 3.4 - fz * row * 4, yaw, 1);
+      const flap = Math.sin(now / 160 + k * .8);
+      beam(X, [0, 0, -1.2], [0, .1, 1.3], .3, C.crane);
+      beam(X, [0, .1, 1.2], [0, .7, 1.8], .12, C.crane);
+      for (const s of [1, -1]) face(X([s * .15, .1, .6]), X([s * .15, .1, -.5]), X([s * 3, flap * 1.6, -.2]), C.craneWing, s > 0 ? .05 : -.05);
+    }
+  }
+}
+
+// lightning bolt lives in the world so hills can hide its foot
+function drawBolt(b) {
+  const fx = sY, fz = cY, rx = cY, rz = -sY, dist = 240 + hash(b.key, 6) * 160, lat = (hash(b.key, 7) - .5) * 360;
+  let x = cam.x + fx * dist + rx * lat, z = cam.z + fz * dist + rz * lat;
+  const ground = groundAt(x, z), steps = 9, pts = [];
+  for (let s = 0; s <= steps; s++) {
+    pts.push(toCam(x, lerp(150, ground, s / steps), z));
+    x += (hash(b.key, s + 10) - .5) * 18; z += (hash(b.key, s + 20) - .5) * 18;
+  }
+  for (let s = 0; s < steps; s++) {
+    const a = pts[s], q = pts[s + 1], w = 2.2 - s * .15;
+    queue([a, q, [a[0] + w, a[1], a[2]]], '#fff7c4', 0, Math.min(1, b.a * 1.6));
+    queue([a, q, [q[0] - w * .8, q[1], q[2]]], '#f1d66b', 0, Math.min(1, b.a * 1.6));
+  }
+}
+function lightning(storm, now) {
+  const win = 520, key = Math.floor(now / win), into = now % win;
+  if (storm < .3 || hash(key, 5) > storm * .32 || into > 260) return null;
+  return { a: 1 - into / 260, key };
+}
+
+// ---------- sky pieces (screen space, around the rotated horizon) ----------
+function drawSun(sun, now, wx) {
+  if (sun.alt < -.12) return;
+  const s = dirToScreen(skyDir(sun, .5));
+  if (!s) return;
+  const [x, y] = s, low = 1 - sstep(.05, .45, sun.alt), r = H * (.042 + low * .014);
+  const col = mixC(hex('#ffd45a'), hex('#ff6a35'), low), dim = 1 - wx.cover * .55;
+  const g = ctx.createRadialGradient(x, y, r * .5, x, y, r * 7);
+  g.addColorStop(0, rgb(col, .5 * dim)); g.addColorStop(1, rgb(col, 0));
+  ctx.fillStyle = g; ctx.fillRect(x - r * 7, y - r * 7, r * 14, r * 14);
+  ctx.globalAlpha = dim;
+  const rot = now / 12000;
+  for (let k = 0; k < 12; k++) {
+    const a = rot + k * Math.PI / 6, w = .12, len = r * (1.55 + (k % 2) * .25);
+    poly2([[x + Math.cos(a - w) * r * 1.12, y + Math.sin(a - w) * r * 1.12], [x + Math.cos(a) * len, y + Math.sin(a) * len], [x + Math.cos(a + w) * r * 1.12, y + Math.sin(a + w) * r * 1.12]], rgb(mixC(col, [255, 255, 255], k % 2 ? 0 : .25), .85));
+  }
+  for (let k = 0; k < 10; k++) {
+    const a0 = k * Math.PI / 5 - Math.PI / 2, a1 = a0 + Math.PI / 5;
+    poly2([[x, y], [x + Math.cos(a0) * r, y + Math.sin(a0) * r], [x + Math.cos(a1) * r, y + Math.sin(a1) * r]], rgb(mixC(col, k % 2 ? hex('#e8702a') : [255, 245, 210], .22)));
+  }
+  ctx.globalAlpha = 1;
+}
+function drawMoon(ms, m, night, wx) {
+  if (ms.alt < -.12) return;
+  const s = dirToScreen(skyDir(ms, .45));
+  if (!s) return;
+  const [x, y] = s, r = H * .028, a = (.35 + .65 * night) * (1 - wx.cover * .6);
+  ctx.globalAlpha = a;
+  const g = ctx.createRadialGradient(x, y, r, x, y, r * 5);
+  g.addColorStop(0, `rgba(210,220,255,${.22 * night * m.illum})`); g.addColorStop(1, 'rgba(210,220,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(x - r * 5, y - r * 5, r * 10, r * 10);
+  for (let k = 0; k < 10; k++) {
+    const a0 = k * Math.PI / 5, a1 = a0 + Math.PI / 5;
+    poly2([[x, y], [x + Math.cos(a0) * r, y + Math.sin(a0) * r], [x + Math.cos(a1) * r, y + Math.sin(a1) * r]], rgb(k % 2 ? [44, 52, 86] : [52, 60, 96], .55));
+  }
+  const side = m.phase < .5 ? 1 : -1, k2 = Math.cos(m.phase * Math.PI * 2), steps = 8, limb = [], term = [];
+  for (let st = 0; st <= steps; st++) {
+    const t = -Math.PI / 2 + Math.PI * st / steps;
+    limb.push([x + side * r * Math.cos(t), y + r * Math.sin(t)]);
+    term.push([x + side * r * Math.cos(t) * k2, y + r * Math.sin(t)]);
+  }
+  poly2([...limb.slice(0, 5), ...term.slice(0, 5).reverse()], rgb([244, 240, 226]));
+  poly2([...limb.slice(4), ...term.slice(4).reverse()], rgb([214, 214, 210]));
+  ctx.globalAlpha = 1;
+}
+const STARS = Array.from({ length: 220 }, (_, i) => [hash(i, 1) * Math.PI * 2, .04 + Math.pow(hash(i, 2), 1.3) * 1.1, .5 + hash(i, 3) * 1.6, hash(i, 4) * 6]);
+function drawStars(night, cover, now, h) {
+  if (night < .02) return;
+  const turn = h / 24 * Math.PI * 2;   // the sky wheels once a day
+  for (const [az, el, sz, ph] of STARS) {
+    const s = dirToScreen([Math.sin(az + turn) * Math.cos(el), Math.sin(el), Math.cos(az + turn) * Math.cos(el)]);
+    if (!s) continue;
+    const r = sz * H / 380, a = night * (1 - cover * .9) * (.55 + .45 * Math.sin(now / 600 + ph)), q = r * .28, [x, y] = s;
+    poly2([[x, y - r], [x + q, y - q], [x + r, y], [x + q, y + q], [x, y + r], [x - q, y + q], [x - r, y], [x - q, y - q]], `rgba(255,248,225,${a})`);
+  }
+}
+// distant ranges at infinity, with a flat-topped snow peak off the right of the flight line
+function drawRanges() {
+  const step = .045, k0 = Math.floor((yaw - 1.4) / step), k1 = Math.ceil((yaw + 1.4) / step);
+  const el = k => {
+    const az = k * step, kili = Math.max(0, 1 - Math.abs(az - .5) / .2);
+    const peak = q => .014 + .028 * Math.pow(hash(q, 3), 1.5) * (.4 + .6 * hash(Math.floor(q / 5), 4));
+    const ridge = k % 2 ? .7 * Math.min(peak(k - 1), peak(k + 1)) : peak(k);
+    return Math.max(ridge, Math.min(.068, kili * .09) + (k % 2 ? 0 : .004));
+  };
+  const dir = (az, e) => [Math.sin(az) * Math.cos(e), Math.sin(e), Math.cos(az) * Math.cos(e)];
+  const mcol = mixC(C.mountain.map((v, q) => v * tint[q] * (.65 + .35 * kd / .62)), haze, .45), scol = mixC(C.snow.map((v, q) => v * tint[q] * (.55 + .45 * kd / .62)), haze, .4);
+  for (let k = k0; k < k1; k++) {
+    const a = k * step, b = a + step, ea = el(k), eb = el(k + 1);
+    const ta = dirToScreen(dir(a, ea)), tb = dirToScreen(dir(b, eb)), ba = dirToScreen(dir(a, -.07)), bb = dirToScreen(dir(b, -.07));
+    if (!ta || !tb || !ba || !bb) continue;
+    const lit = Math.sign(eb - ea) * Math.sign(light[0] || 1) * .35 * (kd / .62);
+    poly2([ta, tb, bb, ba], rgb(mixC(mcol, [0, 0, 0], .08)));
+    const fold = dirToScreen(dir(ea > eb ? a : b, Math.min(ea, eb) - .008));   // crease running down from the higher point
+    if (fold) poly2([ta, tb, fold], rgb(mixC(mcol, [0, 0, 0], clamp(.08 - lit * .4, -.1, .25))));
+    if (ea > .055 && eb > .055) {
+      const sa = dirToScreen(dir(a, Math.max(.055, ea - .012))), sb = dirToScreen(dir(b, Math.max(.055, eb - .012)));
+      if (sa && sb) poly2([ta, tb, sb, sa], rgb(mixC(scol, [0, 0, 0], clamp(.05 - lit * .3, 0, .2))));
+    }
+  }
+}
+
+function poly2(pts, fill) {
+  ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+}
+
+// rain lives in camera space and streams past toward the viewer
+const RAIN = Array.from({ length: 420 }, () => [(Math.random() - .5) * 120, Math.random() * 70 - 30, 2 + Math.random() * 110]);
+function drawRain(rain, dt) {
+  const n = Math.floor(clamp(rain, 0, 1) * RAIN.length);
+  if (!n) return;
+  ctx.strokeStyle = rgb(mixC([205, 218, 238], tint.map(v => v * 200), .3), .5);
+  ctx.lineWidth = Math.max(1, H / 700);
+  ctx.beginPath();
+  for (let k = 0; k < RAIN.length; k++) {
+    const d = RAIN[k];
+    d[2] -= SPEED * dt; d[1] -= 26 * dt;
+    if (d[2] < 1.5 || d[1] < -30) { d[0] = (Math.random() - .5) * 120; d[1] = 40 * Math.random(); d[2] = 30 + Math.random() * 80; }
+    if (k >= n) continue;
+    const t = [d[0], d[1] + 1.2, d[2] + 1.6];
+    ctx.moveTo(d[0] / d[2] * F, -d[1] / d[2] * F); ctx.lineTo(t[0] / t[2] * F, -t[1] / t[2] * F);
+  }
+  ctx.stroke();
+}
+
+// ---------- HUD ----------
+const $ = id => document.getElementById(id);
+let hudDay = -1, lastLabel = '', hudTick = 0;
+function lane(el, a, b) {
+  el.innerHTML = '';
+  const seg = (s, e) => { const d = document.createElement('div'); d.className = 'band'; d.style.left = (s / 24 * 100) + '%'; d.style.width = ((e - s) / 24 * 100) + '%'; el.appendChild(d); };
+  if (b > a) seg(a, b); else { seg(a, 24); seg(0, b); }
+}
+function phaseLabel(h, m, wx) {
+  const near = (t, d = .35) => Math.abs(((h - t + 36) % 24) - 12) < d;
+  if (near(SUNRISE)) return 'Sunrise';
+  if (near(SUNSET)) return 'Sunset';
+  if (near(m.rise)) return 'Moonrise';
+  if (near(m.set)) return 'Moonset';
+  if (wx.storm > .55) return 'Thunderstorm';
+  if (wx.rain > .3) return 'Rain';
+  if (h > SUNRISE - 1 && h < SUNRISE) return 'First light';
+  if (h > SUNSET && h < SUNSET + 1) return 'Dusk';
+  if (h > SUNSET - 1.1 && h < SUNSET) return 'Golden hour';
+  if (h > 11.5 && h < 13) return 'Midday heat';
+  if (h >= SUNRISE && h < 11.5) return 'Morning';
+  if (h >= 13 && h < SUNSET) return 'Afternoon';
+  return 'Night';
+}
+
+// ---------- main loop ----------
+const t0 = performance.now() - START_H / 24 * DAY_MS;
+let travel = 0, last = performance.now(), camInit = false;
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  travel += dt * SPEED * (reduced ? .5 : 1);
+  const el = now - t0, day = Math.floor(el / DAY_MS), h = (el % DAY_MS) / DAY_MS * 24;
+  const W8 = WEATHER[W_FORCE ?? day % WEATHER.length], wx = W8.f(h), m = moonInfo(day);
+  const sun = sunState(h), ms = moonState(h, m);
+
+  // fly the path: follow its heading, bank into the turns, hold height over the ground ahead
+  cam.z = travel; cam.x = pathX(travel);
+  yaw = Math.atan2(pathX(travel + 15) - pathX(travel - 15), 30);
+  const yawAhead = Math.atan2(pathX(travel + 75) - pathX(travel + 45), 30);
+  const targetRoll = clamp((yawAhead - yaw) * 2.2, -.32, .32);
+  roll = lerp(roll, targetRoll, Math.min(1, dt * 1.5));
+  let ground = -Infinity;
+  for (const a of [0, 40, 80, 120]) ground = Math.max(ground, groundAt(pathX(travel + a), travel + a));
+  const targetY = ground + 24 + 6 * Math.sin(now / 7000);
+  cam.y = camInit ? lerp(cam.y, targetY, Math.min(1, dt * .9)) : targetY; camInit = true;
+  pitch = -.15 + .03 * Math.sin(now / 5300) + clamp((targetY - cam.y) * .006, -.05, .05);
+  cY = Math.cos(yaw); sY = Math.sin(yaw); cP = Math.cos(pitch); sP = Math.sin(pitch);
+
+  const dayK = sstep(-.12, .3, sun.alt);
+  const golden = Math.exp(-(((sun.alt - .04) / .16) ** 2)) * (1 - wx.cover * .5), night = 1 - sstep(-.25, .03, sun.alt);
+  tint = mixC([.34, .4, .64], [1, 1, 1], dayK);
+  tint = mixC(tint, [1.16, .84, .62], golden * .65);
+  tint = tint.map(v => v * (1 - wx.storm * .3 - wx.cover * .08));
+  const bolt = lightning(wx.storm, now), flash = bolt ? bolt.a * (reduced ? .25 : 1) : 0;
+  if (flash) tint = tint.map(v => v + flash * .45);
+  if (sun.alt > -.03) { light = skyDir({ p: sun.p, alt: Math.max(sun.alt, .08) }, .5); kd = .62 * (1 - wx.storm * .7) * (.4 + .6 * dayK); amb = .52; }
+  else { light = skyDir({ p: ms.p, alt: Math.max(ms.alt, .2) }, .45); kd = ms.alt > 0 ? .35 * m.illum : .1; amb = .5; }
+
+  let [top, bot] = skyAt(h);
+  const grey = wx.cover * .25 + wx.storm * .55 * (.3 + .7 * dayK);
+  top = mixC(top, mixC(hex('#4f5866'), top, 1 - dayK), grey);
+  bot = mixC(bot, mixC(hex('#8b9097'), bot, 1 - dayK), grey);
+  if (flash) { top = mixC(top, [200, 205, 235], flash * .4); bot = mixC(bot, [220, 220, 240], flash * .4); }
+  haze = bot;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.save();
+  ctx.translate(W / 2, H / 2); ctx.rotate(-roll);
+  const hy = Math.tan(pitch) * F;
+  const g = ctx.createLinearGradient(0, hy - H * 1.1, 0, hy);
+  g.addColorStop(0, rgb(top)); g.addColorStop(1, rgb(bot));
+  ctx.fillStyle = g; ctx.fillRect(-R, -R, R * 2, hy + R);
+  ctx.fillStyle = rgb(bot); ctx.fillRect(-R, hy - 1, R * 2, R - hy + 1);
+  for (const [t, r] of skyGrid) if (t[0][1] < hy) poly2(t, r > .5 ? `rgba(255,255,255,${(r - .5) * .04 * (.3 + .7 * (1 - night))})` : `rgba(0,0,20,${(.5 - r) * .05})`);
+
+  drawStars(night, wx.cover, now, h);
+  drawSun(sun, now, wx);
+  drawMoon(ms, m, night, wx);
+  drawRanges();
+
+  polys = [];
+  drawTerrain(now, true);
+  drawClouds(wx, now);
+  drawCranes(h, now);
+  if (bolt) drawBolt(bolt);
+  polys.sort((a, b) => b.d - a.d);
+  ctx.lineJoin = 'round'; ctx.lineWidth = .7;
+  for (const q of polys) {
+    const p = q.p;
+    ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
+    ctx.closePath();
+    if (q.a < 1) ctx.globalAlpha = q.a;
+    ctx.fillStyle = q.c; ctx.fill();
+    if (q.s) { ctx.strokeStyle = q.c; ctx.stroke(); }
+    if (q.a < 1) ctx.globalAlpha = 1;
+  }
+  drawRain(wx.rain, dt);
+  ctx.restore();
+
+  if (flash) { ctx.fillStyle = `rgba(235,238,255,${flash * .18})`; ctx.fillRect(0, 0, W, H); }
+  ctx.fillStyle = noisePat; ctx.fillRect(0, 0, W, H);
+  const v = ctx.createRadialGradient(W / 2, H * .55, Math.min(W, H) * .35, W / 2, H * .55, Math.max(W, H) * .8);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(10,5,0,.32)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+
+  // HUD
+  if (day !== hudDay) {
+    hudDay = day;
+    $('day').textContent = 'Day ' + (day + 1);
+    $('mr').textContent = fmt(m.rise); $('ms').textContent = fmt(m.set);
+    $('sr').textContent = fmt(SUNRISE); $('ss').textContent = fmt(SUNSET);
+    $('moonName').textContent = moonName(m.phase) + ' · ' + Math.round(m.illum * 100) + '% lit';
+    $('wx').textContent = W8.name;
+    lane($('sunLane'), SUNRISE, SUNSET);
+    lane($('moonLane'), m.rise, m.set);
+  }
+  $('time').textContent = fmt(h);
+  const label = phaseLabel(h, m, wx);
+  if (label !== lastLabel) { $('phase').textContent = label; lastLabel = label; }
+  $('now').style.left = (h / 24 * 100) + '%';
+  if (now - hudTick > 250) {
+    hudTick = now;
+    $('alt').textContent = Math.round(cam.y - groundAt(cam.x, cam.z)) + ' m';
+    $('spd').textContent = Math.round(SPEED * 3.6 * (reduced ? .5 : 1)) + ' km/h';
+    const b = Math.round(roll * 180 / Math.PI);
+    $('bank').textContent = (b > 0 ? 'R ' : b < 0 ? 'L ' : '') + Math.abs(b) + '°';
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------- screensaver behaviour ----------
+let idleT;
+const wake = () => { document.body.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => document.body.classList.add('idle'), 3500); };
+['pointermove', 'pointerdown', 'keydown', 'touchstart'].forEach(e => addEventListener(e, wake, { passive: true }));
+wake();
+const toggleFs = () => {
+  try {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  } catch (e) {}
+};
+$('fs').addEventListener('click', toggleFs);
+cv.addEventListener('dblclick', toggleFs);
+addEventListener('keydown', e => { if (e.key === 'f') toggleFs(); });
+const lock = () => { try { navigator.wakeLock?.request('screen').catch(() => {}); } catch (e) {} };
+lock(); document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && lock());
+})();
+</script>
+</body>
+</html>
