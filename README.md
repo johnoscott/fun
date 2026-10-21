@@ -32,6 +32,7 @@ or `scripts/build-pages.mjs` to change project names and descriptions. Generated
 | Project | Files |
 |---|---|
 | aquarium | [aquarium-v1.html](html-screensaver/aquarium/aquarium-v1.html), [aquarium-v2.html](html-screensaver/aquarium/aquarium-v2.html) ([changelog](html-screensaver/aquarium/CHANGELOG.md)) |
+| cmatrix | [cmatrix.html](html-screensaver/cmatrix/cmatrix.html) ([changelog](html-screensaver/cmatrix/CHANGELOG.md)) |
 | dna-screensaver | [dna-screensaver-v1.html](html-screensaver/dna-screensaver/dna-screensaver-v1.html), [dna-screensaver-v2.html](html-screensaver/dna-screensaver/dna-screensaver-v2.html) |
 | evolution-screensaver | [evolution-screensaver-zoom-track.html](html-screensaver/evolution-screensaver/evolution-screensaver-zoom-track.html), [evolution-screensaver.html](html-screensaver/evolution-screensaver/evolution-screensaver.html) |
 | lawnmower-screensaver | [lawnmower-screensaver.html](html-screensaver/lawnmower-screensaver/lawnmower-screensaver.html) |

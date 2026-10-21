@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--
+  Browser port of cmatrix's scrolling loop (cmatrix.c 2.0, https://github.com/abishekvashok/cmatrix).
+  cmatrix: Copyright (C) 1999-2017 Chris Allegretta, (C) 2017-Present Abishek V Ashok.
+  Like the original, this port is licensed under the GNU GPL, version 3 or later.
+-->
+<title>cmatrix</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: full-bleed canvas terminal; one docked man-page panel bottom-left that collapses to a one-line hint. */
+:root {
+  --bg: #000;
+  --panel: rgba(4, 10, 6, 0.86);
+  --rule: #1d3a24;
+  --text: #b9c8bd;
+  --dim: #6c8474;
+  --key: #5cff6e;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+body.saver, body.saver * { cursor: none; }
+
+.dock {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  max-width: min(30rem, calc(100% - 32px));
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+body.saver .dock { display: none; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  padding: 14px 16px 12px;
+  display: grid;
+  gap: 10px;
+  backdrop-filter: blur(3px);
+}
+.panel header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.panel h1 { margin: 0; font-size: 13px; font-weight: 600; color: var(--key); letter-spacing: 0.02em; }
+.panel h1 span { color: var(--dim); font-weight: 400; }
+.synopsis { color: var(--dim); margin: 0; overflow-wrap: anywhere; }
+
+.keys {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 18px;
+  margin: 0;
+}
+.keys div { display: grid; grid-template-columns: 3.4em 1fr; gap: 6px; min-width: 0; }
+.keys dt { color: var(--key); font-weight: 600; }
+.keys dd { margin: 0; }
+.keys dd small { color: var(--dim); font-size: inherit; }
+@media (max-width: 460px) { .keys { grid-template-columns: 1fr; } }
+
+.state {
+  border-top: 1px solid var(--rule);
+  padding-top: 8px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.state b { color: var(--text); font-weight: 400; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: inherit;
+  color: var(--key);
+  background: transparent;
+  border: 1px solid var(--rule);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--key); }
+button:focus-visible { outline: 2px solid var(--key); outline-offset: 2px; }
+
+.hint {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  padding: 4px 10px;
+  color: var(--dim);
+}
+.hint kbd { font: inherit; color: var(--key); }
+</style>
+</head>
+<body>
+
+<canvas id="matrix" aria-label="Falling green characters, the cmatrix rain"></canvas>
+
+<div class="dock">
+  <section class="panel" id="panel">
+    <header>
+      <h1>CMATRIX(1) <span>· port of cmatrix.c 2.0</span></h1>
+      <button type="button" id="close-help" aria-label="Hide help">h</button>
+    </header>
+    <p class="synopsis">cmatrix -[abBcmkrs] [-u delay] [-C color]. Each key below does what it does in the terminal.</p>
+    <dl class="keys">
+      <div><dt>0–9</dt><dd>update delay <small>-u</small></dd></div>
+      <div><dt>p</dt><dd>pause</dd></div>
+      <div><dt>a</dt><dd>asynchronous scroll <small>-a</small></dd></div>
+      <div><dt>k</dt><dd>characters change <small>-k</small></dd></div>
+      <div><dt>b B n</dt><dd>bold some / all / none</dd></div>
+      <div><dt>c</dt><dd>half-width kana <small>-c</small></dd></div>
+      <div><dt>r</dt><dd>rainbow <small>-r</small></dd></div>
+      <div><dt>m</dt><dd>lambda mode <small>-m</small></dd></div>
+      <div><dt>! @ #</dt><dd>red, green, yellow</dd></div>
+      <div><dt>$ % ^ &amp;</dt><dd>blue, magenta, cyan, white</dd></div>
+      <div><dt>s</dt><dd>screensaver <small>-s</small></dd></div>
+      <div><dt>h ?</dt><dd>toggle this help</dd></div>
+    </dl>
+    <div class="state" id="state" aria-live="polite"></div>
+    <div class="actions">
+      <button type="button" id="start-saver">Start screensaver</button>
+    </div>
+  </section>
+  <div class="hint" id="hint" hidden>Press <kbd>h</kbd> for keys, <kbd>s</kbd> for screensaver</div>
+</div>
+
+<script>
+(() => {
+  // Terminal palette: [normal, bold]. Bold in a terminal shows as the bright variant.
+  const COLORS = {
+    black:   ["#000000", "#000000"],
+    red:     ["#cd2a2a", "#ff5a5a"],
+    green:   ["#14c83c", "#6dff86"],
+    yellow:  ["#cdc31a", "#ffff66"],
+    blue:    ["#3f63ff", "#8a9cff"],
+    magenta: ["#c63ccd", "#ff6bff"],
+    cyan:    ["#18c8c8", "#6bffff"],
+    white:   ["#d6dcd8", "#ffffff"],
+  };
+  const RAINBOW = ["green", "blue", "black", "yellow", "cyan", "magenta"]; // same six as cmatrix.c, black included
+  const SP = 32; // ' '
+  const EMPTY = -1;
+
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const opts = {
+    update: reduce ? 9 : 4, asynch: false, bold: 0, classic: false,
+    rainbow: false, lambda: false, changes: false, color: "green",
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem("cmatrix-opts") || "null");
+    if (saved) Object.assign(opts, saved);
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem("cmatrix-opts", JSON.stringify(opts)); } catch (e) {} };
+
+  let pause = false;
+  let helpOpen = true;
+  try { helpOpen = localStorage.getItem("cmatrix-help") !== "0"; } catch (e) {}
+
+  const canvas = document.getElementById("matrix");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const FONT_PX = 16;
+  let cw = 10, ch = 18, dpr = 1;
+  let COLS = 0, LINES = 0;
+  let val = [], head = [], length, spaces, updates;
+  let randmin = 33, randnum = 90;
+  let count = 0;
+
+  const rand = () => (Math.random() * 0x7fffffff) | 0;
+  const rnd = () => rand() % randnum + randmin;
+
+  function setCharset() {
+    // cmatrix.c: classic uses 0xff66..0xff9d, otherwise 33..123
+    if (opts.classic) { randmin = 0xff66; randnum = 0xff9d - 0xff66; }
+    else { randmin = 33; randnum = 123 - 33; }
+  }
+
+  const FAMILY = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim();
+  const FONTS = [`400 ${FONT_PX}px ${FAMILY}`, `600 ${FONT_PX}px ${FAMILY}`];
+  const font = (bold) => FONTS[bold ? 1 : 0];
+
+  // var_init(): rows 0..LINES, every second column holds a stream
+  function varInit() {
+    val = []; head = [];
+    for (let i = 0; i <= LINES; i++) {
+      val.push(new Int32Array(COLS).fill(EMPTY));
+      head.push(new Uint8Array(COLS));
+    }
+    length = new Int32Array(COLS);
+    spaces = new Int32Array(COLS);
+    updates = new Int32Array(COLS);
+    for (let j = 0; j < COLS; j += 2) {
+      spaces[j] = rand() % LINES + 1;
+      length[j] = rand() % Math.max(1, LINES - 3) + 3;
+      val[1][j] = SP;
+      updates[j] = rand() % 3 + 1;
+    }
+  }
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth, h = window.innerHeight;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = font(false);
+    cw = Math.ceil(ctx.measureText("M").width);
+    ch = Math.ceil(FONT_PX * 1.15);
+    COLS = Math.max(2, Math.floor(w / cw));
+    LINES = Math.max(4, Math.floor(h / ch));
+    varInit();
+    draw();
+  }
+
+  // The new-style scrolling block of the main loop, line for line.
+  function step() {
+    if (++count > 4) count = 1;
+    if (pause) return;
+    for (let j = 0; j < COLS; j += 2) {
+      if (!(count > updates[j] || !opts.asynch)) continue;
+
+      if (val[0][j] === EMPTY && val[1][j] === SP && spaces[j] > 0) {
+        spaces[j]--;
+      } else if (val[0][j] === EMPTY && val[1][j] === SP) {
+        length[j] = rand() % Math.max(1, LINES - 3) + 3;
+        val[0][j] = rnd();
+        spaces[j] = rand() % LINES + 1;
+      }
+
+      let i = 0, y = 0, z = 0, firstcoldone = false;
+      while (i <= LINES) {
+        while (i <= LINES && (val[i][j] === SP || val[i][j] === EMPTY)) i++;
+        if (i > LINES) break;
+
+        z = i; y = 0;
+        while (i <= LINES && val[i][j] !== SP && val[i][j] !== EMPTY) {
+          head[i][j] = 0;
+          if (opts.changes && rand() % 8 === 0) val[i][j] = rnd();
+          i++; y++;
+        }
+        if (i > LINES) { val[z][j] = SP; continue; }
+
+        val[i][j] = rnd();
+        head[i][j] = 1;
+        if (y > length[j] || firstcoldone) {
+          val[z][j] = SP;
+          val[0][j] = EMPTY;
+        }
+        firstcoldone = true;
+        i++;
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textBaseline = "top";
+    const base = COLORS[opts.color] || COLORS.green;
+    let curFont = "";
+    for (let j = 0; j < COLS; j += 2) {
+      const x = j * cw;
+      for (let i = 1; i <= LINES; i++) { // row 0 is the hidden spawn row
+        const v = val[i][j];
+        if (v === EMPTY || v === SP) continue;
+        let fill, bold;
+        if (head[i][j] && !opts.rainbow) {
+          fill = COLORS.white[opts.bold ? 1 : 0];
+          bold = !!opts.bold;
+        } else {
+          const pair = opts.rainbow ? COLORS[RAINBOW[rand() % 6]] : base;
+          bold = opts.bold === 2 || (opts.bold === 1 && v % 2 === 0);
+          fill = pair[bold ? 1 : 0];
+        }
+        const f = font(bold);
+        if (f !== curFont) { ctx.font = f; curFont = f; }
+        ctx.fillStyle = fill;
+        const glyph = opts.lambda && !head[i][j] ? "λ" : String.fromCharCode(v);
+        ctx.fillText(glyph, x, (i - 1) * ch + 1);
+      }
+    }
+  }
+
+  // napms(update * 10) between frames
+  let last = 0;
+  function frame(t) {
+    if (t - last >= opts.update * 10) {
+      last = t;
+      step();
+      draw();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // UI
+  const panel = document.getElementById("panel");
+  const hint = document.getElementById("hint");
+  const stateEl = document.getElementById("state");
+
+  function renderState() {
+    const bold = ["none", "some", "all"][opts.bold];
+    const flags = [
+      opts.asynch && "async", opts.changes && "changing", opts.classic && "kana",
+      opts.lambda && "lambda", pause && "paused",
+    ].filter(Boolean).join(", ") || "none";
+    stateEl.innerHTML =
+      `delay <b>${opts.update}</b> · color <b>${opts.rainbow ? "rainbow" : opts.color}</b> · bold <b>${bold}</b> · <b>${COLS}×${LINES}</b><br>on: <b>${flags}</b>`;
+  }
+
+  function setHelp(open) {
+    helpOpen = open;
+    panel.hidden = !open;
+    hint.hidden = open;
+    try { localStorage.setItem("cmatrix-help", open ? "1" : "0"); } catch (e) {}
+  }
+
+  let wakeLock = null;
+  let saver = false;
+  let saverStart = 0;
+  async function startSaver() {
+    saver = true;
+    saverStart = performance.now();
+    document.body.classList.add("saver");
+    try { await document.documentElement.requestFullscreen?.(); } catch (e) {}
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) {}
+  }
+  function stopSaver() {
+    if (!saver) return;
+    saver = false;
+    document.body.classList.remove("saver");
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    wakeLock?.release?.().catch(() => {});
+    wakeLock = null;
+  }
+  // -s: exits on the first keystroke; the mouse counts too, after a short grace period
+  const exitOnInput = () => { if (saver && performance.now() - saverStart > 800) stopSaver(); };
+  window.addEventListener("pointermove", exitOnInput);
+  window.addEventListener("pointerdown", exitOnInput);
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement) stopSaver(); });
+
+  const colorKeys = { "!": "red", "@": "green", "#": "yellow", "$": "blue", "%": "magenta", "^": "cyan", "&": "white" };
+
+  window.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (saver) { e.preventDefault(); stopSaver(); return; }
+    const k = e.key;
+    if (e.target instanceof HTMLButtonElement && (k === "Enter" || k === " ")) return;
+    let handled = true;
+    if (k >= "0" && k <= "9") opts.update = +k;
+    else if (k in colorKeys) { opts.color = colorKeys[k]; opts.rainbow = false; }
+    else switch (k) {
+      case "a": opts.asynch = !opts.asynch; break;
+      case "b": opts.bold = 1; break;
+      case "B": opts.bold = 2; break;
+      case "n": opts.bold = 0; break;
+      case "r": opts.rainbow = true; break;
+      case "m": opts.lambda = !opts.lambda; break;
+      case "k": opts.changes = !opts.changes; break;
+      case "c": opts.classic = !opts.classic; setCharset(); varInit(); break;
+      case "p": case "P": pause = !pause; break;
+      case "s": startSaver(); break;
+      case "h": case "?": setHelp(!helpOpen); break;
+      default: handled = false;
+    }
+    if (handled) { e.preventDefault(); save(); renderState(); }
+  });
+
+  document.getElementById("close-help").addEventListener("click", () => setHelp(false));
+  document.getElementById("start-saver").addEventListener("click", startSaver);
+
+  let resizeTimer = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { resize(); renderState(); }, 120);
+  });
+
+  setCharset();
+  resize();
+  // Warm up so the first frame already shows streams in flight
+  for (let n = 0; n < LINES * 2; n++) step();
+  draw();
+  setHelp(helpOpen);
+  renderState();
+  requestAnimationFrame(frame);
+  document.fonts?.load(font(false)).then(() => { resize(); for (let n = 0; n < LINES * 2; n++) step(); draw(); renderState(); });
+})();
+</script>
+</body>
+</html>
