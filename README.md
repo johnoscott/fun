@@ -42,6 +42,7 @@ or `scripts/build-pages.mjs` to change project names and descriptions. Generated
 | origami-fps | [origami-fps-v1.html](html-screensaver/origami-fps/origami-fps-v1.html), [origami-fps-v2.html](html-screensaver/origami-fps/origami-fps-v2.html), [origami-fps-v3.html](html-screensaver/origami-fps/origami-fps-v3.html), [origami-fps-v4.html](html-screensaver/origami-fps/origami-fps-v4.html), [origami-fps-v5.html](html-screensaver/origami-fps/origami-fps-v5.html), [origami-fps-v6.html](html-screensaver/origami-fps/origami-fps-v6.html) ([changelog](html-screensaver/origami-fps/CHANGELOG.md)) |
 | paper-savanna | [paper-savanna.html](html-screensaver/paper-savanna/paper-savanna.html) ([changelog](html-screensaver/paper-savanna/CHANGELOG.md)) |
 | paper-savanna-pov | [paper-savanna-pov.html](html-screensaver/paper-savanna-pov/paper-savanna-pov.html) ([changelog](html-screensaver/paper-savanna-pov/CHANGELOG.md)) |
+| paper-savanna-rainbow | [paper-savanna-rainbow.html](html-screensaver/paper-savanna-rainbow/paper-savanna-rainbow.html) ([changelog](html-screensaver/paper-savanna-rainbow/CHANGELOG.md)) |
 | retro-80s-video-games-screensaver | [retro-80s-video-games-screensaver.html](html-screensaver/retro-80s-video-games-screensaver/retro-80s-video-games-screensaver.html) |
 | space-news-billboards | [space-news-billboards.html](html-screensaver/space-news-billboards/space-news-billboards.html) |
 | spirograph | [spirograph-v1.html](html-screensaver/spirograph/spirograph-v1.html), [spirograph-v2.html](html-screensaver/spirograph/spirograph-v2.html) |
