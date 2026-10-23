@@ -1,0 +1,1451 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<meta charset="utf-8">
+<title>One Minute of Light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,300&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #e9ecf4;
+    --dim: #8b90a6;
+    --faint: rgba(233, 236, 244, 0.14);
+    --glow: #ffd9a8;
+    --ground: #04040a;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  }
+  html, body { height: 100%; background: var(--ground); margin: 0; overflow: hidden; }
+  body { color: var(--ink); font-family: var(--mono); }
+  canvas#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .hud {
+    position: fixed; inset: 0; pointer-events: none;
+    padding: calc(env(safe-area-inset-top, 0px) + clamp(16px, 3vw, 36px)) clamp(16px, 3vw, 40px) calc(env(safe-area-inset-bottom, 0px) + clamp(16px, 3vw, 32px));
+    display: grid; grid-template-rows: auto 1fr auto; gap: 16px;
+    transition: opacity .6s ease;
+  }
+  .hud.hidden { opacity: 0; }
+  .hud { text-shadow: 0 1px 12px rgba(4, 4, 10, .55); }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .eyebrow { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink); }
+  .eyebrow b { font-weight: 500; color: var(--glow); }
+  .spec { font-size: 11px; color: var(--dim); margin-top: 6px; letter-spacing: .04em; }
+  .meter { font-size: 11px; color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; letter-spacing: .04em; line-height: 1.7; }
+  .meter span { color: var(--ink); }
+
+  .bottom { display: grid; gap: 18px; }
+  .row { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+  .act { display: grid; gap: 6px; max-width: 44rem; }
+  .act .num { font-size: 11px; letter-spacing: .22em; color: var(--glow); text-transform: uppercase; }
+  .act h1 {
+    font-family: var(--serif); font-style: italic; font-weight: 300;
+    font-variation-settings: "opsz" 144;
+    font-size: clamp(40px, 7vw, 96px); line-height: .95; margin: 0; letter-spacing: -.02em;
+    text-wrap: balance;
+  }
+  .act p { margin: 4px 0 0; font-size: 12px; color: var(--dim); letter-spacing: .03em; max-width: 60ch; }
+  .act > * { transition: opacity .6s ease, transform .8s cubic-bezier(.2,.7,.1,1), filter .6s ease; }
+  .act.out > * { opacity: 0; transform: translateY(10px); filter: blur(6px); }
+  .act.out > h1 { transform: translateY(18px); }
+
+  .sound {
+    pointer-events: auto; cursor: pointer;
+    font: 500 12px/1 var(--mono); letter-spacing: .08em; color: var(--ground);
+    background: var(--glow); border: 0; border-radius: 999px; padding: 12px 18px;
+    display: inline-flex; align-items: center; gap: 10px;
+    box-shadow: 0 0 0 0 rgba(255, 217, 168, .5); animation: breathe 2.4s ease-in-out infinite;
+    transition: background .3s ease, color .3s ease;
+  }
+  .sound:disabled { cursor: progress; background: var(--faint); color: var(--dim); animation: none; }
+  .sound.on { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--faint); animation: none; }
+  .sound:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  .sound svg { width: 14px; height: 14px; fill: currentColor; }
+  @keyframes breathe { 50% { box-shadow: 0 0 0 10px rgba(255, 217, 168, 0); } }
+
+  .rail { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 18px; }
+  .track { display: grid; grid-template-columns: 6fr 15fr 15fr 15fr 15fr 15fr; gap: 6px; }
+  .seg { height: 2px; background: var(--faint); position: relative; overflow: hidden; }
+  .seg i { position: absolute; inset: 0; background: var(--ink); transform-origin: left; transform: scaleX(0); }
+  .clock { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: .04em; white-space: nowrap; }
+  .clock em { font-style: normal; color: var(--dim); }
+  .keys { font-size: 10px; color: var(--dim); letter-spacing: .08em; opacity: .8; }
+  .keys kbd { font-family: var(--mono); color: var(--ink); border: 1px solid var(--faint); padding: 1px 5px; border-radius: 3px; }
+  .paused .clock::after { content: "  paused"; color: var(--glow); }
+
+  .hud .top { transition: opacity .8s ease; }
+  .hud[data-mode="titles"] .top, .hud[data-mode="credits"] .top { opacity: 0; }
+
+  /* Titles, chapter cards, credits */
+  .titles {
+    position: fixed; inset: 0; pointer-events: none; display: grid; place-items: center;
+    padding: 16px; text-align: center; text-shadow: 0 0 36px rgba(4, 4, 10, .9), 0 2px 12px rgba(4, 4, 10, .6);
+  }
+  .titles > *, .credits > * { grid-area: 1 / 1; max-width: min(64rem, 100%); }
+  .credits { display: grid; place-items: center; width: 100%; }
+  .fade {
+    opacity: 0; filter: blur(10px); transform: translateY(10px) scale(.985);
+    transition: opacity 1s ease, filter 1s ease, transform 1.6s cubic-bezier(.2,.7,.1,1);
+  }
+  .fade.on { opacity: 1; filter: none; transform: none; }
+  .kicker { font-size: 11px; letter-spacing: .32em; text-transform: uppercase; color: var(--glow); }
+  .sub { font-size: 12px; color: var(--dim); letter-spacing: .08em; }
+  .i-title, .c-title, .cr-name {
+    font-family: var(--serif); font-style: italic; font-weight: 300; font-variation-settings: "opsz" 144;
+    letter-spacing: -.03em; line-height: .92; margin: 18px 0 20px; text-wrap: balance;
+  }
+  .i-title { font-size: clamp(52px, 10.5vw, 160px); }
+  .i-title span {
+    display: inline-block; opacity: 0; transform: translateY(26px); filter: blur(12px);
+    transition: opacity 1.3s ease, transform 1.8s cubic-bezier(.2,.7,.1,1), filter 1.3s ease;
+    transition-delay: calc(var(--i) * .24s);
+  }
+  .intro.on .i-title span { opacity: 1; transform: none; filter: none; }
+  .c-title { font-size: clamp(60px, 12vw, 180px); margin: 12px 0 22px; }
+  .cr-name { font-size: clamp(44px, 8vw, 120px); }
+  .rule { width: 120px; height: 1px; background: var(--ink); margin: 0 auto 16px; transform: scaleX(0); transition: transform 1.3s cubic-bezier(.2,.7,.1,1) .25s; }
+  .card.on .rule { transform: scaleX(1); }
+  .cr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 64px; text-align: left; margin: 0; }
+  .cr-grid.cr-wide { grid-template-columns: minmax(0, 1fr); max-width: 40rem; gap: 26px; }
+  .cr-grid dt { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--glow); margin-bottom: 8px; }
+  .cr-grid dd { margin: 0; font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(20px, 2.4vw, 32px); line-height: 1.18; }
+
+  .fallback { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--dim); font-size: 13px; white-space: pre-wrap; }
+
+  @media (max-width: 560px) {
+    .cr-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    .keys, .meter .fps-line { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sound { animation: none; } .fade, .i-title span { transition-duration: .01s; filter: none; } }
+</style>
+
+<canvas id="stage" aria-label="A real-time film: opening titles, four chapters and end credits, with an original score, then loops"></canvas>
+
+<div class="titles" id="titles" aria-live="off">
+  <div class="intro fade">
+    <div class="kicker">A real-time film in four chapters</div>
+    <h2 class="i-title"><span style="--i:0">One</span> <span style="--i:1">Minute</span> <span style="--i:2">of</span> <span style="--i:3">Light</span></h2>
+    <div class="sub">Every pixel and every note computed live, as you watch</div>
+  </div>
+  <div class="card fade" id="card">
+    <div class="kicker" id="cardNum">Chapter I</div>
+    <h2 class="c-title" id="cardTitle">Forms</h2>
+    <div class="rule"></div>
+    <div class="sub" id="cardNote">Geometry, computed</div>
+  </div>
+  <div class="credits" id="credits">
+    <section class="fade" data-from="0.4" data-to="3.5">
+      <div class="kicker">Written, directed &amp; scored by</div>
+      <h2 class="cr-name">Claude Opus 5.5</h2>
+    </section>
+    <section class="fade" data-from="3.9" data-to="7.6">
+      <dl class="cr-grid">
+        <div><dt>I · Forms</dt><dd>262,144 particles, placed on the GPU every frame</dd></div>
+        <div><dt>II · Matter</dt><dd>Raymarched distance fields &amp; thin-film light</dd></div>
+        <div><dt>III · Flow</dt><dd>Navier–Stokes fluid, solved live on the beat</dd></div>
+        <div><dt>IV · World</dt><dd>Terrain, water &amp; sky from nine octaves of noise</dd></div>
+      </dl>
+    </section>
+    <section class="fade" data-from="8.0" data-to="11.4">
+      <dl class="cr-grid cr-wide">
+        <div><dt>Original score</dt><dd>“Light”, in D minor · 27 bars at 80 bpm · <span id="noteCount">—</span> notes, performed live</dd></div>
+        <div><dt>The orchestra</dt><dd>FM bells, plucked arpeggio, analogue pad, supersaw strings, brass &amp; drums, all synthesised in WebAudio</dd></div>
+        <div><dt>Assets used</dt><dd>None. No images, no models, no samples.</dd></div>
+      </dl>
+    </section>
+    <section class="fade" data-from="11.8" data-to="14.7">
+      <h2 class="cr-name">Fin</h2>
+      <div class="sub">The film begins again.</div>
+    </section>
+  </div>
+</div>
+
+<div class="hud" id="hud" data-mode="titles">
+  <div class="top">
+    <div>
+      <div class="eyebrow"><b>One Minute of Light</b> · <span id="chapLabel">Chapter I · Forms</span></div>
+      <div class="spec">Titles, four chapters, credits · rendered and scored live</div>
+    </div>
+    <div class="meter">
+      <div class="fps-line"><span id="fps">--</span> fps · <span id="res">--</span></div>
+      <div>Original score · D minor · 80 bpm · 27 bars</div>
+      <div class="keys"><kbd>space</kbd> pause &nbsp;<kbd>m</kbd> mute &nbsp;<kbd>f</kbd> fullscreen &nbsp;<kbd>h</kbd> hide</div>
+    </div>
+  </div>
+  <div></div>
+  <div class="bottom">
+    <div class="row">
+      <div class="act out" id="act">
+        <div class="num" id="actNum">Chapter I · Form 1 of 5</div>
+        <h1 id="actTitle">Spiral</h1>
+        <p id="actNote">262,144 particles · logarithmic arms, r = a·e<sup>bθ</sup></p>
+      </div>
+      <button class="sound" id="sound" type="button" disabled>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5v11l10-5.5z"/></svg>
+        <span id="soundLabel">Loading the score…</span>
+      </button>
+    </div>
+    <div class="rail">
+      <div class="track">
+        <div class="seg" title="Titles"><i></i></div><div class="seg"><i></i></div><div class="seg"><i></i></div><div class="seg"><i></i></div><div class="seg"><i></i></div><div class="seg" title="Credits"><i></i></div>
+      </div>
+      <div class="clock" id="clock">00:00.0 <em>/ 01:21.0</em></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ================================================================
+  //  Timeline & score data (shared by the audio and the visuals)
+  // ================================================================
+  // 6 s titles · four 15 s chapters · 15 s credits = 81 s, 27 bars of 4/4 at 80 bpm.
+  const INTRO = 6, CHAP = 15, CRED = 15, LOOP = INTRO + 4 * CHAP + CRED, CREDITS_AT = INTRO + 4 * CHAP;
+  const BPM = 80, BEAT = 60 / BPM, BAR = BEAT * 4, TAU = Math.PI * 2;
+  const N = 262144;
+  const ROMAN = ["I", "II", "III", "IV"];
+
+  const CHAPTERS = [
+    { name: "Forms",  tag: "Geometry, computed" },
+    { name: "Matter", tag: "Light, traced", title: "Matter", note: "Signed distance fields · smooth-min blends · thin-film iridescence · not one polygon" },
+    { name: "Flow",   tag: "Physics, solved", title: "Flow",   note: "Navier–Stokes solved live · 20 pressure iterations a frame · every splat lands on the kick" },
+    { name: "World",  tag: "A world, generated", title: "World",  note: "Procedural terrain from nine octaves of noise · sunset to starlight in fifteen seconds" },
+  ];
+  const FORMS = [
+    ["Spiral",        "262,144 particles · logarithmic arms, r = a·e<sup>bθ</sup>"],
+    ["Ringed sphere", "Fibonacci lattice · golden angle 137.508° · a Cassini gap in the rings"],
+    ["Trefoil",       "(2,3) torus knot · every particle flowing along the tube"],
+    ["Interference",  "Four point sources · wavefronts summed per particle, per frame"],
+    ["Double helix",  "Two strands · 28 base pairs · then collapse to a single point"],
+  ];
+
+  // One chord (or two) per bar. MIDI note numbers, bass first.
+  const CHORDS = [
+    [[0, [50, 57, 62, 64, 69]]],                         //  1 Dsus2       — titles
+    [[0, [46, 53, 57, 62, 65]], [2, [45, 52, 57, 61, 64]]], //  2 Bbmaj7 → A
+    [[0, [50, 57, 60, 64, 65]]],                         //  3 Dm9         — I Forms
+    [[0, [46, 53, 57, 62, 65]]],                         //  4 Bbmaj7
+    [[0, [41, 53, 57, 60, 67]]],                         //  5 Fadd9
+    [[0, [48, 55, 62, 64, 67]]],                         //  6 Cadd9
+    [[0, [45, 52, 57, 62, 64]], [2, [45, 52, 57, 61, 64]]], //  7 Asus4 → A
+    [[0, [46, 57, 62, 64, 65]]],                         //  8 Bbmaj7#11   — II Matter
+    [[0, [43, 58, 62, 65, 69]]],                         //  9 Gm9
+    [[0, [39, 55, 58, 62, 67]]],                         // 10 Ebmaj7
+    [[0, [48, 55, 58, 62, 63]]],                         // 11 Cm9
+    [[0, [50, 57, 62, 66, 69]]],                         // 12 D
+    [[0, [50, 57, 62, 65, 69]]],                         // 13 Dm          — III Flow
+    [[0, [46, 58, 62, 65, 70]]],                         // 14 Bb
+    [[0, [41, 57, 60, 65, 69]]],                         // 15 F
+    [[0, [48, 55, 60, 64, 67]]],                         // 16 C
+    [[0, [43, 58, 62, 67, 70]], [2, [45, 57, 61, 64, 69]]], // 17 Gm → A
+    [[0, [46, 53, 58, 62, 65]]],                         // 18 Bb          — IV World
+    [[0, [48, 55, 60, 64, 67]]],                         // 19 C
+    [[0, [50, 57, 62, 65, 69]]],                         // 20 Dm
+    [[0, [43, 55, 58, 62, 67]]],                         // 21 Gm
+    [[0, [45, 52, 57, 62, 64]], [2, [45, 55, 61, 64, 67]]], // 22 A7sus4 → A7
+    [[0, [50, 57, 62, 65, 69]]],                         // 23 Dm          — credits
+    [[0, [46, 57, 62, 65, 69]]],                         // 24 Bbmaj7
+    [[0, [43, 58, 62, 65, 69]]],                         // 25 Gm9
+    [[0, [41, 53, 57, 60, 67]]],                         // 26 Fadd9
+    [[0, [45, 52, 57, 62, 64]], [2, [45, 55, 61, 64, 67]]], // 27 Asus4 → A7
+  ];
+  // Melodies as [bar, beat, midi, beats]; the theme is written once and placed where it recurs.
+  const shiftBars = (arr, d) => arr.map(([b, ...r]) => [b + d, ...r]);
+  const THEME0 = [
+    [0,0,74,1],[0,1,76,.5],[0,1.5,77,.5],[0,2,81,1.5],[0,3.5,79,.5],
+    [1,0,77,1],[1,1,74,1],[1,2,76,.5],[1,2.5,77,.5],[1,3,74,1],
+    [2,0,72,1.5],[2,1.5,69,.5],[2,2,72,1],[2,3,77,1],
+    [3,0,76,2],[3,2,74,1],[3,3,72,.5],[3,3.5,74,.5],
+    [4,0,74,2],[4,2,76,1],[4,3,73,1],
+  ];
+  const TITLES = [[0,1,69,1],[0,2,74,2],[1,0,77,2],[1,2,76,2]];
+  const THEME = shiftBars(THEME0, 2);
+  const GLASS = shiftBars([
+    [5,0,74,1.5],[5,1.5,76,.5],[5,2,77,2],[6,0,81,3],[6,3,79,1],[7,0,74,2],[7,2,79,2],
+    [8,0,77,3],[8,3,75,1],[9,0,78,2],[9,2,81,2],
+  ], 2);
+  const BRASS = shiftBars([
+    [15,0,74,1],[15,1,76,.5],[15,1.5,77,.5],[15,2,81,1.5],[15,3.5,79,.5],
+    [16,0,79,1],[16,1,76,1],[16,2,77,.5],[16,2.5,79,.5],[16,3,76,1],
+    [17,0,81,1.5],[17,1.5,77,.5],[17,2,81,1],[17,3,86,1],
+    [18,0,84,2],[18,2,82,1],[18,3,81,.5],[18,3.5,79,.5],
+    [19,0,81,2],[19,2,76,1],[19,3,73,1],
+  ], 2);
+  const CODA = shiftBars(THEME0, 22);
+  const at = (bar, beat) => bar * BAR + beat * BEAT;
+  const GLASS_TIMES = GLASS.map(([b, bt]) => at(b, bt));
+  const BRASS_TIMES = BRASS.map(([b, bt]) => at(b, bt));
+
+  // ================================================================
+  //  The score — synthesised offline, then looped sample-accurately
+  // ================================================================
+  // ================================================================
+  //  The score: a fixed recording of note events (score/record-score.js),
+  //  performed live by this WebAudio synth, a quarter-second ahead of the clock.
+  // ================================================================
+  function createSynth(ctx) {
+    const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    const master = ctx.createGain(); master.gain.value = 0.55;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 10; comp.ratio.value = 3.5; comp.attack.value = 0.008; comp.release.value = 0.22;
+    const out = ctx.createGain();
+    master.connect(comp).connect(out).connect(ctx.destination);
+
+    // Hall reverb: decaying stereo noise, darkening as it fades.
+    const SR = ctx.sampleRate, ir = ctx.createBuffer(2, SR * 4, SR);
+    for (let c = 0; c < 2; c++) {
+      const d = ir.getChannelData(c); let lp = 0;
+      for (let i = 0; i < d.length; i++) {
+        const k = i / d.length;
+        lp += (0.9 - 0.75 * k) * ((Math.random() * 2 - 1) - lp);
+        d[i] = lp * Math.pow(1 - k, 2.4) * Math.min(1, i / (SR * 0.012));
+      }
+    }
+    const verb = ctx.createConvolver(); verb.buffer = ir;
+    const verbIn = ctx.createGain(); verbIn.gain.value = 0.55;
+    verbIn.connect(verb).connect(master);
+
+    // Ping-pong dotted-eighth delay with a darkening feedback path.
+    const dIn = ctx.createGain(), dL = ctx.createDelay(2), dR = ctx.createDelay(2);
+    dL.delayTime.value = dR.delayTime.value = BEAT * 0.75;
+    const lpL = ctx.createBiquadFilter(), lpR = ctx.createBiquadFilter();
+    lpL.type = lpR.type = "lowpass"; lpL.frequency.value = lpR.frequency.value = 2600;
+    const fb = ctx.createGain(); fb.gain.value = 0.42;
+    const merge = ctx.createChannelMerger(2), dOut = ctx.createGain(); dOut.gain.value = 0.6;
+    dIn.connect(dL); dL.connect(lpL); lpL.connect(dR); dR.connect(lpR); lpR.connect(fb); fb.connect(dL);
+    lpL.connect(merge, 0, 0); lpR.connect(merge, 0, 1); merge.connect(dOut); dOut.connect(master); dOut.connect(verbIn);
+
+    function bus(dry, rev, del = 0) {
+      const g = ctx.createGain();
+      const d = ctx.createGain(); d.gain.value = dry; g.connect(d).connect(master);
+      const r = ctx.createGain(); r.gain.value = rev; g.connect(r).connect(verbIn);
+      if (del) { const e = ctx.createGain(); e.gain.value = del; g.connect(e).connect(dIn); }
+      return g;
+    }
+    const B = {
+      pluck: bus(0.55, 0.35, 0.3), pad: bus(0.45, 0.6), bass: bus(0.9, 0.04), bell: bus(0.5, 0.7, 0.28),
+      drums: bus(0.85, 0.1), lead: bus(0.65, 0.45, 0.12), fx: bus(0.5, 0.9), strings: bus(0.45, 0.65),
+    };
+
+    const noiseBuf = ctx.createBuffer(1, SR * 2, SR);
+    { const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    function noise(t, dur) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; s.start(t, Math.random() * 1.5); s.stop(t + dur); return s; }
+    function osc(type, f, t0, t1, detune = 0) { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = detune; o.start(t0); o.stop(t1); return o; }
+    function perc(g, t, peak, a, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
+    function pan(node, p) { const s = ctx.createStereoPanner(); s.pan.value = p; node.connect(s); return s; }
+    function filt(type, f, q = 0.7) { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; }
+
+    const I = {
+      pluck(t, m, vel, b, p = 0, bright = 3200) {
+        const f = mtof(m), g = ctx.createGain(), lp = filt("lowpass", bright, 1.4);
+        lp.frequency.setValueAtTime(bright, t); lp.frequency.exponentialRampToValueAtTime(bright * 0.22, t + 0.35);
+        osc("triangle", f, t, t + 0.8).connect(lp);
+        const g2 = ctx.createGain(); g2.gain.value = 0.22; osc("sawtooth", f, t, t + 0.8, 7).connect(g2).connect(lp);
+        lp.connect(g); perc(g, t, vel, 0.004, 0.75); pan(g, p).connect(B[b]);
+      },
+      pad(t, notes, dur, vel, b, cut = 1400, voices = 3) {
+        const detunes = voices === 5 ? [-14, -7, 0, 7, 14] : [-9, 0, 9], each = voices === 5 ? 0.035 : 0.05;
+        const g = ctx.createGain(), lp = filt("lowpass", cut, 0.6);
+        lp.frequency.setValueAtTime(cut * 0.45, t); lp.frequency.linearRampToValueAtTime(cut, t + dur * 0.7);
+        lp.connect(g); g.connect(B[b]);
+        const a = Math.min(0.9, dur * 0.3);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + a);
+        g.gain.setValueAtTime(vel, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 1.1);
+        notes.forEach((m) => detunes.forEach((d, j) => {
+          const pg = ctx.createGain(); pg.gain.value = each;
+          osc("sawtooth", mtof(m), t, t + dur + 1.2, d).connect(pg);
+          pan(pg, (j / (detunes.length - 1) - 0.5) * 1.1).connect(lp);
+        }));
+      },
+      bass(t, m, dur, vel, b, bright = 500) {
+        const f = mtof(m), g = ctx.createGain(), lp = filt("lowpass", bright, 3);
+        lp.frequency.setValueAtTime(bright * 2.6, t); lp.frequency.exponentialRampToValueAtTime(bright, t + 0.12);
+        osc("sine", f, t, t + dur + 0.3).connect(lp);
+        const sg = ctx.createGain(); sg.gain.value = 0.35; osc("sawtooth", f, t, t + dur + 0.3).connect(sg).connect(lp);
+        lp.connect(g); g.connect(B[b]);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.008);
+        g.gain.setTargetAtTime(vel * 0.7, t + 0.01, 0.2); g.gain.setTargetAtTime(0, t + dur, 0.04);
+      },
+      bell(t, m, vel, b, decay = 2.6, p = 0) {
+        const f = mtof(m);
+        const car = osc("sine", f, t, t + decay + 0.1), mod = osc("sine", f * 3.5, t, t + decay + 0.1);
+        const mg = ctx.createGain(); mg.gain.setValueAtTime(f * 2.2, t); mg.gain.exponentialRampToValueAtTime(f * 0.08, t + decay * 0.6);
+        mod.connect(mg).connect(car.frequency);
+        const g = ctx.createGain(); perc(g, t, vel, 0.003, decay); car.connect(g); pan(g, p).connect(B[b]);
+        const g2 = ctx.createGain(); perc(g2, t, vel * 0.22, 0.003, decay * 0.5); osc("sine", f * 2, t, t + decay).connect(g2); pan(g2, -p).connect(B[b]);
+      },
+      kick(t, vel, b) {
+        const o = osc("sine", 160, t, t + 0.6); o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+        const g = ctx.createGain(); perc(g, t, vel, 0.002, 0.48); o.connect(g).connect(B[b]);
+        const ng = ctx.createGain(); perc(ng, t, vel * 0.22, 0.001, 0.02); noise(t, 0.04).connect(filt("highpass", 2500)).connect(ng).connect(B[b]);
+      },
+      clap(t, vel, b) {
+        const g = ctx.createGain();
+        [0, 0.011, 0.022].forEach((o) => { g.gain.setValueAtTime(vel, t + o); g.gain.exponentialRampToValueAtTime(vel * 0.15, t + o + 0.009); });
+        g.gain.setValueAtTime(vel * 0.8, t + 0.033); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+        noise(t, 0.35).connect(filt("bandpass", 1600, 0.9)).connect(g).connect(B[b]);
+        const og = ctx.createGain(); perc(og, t, vel * 0.3, 0.001, 0.1); osc("triangle", 190, t, t + 0.15).connect(og).connect(B[b]);
+      },
+      hat(t, vel, b, open = 0, p = 0) {
+        const d = open ? 0.26 : 0.045, g = ctx.createGain(); perc(g, t, vel, 0.001, d);
+        noise(t, d + 0.03).connect(filt("highpass", 7500)).connect(g); pan(g, p).connect(B[b]);
+      },
+      tom(t, m, vel, b) {
+        const f = mtof(m), o = osc("sine", f * 1.6, t, t + 1.1);
+        o.frequency.setValueAtTime(f * 1.6, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.18);
+        const g = ctx.createGain(); perc(g, t, vel, 0.003, 0.9); o.connect(g).connect(B[b]);
+        const ng = ctx.createGain(); perc(ng, t, vel * 0.4, 0.002, 0.14); noise(t, 0.2).connect(filt("lowpass", 900)).connect(ng).connect(B[b]);
+      },
+      brass(t, m, dur, vel, b) {
+        const f = mtof(m), g = ctx.createGain(), lp = filt("lowpass", 300, 2);
+        lp.frequency.setValueAtTime(300, t); lp.frequency.exponentialRampToValueAtTime(2600, t + 0.09); lp.frequency.exponentialRampToValueAtTime(1300, t + 0.4);
+        const vib = osc("sine", 5.2, t, t + dur + 0.5), vg = ctx.createGain();
+        vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(9, t + Math.max(0.3, dur * 0.6)); vib.connect(vg);
+        [-7, 7].forEach((d) => { const o = osc("sawtooth", f, t, t + dur + 0.5, d); vg.connect(o.detune); o.connect(lp); });
+        const g3 = ctx.createGain(); g3.gain.value = 0.3; osc("square", f / 2, t, t + dur + 0.5).connect(g3).connect(lp);
+        lp.connect(g); g.connect(B[b]);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.05);
+        g.gain.setTargetAtTime(vel * 0.8, t + 0.06, 0.3); g.gain.setTargetAtTime(0, t + dur, 0.09);
+      },
+      riser(t, dur, vel, b, hi = 7000) {
+        const bp = filt("bandpass", 300, 3); bp.frequency.setValueAtTime(300, t); bp.frequency.exponentialRampToValueAtTime(hi, t + dur);
+        const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.04);
+        noise(t, dur + 0.05).connect(bp).connect(g).connect(B[b]);
+      },
+      impact(t, vel, b) {
+        const o = osc("sine", 90, t, t + 2.5); o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(30, t + 1.2);
+        const g = ctx.createGain(); perc(g, t, vel, 0.003, 2.2); o.connect(g).connect(B[b]);
+        const lp = filt("lowpass", 3000); lp.frequency.setValueAtTime(3000, t); lp.frequency.exponentialRampToValueAtTime(200, t + 1.2);
+        const ng = ctx.createGain(); perc(ng, t, vel * 0.5, 0.002, 1.3); noise(t, 1.5).connect(lp).connect(ng).connect(B[b]);
+      },
+    };
+    return { out, play(ev, when) { const [, name, ...args] = ev; I[name](when, ...args); } };
+  }
+
+  // ================================================================
+  //  WebGL
+  // ================================================================
+  const canvas = document.getElementById("stage");
+  const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, powerPreference: "high-performance" });
+  function fail(msg) {
+    document.getElementById("hud").hidden = true;
+    const f = document.createElement("div"); f.className = "fallback"; f.textContent = msg; document.body.appendChild(f);
+  }
+  if (!gl) { fail("This piece needs WebGL2. Open it in a current version of Chrome, Safari, Edge or Firefox."); return; }
+  const hdr = !!gl.getExtension("EXT_color_buffer_float");
+  gl.getExtension("OES_texture_float_linear");
+
+  const TRI_VS = `#version 300 es
+  const vec2 P[3] = vec2[3](vec2(-1.,-1.), vec2(3.,-1.), vec2(-1.,3.));
+  void main(){ gl_Position = vec4(P[gl_VertexID], 0., 1.); }`;
+  const HEAD = `#version 300 es
+  precision highp float;
+  out vec4 o;
+  const float TAU = 6.28318530718;
+  mat2 rot(float a){ float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+  `;
+
+  // ---------------- Chapter I: particles ----------------
+  const PARTICLE_VS = `#version 300 es
+  precision highp float;
+  precision highp int;
+  uniform float uT;
+  uniform mat4 uVP;
+  uniform float uFocal;
+  uniform float uCalm;
+  uniform float uN;
+  uniform float uHold;
+  out vec3 vCol;
+  out float vA;
+  const float TAU = 6.28318530718;
+  const float LOOP = 15.0;
+
+  uint hsh(uint x){ x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+  float rnd(uint i, uint s){ return float(hsh(i * 7u + s * 0x9e3779b9u) >> 8) / 16777216.0; }
+  float gauss(float a, float b){ return sqrt(-2.0 * log(max(a, 1e-6))) * cos(TAU * b); }
+  mat2 rot(float a){ float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+
+  void galaxy(uint i, float u, vec4 r, float t, out vec3 p, out vec3 c, out float a){
+    a = 1.0;
+    if (r.x < 0.14) {
+      p = vec3(gauss(r.y, r.z), gauss(r.z, r.w) * 0.5, gauss(r.w, r.y)) * 0.19;
+      c = vec3(1.0, 0.78, 0.52) * 1.5;
+    } else {
+      float q = (r.x - 0.14) / 0.86;
+      float rr = 0.2 + pow(q, 0.85) * 1.85;
+      float arm = floor(r.y * 3.0);
+      float ang = arm * TAU / 3.0 + log(rr) * 2.6 + gauss(r.z, r.w) * 0.26 / (0.45 + rr);
+      float thick = gauss(r.w, r.z) * 0.045 * (2.1 - rr);
+      p = vec3(cos(ang) * rr, thick, sin(ang) * rr);
+      c = mix(vec3(1.0, 0.7, 0.42), vec3(0.3, 0.48, 1.0), smoothstep(0.25, 1.4, rr));
+      if (fract(r.w * 13.7 + r.y * 3.1) < 0.05) c = vec3(1.0, 0.32, 0.6) * 2.4;
+      if (fract(r.z * 17.3) < 0.02) c = vec3(0.8, 0.9, 1.0) * 3.0;
+    }
+    p.xz = rot(TAU * t / LOOP * 0.5) * p.xz;
+  }
+
+  void sphere(uint i, float u, vec4 r, float t, out vec3 p, out vec3 c, out float a){
+    a = 1.0;
+    float spin = TAU * t / LOOP;
+    if (u < 0.7) {
+      float k = u / 0.7;
+      float y = 1.0 - 2.0 * k;
+      float rad = sqrt(max(0.0, 1.0 - y * y));
+      float phi = fract(float(i) * 0.381966011) * TAU;
+      vec3 n = vec3(cos(phi) * rad, y, sin(phi) * rad);
+      float lat = acos(clamp(dot(n, normalize(vec3(0.3, 1.0, 0.2))), -1.0, 1.0));
+      float w = sin(lat * 13.0 - t * 5.0);
+      p = n * (1.0 + 0.06 * w * w * w);
+      p.xz = rot(spin) * p.xz;
+      c = mix(vec3(0.06, 0.42, 0.62), vec3(0.8, 1.0, 1.0), smoothstep(-0.1, 1.0, w));
+    } else {
+      float k = (u - 0.7) / 0.3;
+      float rr = 1.4 + k * 0.8 + gauss(r.x, r.y) * 0.006;
+      float ang = r.z * TAU + spin * 2.0;
+      p = vec3(cos(ang) * rr, gauss(r.y, r.w) * 0.006, sin(ang) * rr);
+      p.yz = rot(0.42) * p.yz;
+      p.xy = rot(0.18) * p.xy;
+      float band = 0.55 + 0.45 * sin(rr * 46.0) * sin(rr * 13.0);
+      c = mix(vec3(1.0, 0.72, 0.42), vec3(0.75, 0.6, 0.55), k) * (0.5 + band);
+      a = smoothstep(0.0, 0.025, abs(rr - 1.86) - 0.035);
+    }
+  }
+
+  vec3 knotC(float s){ return vec3((2.0 + cos(3.0 * s)) * cos(2.0 * s), sin(3.0 * s), (2.0 + cos(3.0 * s)) * sin(2.0 * s)) * 0.5; }
+  void knot(uint i, float u, vec4 r, float t, out vec3 p, out vec3 c, out float a){
+    a = 1.0;
+    float s = fract(u + t / LOOP) * TAU;
+    vec3 C = knotC(s);
+    float e = 0.02;
+    vec3 P1 = knotC(s + e), P0 = knotC(s - e);
+    vec3 T = normalize(P1 - P0);
+    vec3 A = P1 - 2.0 * C + P0;
+    vec3 Nn = normalize(A - dot(A, T) * T);
+    vec3 B = cross(T, Nn);
+    float th = r.x * TAU;
+    float rad = r.z < 0.65 ? 0.19 + gauss(r.y, r.w) * 0.006 : 0.19 * sqrt(r.y);
+    p = C + (Nn * cos(th) + B * sin(th)) * rad;
+    c = mix(vec3(1.0, 0.22, 0.5), vec3(1.0, 0.68, 0.25), 0.5 + 0.5 * sin(s * 3.0));
+    c *= 0.6 + 1.4 * pow(0.5 + 0.5 * sin(s * 18.0 - t * 9.0), 6.0);
+    p.xz = rot(TAU * t / LOOP) * p.xz;
+  }
+
+  void field(uint i, float u, vec4 r, float t, out vec3 p, out vec3 c, out float a){
+    float rr = sqrt(u) * 2.15;
+    float phi = fract(float(i) * 0.381966011) * TAU;
+    vec2 q = vec2(cos(phi), sin(phi)) * rr;
+    float h = 0.0;
+    for (int k = 0; k < 4; k++) {
+      float fk = float(k);
+      vec2 s = 1.25 * vec2(cos(fk * 1.5708 + 0.4), sin(fk * 1.5708 + 0.4));
+      float d = length(q - s);
+      h += sin(d * 7.0 - t * 5.0 + fk * 1.3) / (1.0 + d * 1.1);
+    }
+    h *= 0.12;
+    p = vec3(q.x, h, q.y);
+    float hn = h / 0.28;
+    c = mix(vec3(0.05, 0.1, 0.55), vec3(0.2, 0.75, 1.0), smoothstep(-0.8, 0.45, hn));
+    c = mix(c, vec3(1.3), smoothstep(0.5, 1.0, hn));
+    a = 1.0 - smoothstep(1.75, 2.15, rr);
+  }
+
+  void helix(uint i, float u, vec4 r, float t, out vec3 p, out vec3 c, out float a){
+    a = 1.0;
+    float spin = TAU * t / LOOP * 1.5;
+    float L = 3.9;
+    if (u < 0.62) {
+      float y = (r.x - 0.5) * L;
+      float strand = step(0.5, r.y) * 3.14159265;
+      float ang = y * 2.3 + strand + spin;
+      float rad = 0.62 + gauss(r.z, r.w) * 0.03;
+      p = vec3(cos(ang) * rad, y, sin(ang) * rad) + vec3(gauss(r.w, r.x), 0.0, gauss(r.x, r.z)) * 0.015;
+      c = (strand > 0.0 ? vec3(0.3, 0.95, 0.75) : vec3(0.5, 0.6, 1.0)) * 1.1;
+    } else {
+      float j = floor(r.x * 28.0);
+      float y = ((j + 0.5) / 28.0 - 0.5) * L;
+      float ang = y * 2.3 + spin;
+      vec3 p0 = vec3(cos(ang) * 0.62, y, sin(ang) * 0.62);
+      p = mix(p0, vec3(-p0.x, y, -p0.z), r.y) + (vec3(r.z, r.w, fract(r.z * 7.3)) - 0.5) * 0.03;
+      float pair = fract(j * 0.618034);
+      vec3 ca = pair < 0.5 ? vec3(1.0, 0.45, 0.3) : vec3(0.35, 0.75, 1.0);
+      vec3 cb = pair < 0.5 ? vec3(1.0, 0.85, 0.35) : vec3(0.8, 0.5, 1.0);
+      if (fract(j * 0.37) < 0.5) { vec3 tmp = ca; ca = cb; cb = tmp; }
+      c = (r.y < 0.5 ? ca : cb) * 0.75;
+    }
+    p.xy = rot(0.3) * p.xy;
+  }
+
+  void shape(int k, uint i, float u, vec4 r, float t, out vec3 p, out vec3 c, out float a){
+    if (k == 0) galaxy(i, u, r, t, p, c, a);
+    else if (k == 1) sphere(i, u, r, t, p, c, a);
+    else if (k == 2) knot(i, u, r, t, p, c, a);
+    else if (k == 3) field(i, u, r, t, p, c, a);
+    else helix(i, u, r, t, p, c, a);
+  }
+
+  void main(){
+    uint i = uint(gl_VertexID);
+    float u = (float(i) + 0.5) / uN;
+    vec4 r = vec4(rnd(i, 1u), rnd(i, 2u), rnd(i, 3u), rnd(i, 4u));
+    float T = uT;
+    int k = uHold > 0.5 ? 0 : min(int(floor(T / 3.0)), 4);
+    float local = T - float(k) * 3.0;
+    float dly = rnd(i, 5u) * 0.45;
+    float e = uHold > 0.5 ? 0.0 : smoothstep(0.0, 1.0, clamp((local - 1.75 - dly) / 0.8, 0.0, 1.0));
+
+    vec3 p0, c0, p1, c1; float a0, a1;
+    shape(k, i, u, r, T, p0, c0, a0);
+    p1 = p0; c1 = c0; a1 = a0;
+    if (e > 0.0) {
+      if (k < 4) shape(k + 1, i, u, r, T, p1, c1, a1);
+      else { p1 = vec3(gauss(r.x, r.y), gauss(r.y, r.z), gauss(r.z, r.w)) * 0.025; c1 = vec3(1.0, 0.85, 0.7) * 2.0; a1 = 1.0; }
+    }
+
+    float m = sin(3.14159265 * e);
+    vec3 p = mix(p0, p1, e);
+    vec3 sw = vec3(sin(p.y * 2.1 + T * 1.7 + r.x * 3.0),
+                   sin(p.z * 2.3 + T * 1.3 + r.y * 3.0),
+                   sin(p.x * 1.9 + T * 1.1 + r.z * 3.0));
+    p += sw * 0.6 * m * uCalm;
+    p *= 1.0 + 0.22 * m * uCalm;
+    vec3 c = mix(c0, c1, e) * (1.0 + 1.3 * m);
+    float a = mix(a0, a1, e);
+
+    vec4 cp = uVP * vec4(p, 1.0);
+    gl_Position = cp;
+    float sz = uFocal * 0.0105 / max(cp.w, 0.05);
+    gl_PointSize = clamp(sz, 1.0, 9.0);
+    vA = a * 0.11 * min(1.0, sz * sz);
+    vCol = c;
+  }`;
+
+  const PARTICLE_FS = `#version 300 es
+  precision highp float;
+  in vec3 vCol; in float vA;
+  out vec4 o;
+  void main(){
+    vec2 d = gl_PointCoord * 2.0 - 1.0;
+    float r2 = dot(d, d);
+    if (r2 > 1.0) discard;
+    o = vec4(vCol * vA * exp(-r2 * 3.5), 1.0);
+  }`;
+
+  const SPACE_FS = HEAD + `
+  uniform vec2 uRes; uniform vec3 uR, uU, uF; uniform float uTh;
+  uniform vec3 uTint, uTint2;
+  float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float noise(vec3 x){
+    vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+  void main(){
+    vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / (0.5 * uRes.y);
+    vec3 d = normalize(uF + uv.x * uTh * uR + uv.y * uTh * uU);
+    float n = noise(d * 2.0) * 0.5 + noise(d * 4.3) * 0.3 + noise(d * 9.1) * 0.2;
+    float band = exp(-abs(d.y + 0.15) * 3.5);
+    vec3 col = uTint * (0.3 + 0.7 * n) + uTint2 * pow(n, 3.0) * band;
+    vec3 g = d * 150.0; vec3 id = floor(g); vec3 f = fract(g) - 0.5;
+    float hs = h3(id);
+    vec3 off = vec3(h3(id + 3.1), h3(id + 7.7), h3(id + 1.3)) - 0.5;
+    col += vec3(0.75, 0.82, 1.0) * step(0.94, hs) * smoothstep(0.09, 0.0, length(f - off * 0.6)) * (hs - 0.94) * 16.0;
+    o = vec4(col, 1.0);
+  }`;
+
+  // ---------------- Chapter II: raymarched sculpture ----------------
+  const MATTER_FS = HEAD + `
+  uniform vec2 uRes; uniform float uT; uniform float uPulse;
+  const float FLOOR = -1.25;
+  float emerge;
+  float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+
+  float map(vec3 p){
+    float t = uT, s = max(emerge, 0.001);
+    p /= s;
+    vec3 q = p; q.xz = rot(t * 0.35) * q.xz; q.xy = rot(t * 0.21) * q.xy;
+    float sph = length(p) - 0.78;
+    float tor = length(vec2(length(q.xz) - 0.82, q.y)) - 0.3;
+    float d = mix(sph, tor, smoothstep(3.5, 7.5, t));
+    float spread = 1.0 + 0.2 * sin(t * 0.8);
+    for (int i = 0; i < 5; i++) {
+      float fi = float(i);
+      vec3 c = vec3(sin(t * 0.9 + fi * 1.3) * 1.15, cos(t * 0.7 + fi * 2.1) * 0.55, sin(t * 0.63 + fi * 0.8 + 1.0) * 1.05) * spread;
+      d = smin(d, length(p - c) - (0.2 + 0.015 * fi), 0.45);
+    }
+    float g = dot(sin(p * 5.0 + vec3(0.0, t * 0.6, 0.0)), cos(p.yzx * 5.0)) / 5.0;
+    d = mix(d, max(d, abs(g) - 0.045), smoothstep(9.0, 11.5, t));
+    d += 0.012 * uPulse * sin(p.x * 18.0 + t * 6.0) * sin(p.y * 18.0) * sin(p.z * 18.0);
+    return d * 0.7 * s;
+  }
+  vec3 nrm(vec3 p){
+    const vec2 k = vec2(1.0, -1.0); float h = 0.0015;
+    return normalize(k.xyy * map(p + k.xyy * h) + k.yyx * map(p + k.yyx * h) + k.yxy * map(p + k.yxy * h) + k.xxx * map(p + k.xxx * h));
+  }
+  float ao(vec3 p, vec3 n){
+    float o = 0.0, w = 1.0;
+    for (int i = 1; i <= 5; i++) { float h = 0.015 * float(i * i) + 0.01; o += (h - map(p + n * h)) * w; w *= 0.7; }
+    return clamp(1.0 - 2.2 * o, 0.0, 1.0);
+  }
+  float shadow(vec3 ro, vec3 rd){
+    float res = 1.0, t = 0.03;
+    for (int i = 0; i < 28; i++) { float h = map(ro + rd * t); res = min(res, 10.0 * h / t); t += clamp(h, 0.03, 0.3); if (res < 0.002 || t > 5.0) break; }
+    return clamp(res, 0.0, 1.0);
+  }
+  vec2 bound(vec3 ro, vec3 rd, float R){
+    float b = dot(ro, rd), c = dot(ro, ro) - R * R, h = b * b - c;
+    if (h < 0.0) return vec2(-1.0);
+    h = sqrt(h); return vec2(max(-b - h, 0.0), -b + h);
+  }
+  float march(vec3 ro, vec3 rd, float tmax){
+    vec2 bb = bound(ro, rd, 2.4 * max(emerge, 0.01));
+    if (bb.y < 0.0) return -1.0;
+    float t = bb.x; tmax = min(tmax, bb.y);
+    for (int i = 0; i < 110; i++) {
+      float d = map(ro + rd * t);
+      if (d < 0.0006 + 0.0006 * t) return t;
+      t += d;
+      if (t > tmax) break;
+    }
+    return -1.0;
+  }
+  vec3 env(vec3 d){
+    vec3 c = mix(vec3(0.02, 0.02, 0.026), vec3(0.11, 0.11, 0.125), smoothstep(-0.3, 0.7, d.y));
+    c += vec3(0.16, 0.1, 0.08) * exp(-abs(d.y - 0.05) * 9.0);
+    if (d.y > 0.0) { vec2 q = d.xz / d.y; float r = max(abs(q.x) - 0.5, abs(q.y + 0.2) - 0.22); c += vec3(1.0, 0.97, 0.92) * 3.2 * smoothstep(0.06, 0.0, r); }
+    if (d.x > 0.0) { vec2 q = d.yz / d.x; float r = max(abs(q.x - 0.1) - 0.9, abs(q.y) - 0.06); c += vec3(0.45, 0.7, 1.0) * 2.6 * smoothstep(0.04, 0.0, r); }
+    if (d.x < 0.0) { vec2 q = d.yz / -d.x; float r = max(abs(q.x - 0.1) - 0.9, abs(q.y - 0.3) - 0.06); c += vec3(1.0, 0.6, 0.35) * 2.6 * smoothstep(0.04, 0.0, r); }
+    if (d.z < 0.0) { vec2 q = d.xy / -d.z; c += vec3(1.0, 0.4, 0.7) * 1.2 * smoothstep(0.35, 0.0, length(q - vec2(0.0, 0.4)) - 0.2); }
+    return c;
+  }
+  vec3 shadeObj(vec3 p, vec3 rd){
+    vec3 n = nrm(p), v = -rd;
+    float ndv = clamp(dot(n, v), 0.0, 1.0);
+    vec3 r = reflect(rd, n);
+    vec3 rc;
+    if (r.y < 0.0) {
+      vec3 fp = p + r * ((FLOOR - p.y) / r.y);
+      rc = vec3(0.02, 0.02, 0.025) + vec3(0.07) * exp(-length(fp.xz) * 0.7);
+    } else rc = env(r);
+    float film = 0.55 + 0.25 * sin(dot(p, vec3(2.1, 3.3, 1.7)) + uT * 0.8) + uPulse * 0.08;
+    vec3 irid = 0.5 + 0.5 * cos(TAU * (film * 2.2 * (1.0 - 0.55 * ndv) + vec3(0.0, 0.33, 0.67)));
+    float fres = pow(1.0 - ndv, 5.0);
+    vec3 tint = mix(mix(vec3(0.93, 0.91, 0.88), irid, 0.6), vec3(1.0), fres);
+    return rc * tint * (0.3 + 0.7 * ao(p, n));
+  }
+  void main(){
+    float t = uT;
+    emerge = clamp(1.0 - exp(-2.6 * t) * cos(5.5 * t), 0.0, 1.25);
+    vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+    float a = 0.9 + t * 0.14, rad = 4.7 - t * 0.06;
+    vec3 ro = vec3(rad * cos(a), 0.35 + 0.35 * sin(t * 0.4), rad * sin(a));
+    vec3 ta = vec3(0.0, -0.05, 0.0);
+    vec3 cf = normalize(ta - ro), cr = normalize(cross(cf, vec3(0, 1, 0))), cu = cross(cr, cf);
+    vec3 rd = normalize(uv.x * cr + uv.y * cu + 1.8 * cf);
+    vec3 bg = mix(vec3(0.012, 0.012, 0.018), vec3(0.035, 0.036, 0.046), smoothstep(-0.2, 0.5, rd.y));
+    vec3 col = bg;
+    float tf = rd.y < 0.0 ? (FLOOR - ro.y) / rd.y : 1e9;
+    float th = march(ro, rd, min(tf, 20.0));
+    if (th > 0.0) {
+      col = shadeObj(ro + rd * th, rd);
+    } else if (tf < 1e8) {
+      vec3 p = ro + rd * tf;
+      float sh = shadow(p + vec3(0.0, 0.002, 0.0), normalize(vec3(0.1, 1.0, 0.2)));
+      vec3 base = vec3(0.022, 0.022, 0.028) + vec3(0.09, 0.088, 0.085) * exp(-length(p.xz) * 0.55) * sh;
+      vec3 r = reflect(rd, vec3(0, 1, 0));
+      float refl = 0.22 + 0.5 * pow(1.0 - clamp(-rd.y, 0.0, 1.0), 3.0);
+      float tr = march(p + r * 0.002, r, 12.0);
+      vec3 rc = tr > 0.0 ? shadeObj(p + r * (tr + 0.002), r) : env(r) * 0.12;
+      col = base + rc * refl;
+      col = mix(col, bg, 1.0 - exp(-0.012 * tf * tf));
+    }
+    o = vec4(col, 1.0);
+  }`;
+
+  // ---------------- Chapter III: stable fluids ----------------
+  const FL = {
+    splat: HEAD + `uniform sampler2D uTarget; uniform vec2 uRes; uniform float uAspect; uniform vec2 uPoint; uniform vec3 uColor; uniform float uRadius;
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes; vec2 p = uv - uPoint; p.x *= uAspect;
+        o = vec4(texture(uTarget, uv).rgb + exp(-dot(p, p) / uRadius) * uColor, 1.0); }`,
+    curl: HEAD + `uniform sampler2D uVel; uniform vec2 uRes, uTexel;
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes;
+        float L = texture(uVel, uv - vec2(uTexel.x, 0)).y, R = texture(uVel, uv + vec2(uTexel.x, 0)).y;
+        float T = texture(uVel, uv + vec2(0, uTexel.y)).x, B = texture(uVel, uv - vec2(0, uTexel.y)).x;
+        o = vec4(0.5 * (R - L - T + B), 0.0, 0.0, 1.0); }`,
+    vort: HEAD + `uniform sampler2D uVel, uCurl; uniform vec2 uRes, uTexel; uniform float uCurlS, uDt;
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes;
+        float L = texture(uCurl, uv - vec2(uTexel.x, 0)).x, R = texture(uCurl, uv + vec2(uTexel.x, 0)).x;
+        float T = texture(uCurl, uv + vec2(0, uTexel.y)).x, B = texture(uCurl, uv - vec2(0, uTexel.y)).x;
+        float C = texture(uCurl, uv).x;
+        vec2 f = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
+        f /= length(f) + 1e-4; f *= uCurlS * C; f.y *= -1.0;
+        vec2 v = texture(uVel, uv).xy + f * uDt;
+        o = vec4(clamp(v, -1000.0, 1000.0), 0.0, 1.0); }`,
+    div: HEAD + `uniform sampler2D uVel; uniform vec2 uRes, uTexel;
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes;
+        float L = texture(uVel, uv - vec2(uTexel.x, 0)).x, R = texture(uVel, uv + vec2(uTexel.x, 0)).x;
+        float T = texture(uVel, uv + vec2(0, uTexel.y)).y, B = texture(uVel, uv - vec2(0, uTexel.y)).y;
+        vec2 C = texture(uVel, uv).xy;
+        if (uv.x - uTexel.x < 0.0) L = -C.x; if (uv.x + uTexel.x > 1.0) R = -C.x;
+        if (uv.y + uTexel.y > 1.0) T = -C.y; if (uv.y - uTexel.y < 0.0) B = -C.y;
+        o = vec4(0.5 * (R - L + T - B), 0.0, 0.0, 1.0); }`,
+    jacobi: HEAD + `uniform sampler2D uP, uDiv; uniform vec2 uRes, uTexel;
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes;
+        float L = texture(uP, uv - vec2(uTexel.x, 0)).x, R = texture(uP, uv + vec2(uTexel.x, 0)).x;
+        float T = texture(uP, uv + vec2(0, uTexel.y)).x, B = texture(uP, uv - vec2(0, uTexel.y)).x;
+        o = vec4((L + R + B + T - texture(uDiv, uv).x) * 0.25, 0.0, 0.0, 1.0); }`,
+    grad: HEAD + `uniform sampler2D uP, uVel; uniform vec2 uRes, uTexel;
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes;
+        float L = texture(uP, uv - vec2(uTexel.x, 0)).x, R = texture(uP, uv + vec2(uTexel.x, 0)).x;
+        float T = texture(uP, uv + vec2(0, uTexel.y)).x, B = texture(uP, uv - vec2(0, uTexel.y)).x;
+        o = vec4(texture(uVel, uv).xy - vec2(R - L, T - B), 0.0, 1.0); }`,
+    advect: HEAD + `uniform sampler2D uVel, uSrc; uniform vec2 uRes, uVelTexel; uniform float uDt, uDiss;
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes;
+        vec2 coord = uv - uDt * texture(uVel, uv).xy * uVelTexel;
+        o = vec4(texture(uSrc, coord).rgb / (1.0 + uDiss * uDt), 1.0); }`,
+    scale: HEAD + `uniform sampler2D uTex; uniform vec2 uRes; uniform float uVal;
+      void main(){ o = vec4(texture(uTex, gl_FragCoord.xy / uRes).rgb * uVal, 1.0); }`,
+    show: HEAD + `uniform sampler2D uDye; uniform vec2 uRes, uTexel;
+      float lum(vec2 uv){ return dot(texture(uDye, uv).rgb, vec3(0.3, 0.59, 0.11)); }
+      void main(){ vec2 uv = gl_FragCoord.xy / uRes;
+        vec3 c = texture(uDye, uv).rgb;
+        float l = lum(uv - vec2(uTexel.x, 0)), r = lum(uv + vec2(uTexel.x, 0)), t = lum(uv + vec2(0, uTexel.y)), b = lum(uv - vec2(0, uTexel.y));
+        vec3 n = normalize(vec3(l - r, b - t, 0.35));
+        vec3 L = normalize(vec3(-0.5, 0.6, 0.65));
+        float dif = clamp(dot(n, L), 0.0, 1.0);
+        float spec = pow(clamp(dot(reflect(-L, n), vec3(0, 0, 1)), 0.0, 1.0), 28.0);
+        vec2 d = uv - 0.5;
+        vec3 bg = vec3(0.008, 0.01, 0.028) * (1.2 - dot(d, d) * 2.0);
+        o = vec4(bg + c * (0.35 + 0.85 * dif) + spec * 0.7 * clamp(length(c), 0.0, 1.0), 1.0); }`,
+  };
+
+  // ---------------- Chapter IV: procedural world ----------------
+  const WORLD_FS = HEAD + `
+  uniform vec2 uRes; uniform float uT;
+  vec3 sunDir;
+  float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  vec3 noised(vec2 x){
+    vec2 p = floor(x), w = fract(x);
+    vec2 u = w * w * w * (w * (w * 6.0 - 15.0) + 10.0);
+    vec2 du = 30.0 * w * w * (w * (w - 2.0) + 1.0);
+    float a = hash(p), b = hash(p + vec2(1, 0)), c = hash(p + vec2(0, 1)), d = hash(p + vec2(1, 1));
+    float k1 = b - a, k2 = c - a, k4 = a - b - c + d;
+    return vec3(-1.0 + 2.0 * (a + k1 * u.x + k2 * u.y + k4 * u.x * u.y), 2.0 * du * (vec2(k1, k2) + k4 * u.yx));
+  }
+  const mat2 M2 = mat2(0.8, -0.6, 0.6, 0.8);
+  float pathX(float z){ return 1.8 * sin(z * 0.11) + 0.8 * sin(z * 0.23 + 1.0); }
+  float terrain(vec2 p, int oct){
+    vec2 q = p * 0.28, d = vec2(0.0);
+    float a = 0.0, b = 1.0;
+    for (int i = 0; i < 10; i++) {
+      if (i >= oct) break;
+      vec3 n = noised(q); d += n.yz;
+      a += b * n.x / (1.0 + dot(d, d));
+      b *= 0.5; q = M2 * q * 2.0;
+    }
+    float h = a * 1.2;
+    float dx = abs(p.x - pathX(p.y));
+    return mix(h * 0.3 - 0.28, h + 0.45, smoothstep(0.4, 3.2, dx));
+  }
+  const float WATER = -0.12;
+  vec3 sky(vec3 rd){
+    float up = smoothstep(-0.14, 0.12, sunDir.y);
+    float h = max(rd.y, 0.0);
+    vec3 zen = mix(vec3(0.004, 0.007, 0.025), vec3(0.1, 0.18, 0.4), up);
+    vec3 hor = mix(vec3(0.05, 0.035, 0.09), vec3(1.0, 0.42, 0.18), up);
+    vec3 c = mix(hor, zen, pow(h, 0.42));
+    float sd = max(dot(rd, sunDir), 0.0);
+    c += vec3(1.0, 0.45, 0.18) * (pow(sd, 6.0) * 0.7 + pow(sd, 1.5) * 0.18) * smoothstep(-0.2, 0.05, sunDir.y);
+    c += vec3(1.0, 0.8, 0.55) * smoothstep(0.9990, 0.9996, sd) * 5.0 * smoothstep(-0.03, 0.01, sunDir.y);
+    // clouds on a high plane, lit from below by the sunset
+    if (rd.y > 0.01) {
+      vec2 cp = rd.xz / rd.y * 2.0 + vec2(0.0, uT * 0.08);
+      float cl = 0.0, amp = 0.55;
+      for (int i = 0; i < 4; i++) { cl += amp * (noised(cp).x * 0.5 + 0.5); cp = M2 * cp * 2.1; amp *= 0.5; }
+      cl = smoothstep(0.5, 0.95, cl) * smoothstep(0.01, 0.2, rd.y);
+      vec3 cc = mix(vec3(0.03, 0.03, 0.06), mix(vec3(0.9, 0.35, 0.3), vec3(1.0, 0.7, 0.45), pow(sd, 3.0)), up);
+      c = mix(c, cc, cl * 0.85);
+    }
+    float night = 1.0 - smoothstep(-0.12, 0.04, sunDir.y);
+    vec3 g = rd * 220.0, id = floor(g), f = fract(g) - 0.5;
+    float hs = h3(id);
+    vec3 off = vec3(h3(id + 3.1), h3(id + 7.7), h3(id + 1.3)) - 0.5;
+    float star = step(0.87, hs) * smoothstep(0.1, 0.0, length(f - off * 0.6)) * (hs - 0.87) * 22.0;
+    vec3 nb = normalize(vec3(0.35, 0.55, -0.75));
+    float band = exp(-abs(dot(rd, nb)) * 7.0);
+    float dust = noised(rd.xy * 6.0 + rd.z * 3.0).x * 0.5 + 0.5;
+    vec3 milky = band * (vec3(0.28, 0.24, 0.4) * dust + vec3(0.6, 0.45, 0.35) * pow(dust, 4.0) * 0.8);
+    c += night * smoothstep(0.0, 0.08, rd.y) * (star * vec3(0.8, 0.85, 1.0) + milky * 0.6);
+    return c;
+  }
+  float tshadow(vec3 ro, vec3 rd){
+    float res = 1.0, t = 0.05;
+    for (int i = 0; i < 26; i++) {
+      vec3 p = ro + rd * t; float h = p.y - terrain(p.xz, 4);
+      res = min(res, 12.0 * h / t); t += clamp(h, 0.05, 0.6);
+      if (res < 0.001 || t > 12.0) break;
+    }
+    return clamp(res, 0.0, 1.0);
+  }
+  void main(){
+    float t = uT;
+    float e = mix(0.13, -0.16, smoothstep(0.0, 13.0, t));
+    sunDir = normalize(vec3(-0.3, e, 1.0));
+    vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+    float z = 2.0 + t * 1.15;
+    vec3 ro = vec3(pathX(z), 0.0, z);
+    ro.y = max(0.5 + 0.08 * sin(t * 0.6), terrain(ro.xz, 5) + 0.35);
+    vec3 ta = vec3(pathX(z + 2.5), 0.32 + 3.6 * smoothstep(8.5, 14.0, t), z + 2.5);
+    vec3 cf = normalize(ta - ro), cr = normalize(cross(cf, vec3(0, 1, 0))), cu = cross(cr, cf);
+    float roll = 0.12 * sin(t * 0.45) * (1.0 - smoothstep(8.0, 12.0, t));
+    cr = cr * cos(roll) + cu * sin(roll); cu = cross(cr, cf);
+    vec3 rd = normalize(uv.x * cr + uv.y * cu + 1.6 * cf);
+
+    vec3 skyc = sky(rd);
+    vec3 col = skyc;
+    float tw = rd.y < 0.0 ? (WATER - ro.y) / rd.y : 1e9;
+    float tt = 0.05, hit = -1.0;
+    float tmax = min(tw, 40.0);
+    for (int i = 0; i < 200; i++) {
+      vec3 p = ro + rd * tt;
+      float h = p.y - terrain(p.xz, 5);
+      if (h < 0.0015 * tt) { hit = tt; break; }
+      tt += 0.42 * h;
+      if (tt > tmax) break;
+    }
+    float up = smoothstep(-0.14, 0.12, sunDir.y);
+    vec3 sunCol = mix(vec3(1.0, 0.3, 0.1), vec3(1.0, 0.75, 0.5), smoothstep(0.0, 0.15, sunDir.y)) * 3.2 * smoothstep(-0.06, 0.04, sunDir.y);
+    vec3 ambC = mix(vec3(0.012, 0.018, 0.04), vec3(0.14, 0.17, 0.3), up);
+    float dist = 1e9;
+    if (hit > 0.0) {
+      dist = hit;
+      vec3 p = ro + rd * hit;
+      float ee = 0.0015 * hit + 0.001;
+      vec3 n = normalize(vec3(terrain(p.xz - vec2(ee, 0), 9) - terrain(p.xz + vec2(ee, 0), 9), 2.0 * ee,
+                              terrain(p.xz - vec2(0, ee), 9) - terrain(p.xz + vec2(0, ee), 9)));
+      vec3 rock = vec3(0.14, 0.11, 0.09), grass = vec3(0.07, 0.1, 0.035), snow = vec3(0.85, 0.88, 0.95);
+      vec3 alb = mix(rock, grass, smoothstep(0.72, 0.9, n.y) * smoothstep(0.9, 0.2, p.y));
+      alb = mix(alb, snow, smoothstep(0.75, 1.1, p.y + 0.25 * n.y) * smoothstep(0.55, 0.8, n.y));
+      float dif = clamp(dot(n, sunDir), 0.0, 1.0);
+      if (dif > 0.0 && sunDir.y > -0.06) dif *= tshadow(p + n * 0.01, sunDir);
+      col = alb * (dif * sunCol + ambC * (0.5 + 0.5 * n.y) * 1.3 + vec3(0.25, 0.12, 0.05) * clamp(-n.x * 0.5 + 0.2, 0.0, 1.0) * up * 0.3);
+    } else if (tw < 40.0) {
+      dist = tw;
+      vec3 p = ro + rd * tw;
+      vec3 w1 = noised(p.xz * 6.0 + vec2(t * 0.6, 0.0));
+      vec3 w2 = noised(p.xz * 13.0 - vec2(0.0, t * 0.9));
+      vec3 n = normalize(vec3(-(w1.y * 0.5 + w2.y * 0.25) * 0.05, 1.0, -(w1.z * 0.5 + w2.z * 0.25) * 0.05));
+      vec3 r = reflect(rd, n);
+      float fres = 0.03 + 0.97 * pow(1.0 - clamp(dot(-rd, n), 0.0, 1.0), 5.0);
+      float depth = p.y - terrain(p.xz, 4);
+      vec3 deep = vec3(0.005, 0.02, 0.03) + ambC * 0.05;
+      col = mix(deep, sky(r), fres);
+      col += sunCol * pow(max(dot(r, sunDir), 0.0), 900.0) * 0.8;
+      col = mix(col, ambC * 0.2, smoothstep(0.02, 0.0, abs(depth)) * 0.4);
+    }
+    if (dist < 1e8) {
+      float fog = 1.0 - exp(-dist * 0.045);
+      vec3 fogC = mix(sky(normalize(vec3(rd.x, 0.02, rd.z))), sunCol * 0.25, pow(max(dot(rd, sunDir), 0.0), 8.0) * 0.5);
+      col = mix(col, fogC, fog);
+    }
+    o = vec4(col, 1.0);
+  }`;
+
+  // ---------------- post ----------------
+  const PASS_FS = HEAD + `
+  uniform sampler2D uTex; uniform vec2 uRes; uniform float uThresh; uniform vec2 uScale;
+  void main(){
+    vec3 c = texture(uTex, gl_FragCoord.xy / uRes * uScale).rgb;
+    if (uThresh > 0.0) { float l = max(c.r, max(c.g, c.b)); c *= smoothstep(uThresh, uThresh * 2.5, l); }
+    o = vec4(c, 1.0);
+  }`;
+  const BLUR_FS = HEAD + `
+  uniform sampler2D uTex; uniform vec2 uRes; uniform vec2 uDir;
+  void main(){
+    vec2 uv = gl_FragCoord.xy / uRes, px = uDir / uRes;
+    vec3 c = texture(uTex, uv).rgb * 0.2270270;
+    c += (texture(uTex, uv + px * 1.3846154).rgb + texture(uTex, uv - px * 1.3846154).rgb) * 0.3162162;
+    c += (texture(uTex, uv + px * 3.2307692).rgb + texture(uTex, uv - px * 3.2307692).rgb) * 0.0702703;
+    o = vec4(c, 1.0);
+  }`;
+  const COMP_FS = HEAD + `
+  uniform sampler2D uScene, uB1, uB2, uB3;
+  uniform vec2 uRes, uScale; uniform float uT, uExpo, uFade, uFlash; uniform vec3 uBloom;
+  vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+  vec3 scene(vec2 uv){ return texture(uScene, clamp(uv, vec2(0.0), vec2(1.0)) * uScale).rgb; }
+  void main(){
+    vec2 uv = gl_FragCoord.xy / uRes;
+    vec2 dc = uv - 0.5;
+    vec2 ca = dc * 0.012 * length(dc);
+    vec3 col = vec3(scene(uv + ca).r, scene(uv).g, scene(uv - ca).b);
+    col += texture(uB1, uv).rgb * uBloom.x + texture(uB2, uv).rgb * uBloom.y + texture(uB3, uv).rgb * uBloom.z;
+    col = aces(col * uExpo) * uFade + vec3(1.0, 0.95, 0.9) * uFlash;
+    col *= 1.0 - 0.55 * dot(dc, dc) * 1.6;
+    col += (hash(gl_FragCoord.xy + fract(uT * 7.0) * 311.0) - 0.5) * 0.022;
+    o = vec4(col, 1.0);
+  }`;
+
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  function program(vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {};
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name] = gl.getUniformLocation(p, info.name); }
+    return { p, u };
+  }
+  let P;
+  try {
+    P = {
+      parts: program(PARTICLE_VS, PARTICLE_FS), space: program(TRI_VS, SPACE_FS),
+      matter: program(TRI_VS, MATTER_FS), world: program(TRI_VS, WORLD_FS),
+      pass: program(TRI_VS, PASS_FS), blur: program(TRI_VS, BLUR_FS), comp: program(TRI_VS, COMP_FS),
+    };
+    for (const k in FL) P["f_" + k] = program(TRI_VS, FL[k]);
+  } catch (err) { fail("A shader failed to compile:\n" + err.message); return; }
+  gl.bindVertexArray(gl.createVertexArray());
+
+  // Uniform setter: numbers → 1f, arrays → nf / matrix, {tex, unit} → sampler.
+  function setU(prog, obj) {
+    for (const k in obj) {
+      const v = obj[k], loc = prog.u[k];
+      if (loc === undefined) continue;
+      if (typeof v === "number") gl.uniform1f(loc, v);
+      else if (v.tex) { gl.activeTexture(gl.TEXTURE0 + v.unit); gl.bindTexture(gl.TEXTURE_2D, v.tex); gl.uniform1i(loc, v.unit); }
+      else if (v.length === 16) gl.uniformMatrix4fv(loc, false, v);
+      else gl["uniform" + v.length + "fv"](loc, v);
+    }
+  }
+  const tx = (t, unit = 0) => ({ tex: t.tex, unit });
+
+  // ---------------- render targets ----------------
+  let fmt = hdr ? { internal: gl.RGBA16F, type: gl.HALF_FLOAT } : { internal: gl.RGBA8, type: gl.UNSIGNED_BYTE };
+  function target(w, h) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, fmt.internal, w, h, 0, gl.RGBA, fmt.type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE && fmt.type !== gl.UNSIGNED_BYTE) {
+      gl.deleteFramebuffer(fb); gl.deleteTexture(tex);
+      fmt = { internal: gl.RGBA8, type: gl.UNSIGNED_BYTE };
+      return target(w, h);
+    }
+    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    return { tex, fb, w, h };
+  }
+  function free(t) { if (t) { gl.deleteFramebuffer(t.fb); gl.deleteTexture(t.tex); } }
+  function dbl(w, h) {
+    let a = target(w, h), b = target(w, h);
+    return { get read() { return a; }, get write() { return b; }, swap() { [a, b] = [b, a]; }, free() { free(a); free(b); }, w, h };
+  }
+  function run(prog, dst, uni) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst ? dst.fb : null);
+    gl.viewport(0, 0, dst ? dst.w : W, dst ? dst.h : H);
+    gl.useProgram(prog.p); setU(prog, uni);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  let W = 0, H = 0, RT = {}, FLU = null, rs = 1;
+  const sceneView = () => ({ fb: RT.scene.fb, w: Math.max(2, Math.round(W * rs)), h: Math.max(2, Math.round(H * rs)) });
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const w = Math.max(2, Math.round(canvas.clientWidth * dpr));
+    const h = Math.max(2, Math.round(canvas.clientHeight * dpr));
+    if (w === W && h === H) return;
+    W = w; H = h; canvas.width = w; canvas.height = h;
+    Object.values(RT).forEach(free);
+    const d = (k) => [Math.max(1, W >> k), Math.max(1, H >> k)];
+    RT = { scene: target(W, H), a1: target(...d(1)), b1: target(...d(1)), a2: target(...d(2)), b2: target(...d(2)), a3: target(...d(3)), b3: target(...d(3)) };
+    if (FLU) { ["vel", "dye", "prs"].forEach((k) => FLU[k].free()); free(FLU.div); free(FLU.curl); }
+    const aspect = W / H, vh = 180, vw = Math.round(vh * aspect), dh = 720, dw = Math.round(dh * aspect);
+    FLU = { vel: dbl(vw, vh), prs: dbl(vw, vh), dye: dbl(dw, dh), div: target(vw, vh), curl: target(vw, vh), vw, vh, dw, dh };
+    document.getElementById("res").textContent = `${W}×${H}`;
+  }
+
+  // ---------------- math ----------------
+  function perspective(fovy, asp, n, f) {
+    const t = 1 / Math.tan(fovy / 2);
+    return [t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0];
+  }
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  function lookAt(e, c) {
+    const z = norm(sub(e, c)), x = norm(cross([0, 1, 0], z)), y = cross(z, x);
+    return { m: [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1], x, y, f: [-z[0], -z[1], -z[2]] };
+  }
+  function mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; }
+    return o;
+  }
+  const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+  function seeded(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
+  const pulseFrom = (times, t, k) => { let s = 0; for (const e of times) if (t >= e && t - e < 2) s += Math.exp(-(t - e) * k); return s; };
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const FOV = 45 * Math.PI / 180;
+  const TINTS = [
+    [[0.020, 0.014, 0.055], [0.10, 0.05, 0.16]],
+    [[0.006, 0.030, 0.040], [0.02, 0.12, 0.14]],
+    [[0.040, 0.008, 0.030], [0.16, 0.03, 0.08]],
+    [[0.004, 0.014, 0.050], [0.02, 0.06, 0.20]],
+    [[0.006, 0.032, 0.022], [0.03, 0.13, 0.09]],
+  ];
+
+  // ---------------- chapter renderers ----------------
+  function drawForms(lt, mode = "chapter") {
+    const sv = sceneView(), aspect = sv.w / sv.h, fit = Math.max(1, 1.35 / aspect);
+    let yaw, elev, dist;
+    if (mode === "credits") {           // the galaxy again, seen from high above, turning slowly
+      yaw = 0.2 + lt * 0.05; elev = 1.05 - lt * 0.012; dist = 7.2 * fit;
+    } else if (mode === "titles") {    // only the starfield, drifting toward the opening shot
+      yaw = 0.6 - (INTRO - lt) * 0.03; elev = 0.36; dist = 5.85 * fit;
+    } else {
+      const ph = TAU * lt / CHAP;
+      yaw = 0.6 + ph * 0.5; elev = 0.36 + 0.24 * Math.sin(ph);
+      dist = (5.3 + 0.55 * Math.cos(ph)) * fit * (1 - 0.22 * smooth((lt - 12) / 3));
+    }
+    const eye = [dist * Math.cos(elev) * Math.cos(yaw), dist * Math.sin(elev), dist * Math.cos(elev) * Math.sin(yaw)];
+    const cam = lookAt(eye, [0, 0, 0]);
+    const vp = mul(perspective(FOV, aspect, 0.05, 50), cam.m);
+    const k = mode === "chapter" ? Math.min(4, Math.floor(lt / 3)) : 0;
+    const e = mode === "chapter" ? smooth((lt - k * 3 - 1.9) / 1.0) : 0;
+    const tA = TINTS[k], tB = TINTS[(k + 1) % 5];
+    run(P.space, sv, { uRes: [sv.w, sv.h], uR: cam.x, uU: cam.y, uF: cam.f, uTh: Math.tan(FOV / 2), uTint: lerp3(tA[0], tB[0], e), uTint2: lerp3(tA[1], tB[1], e) });
+    if (mode === "titles") return;
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(P.parts.p);
+    setU(P.parts, { uT: lt, uVP: vp, uFocal: (sv.h / 2) / Math.tan(FOV / 2), uCalm: reduce ? 0.35 : 1, uN: N, uHold: mode === "credits" ? 1 : 0 });
+    gl.drawArrays(gl.POINTS, 0, N);
+    gl.disable(gl.BLEND);
+  }
+
+  function drawMatter(lt, t) {
+    const sv = sceneView();
+    run(P.matter, sv, { uRes: [sv.w, sv.h], uT: lt, uPulse: Math.min(1.5, pulseFrom(GLASS_TIMES, t, 3.5)) });
+  }
+
+  // Fluid choreography — every event sits on the score's grid.
+  const FLOW_PAL = [
+    [[1.0, 0.18, 0.5], [0.12, 0.55, 1.0]],
+    [[1.0, 0.5, 0.08], [0.3, 0.28, 1.0]],
+    [[0.15, 1.0, 0.55], [1.0, 0.28, 0.3]],
+    [[0.95, 0.85, 0.15], [0.6, 0.2, 1.0]],
+    [[1.0, 0.22, 0.18], [0.2, 0.85, 1.0]],
+  ];
+  const scaleC = (c, s) => [c[0] * s, c[1] * s, c[2] * s];
+  function splat(x, y, dx, dy, color, r) {
+    const aspect = W / H, rad = r * (aspect > 1 ? aspect : 1);
+    run(P.f_splat, { fb: FLU.vel.write.fb, w: FLU.vw, h: FLU.vh }, { uTarget: tx(FLU.vel.read), uRes: [FLU.vw, FLU.vh], uAspect: aspect, uPoint: [x, y], uColor: [dx, dy, 0], uRadius: rad });
+    FLU.vel.swap();
+    run(P.f_splat, { fb: FLU.dye.write.fb, w: FLU.dw, h: FLU.dh }, { uTarget: tx(FLU.dye.read), uRes: [FLU.dw, FLU.dh], uAspect: aspect, uPoint: [x, y], uColor: color, uRadius: rad });
+    FLU.dye.swap();
+  }
+  function onBeat(j) {
+    const aspect = W / H, bar = Math.min(4, Math.floor(j / 4)), bt = j % 4, pal = FLOW_PAL[bar];
+    const ang = j * 2.39996 + 0.3, R = 0.32;
+    const x = 0.5 + Math.cos(ang) * R / aspect, y = 0.5 + Math.sin(ang) * R;
+    const dir = [-Math.sin(ang + 0.6) - Math.cos(ang) * 0.5, Math.cos(ang + 0.6) - Math.sin(ang) * 0.5];
+    const l = Math.hypot(dir[0], dir[1]);
+    splat(x, y, dir[0] / l * 520, dir[1] / l * 520, scaleC(pal[j % 2], bt === 0 ? 1.5 : 1.0), 0.0035);
+    if (bt === 1 || bt === 3) {
+      for (let k = 0; k < 6; k++) {
+        const a2 = k * TAU / 6 + j * 0.7;
+        splat(0.5 + Math.cos(a2) * 0.04 / aspect, 0.5 + Math.sin(a2) * 0.04, Math.cos(a2) * 380, Math.sin(a2) * 380, scaleC(pal[1 - (j % 2)], 0.55), 0.0012);
+      }
+    }
+  }
+  function onFill(j) {
+    const r = seeded(j * 7919 + 13), aspect = W / H;
+    const x = 0.5 + (r() - 0.5) * 0.7 / aspect, y = 0.5 + (r() - 0.5) * 0.7, a = r() * TAU;
+    splat(x, y, Math.cos(a) * 450, Math.sin(a) * 450, scaleC([1.0, 0.85, 0.75], 0.7), 0.0015);
+  }
+  let flowPrev = -1, flowActive = false;
+  function resetFlow() {
+    for (const t of [FLU.vel.read, FLU.vel.write, FLU.dye.read, FLU.dye.write, FLU.prs.read, FLU.prs.write]) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+    flowPrev = -0.001;
+  }
+  function stepFlow(lt, dt) {
+    if (lt < flowPrev) resetFlow();
+    const a = flowPrev, b = lt;
+    for (let j = Math.floor(a / BEAT) + 1; j * BEAT <= b; j++) if (j >= 0 && j < 20) onBeat(j);
+    const S = BEAT / 4;
+    for (let j = Math.floor(a / S) + 1; j * S <= b; j++) if (j * S >= 13.5 && j * S < 15) onFill(j);
+    flowPrev = lt;
+    if (dt <= 0) return;
+    // continuous stirring from two orbiting emitters
+    const aspect = W / H, bar = Math.min(4, Math.floor(lt / BAR)), pal = FLOW_PAL[bar];
+    for (let k = 0; k < 2; k++) {
+      const an = lt * 1.1 + k * Math.PI, x = 0.5 + Math.cos(an) * 0.18 / aspect, y = 0.5 + Math.sin(an * 1.3) * 0.18;
+      splat(x, y, -Math.sin(an) * 160, Math.cos(an) * 160, scaleC(pal[k], dt * 4), 0.0012);
+    }
+    const V = FLU.vel, texel = [1 / FLU.vw, 1 / FLU.vh], vres = [FLU.vw, FLU.vh];
+    const vv = (t) => ({ fb: t.fb, w: FLU.vw, h: FLU.vh });
+    run(P.f_curl, vv(FLU.curl), { uVel: tx(V.read), uRes: vres, uTexel: texel });
+    run(P.f_vort, vv(V.write), { uVel: tx(V.read, 0), uCurl: tx(FLU.curl, 1), uRes: vres, uTexel: texel, uCurlS: 28, uDt: dt }); V.swap();
+    run(P.f_div, vv(FLU.div), { uVel: tx(V.read), uRes: vres, uTexel: texel });
+    run(P.f_scale, vv(FLU.prs.write), { uTex: tx(FLU.prs.read), uRes: vres, uVal: 0.8 }); FLU.prs.swap();
+    for (let i = 0; i < 20; i++) { run(P.f_jacobi, vv(FLU.prs.write), { uP: tx(FLU.prs.read, 0), uDiv: tx(FLU.div, 1), uRes: vres, uTexel: texel }); FLU.prs.swap(); }
+    run(P.f_grad, vv(V.write), { uP: tx(FLU.prs.read, 0), uVel: tx(V.read, 1), uRes: vres, uTexel: texel }); V.swap();
+    run(P.f_advect, vv(V.write), { uVel: tx(V.read, 0), uSrc: tx(V.read, 1), uRes: vres, uVelTexel: texel, uDt: dt, uDiss: 0.2 }); V.swap();
+    run(P.f_advect, { fb: FLU.dye.write.fb, w: FLU.dw, h: FLU.dh }, { uVel: tx(V.read, 0), uSrc: tx(FLU.dye.read, 1), uRes: [FLU.dw, FLU.dh], uVelTexel: texel, uDt: dt, uDiss: 0.55 }); FLU.dye.swap();
+  }
+  function drawFlow(lt, dt) {
+    if (!flowActive) { resetFlow(); flowActive = true; }
+    stepFlow(lt, dt);
+    const sv = sceneView();
+    run(P.f_show, sv, { uDye: tx(FLU.dye.read), uRes: [sv.w, sv.h], uTexel: [1 / FLU.dw, 1 / FLU.dh] });
+  }
+
+  function drawWorld(lt) {
+    const sv = sceneView();
+    run(P.world, sv, { uRes: [sv.w, sv.h], uT: lt });
+  }
+
+  // [threshold, bloom gains, exposure]
+  const LOOK = [
+    [0.4, [0.55, 0.75, 1.0], 1.35],
+    [1.3, [0.25, 0.35, 0.45], 1.2],
+    [0.7, [0.4, 0.55, 0.7], 1.15],
+    [1.4, [0.25, 0.35, 0.5], 1.15],
+  ];
+
+  function segmentAt(t) {
+    if (t < INTRO) return { mode: "titles", lt: t, ch: -1 };
+    if (t >= CREDITS_AT) return { mode: "credits", lt: t - CREDITS_AT, ch: -1 };
+    const ch = Math.min(3, Math.floor((t - INTRO) / CHAP));
+    return { mode: "chapter", ch, lt: t - INTRO - ch * CHAP };
+  }
+
+  function render(t, dt) {
+    resize();
+    const { mode, ch, lt } = segmentAt(t);
+    if (ch !== 2) flowActive = false;
+    gl.disable(gl.BLEND);
+    if (mode !== "chapter") drawForms(lt, mode);
+    else if (ch === 0) drawForms(lt);
+    else if (ch === 1) drawMatter(lt, t);
+    else if (ch === 2) drawFlow(lt, dt);
+    else drawWorld(lt);
+
+    let fade = 1, flash = 0;
+    if (mode === "titles") fade = smooth(lt / 1.2) * smooth((INTRO - lt) / 0.6);
+    if (mode === "credits") fade = smooth(lt / 1.5) * smooth((CRED - lt) / 2.0) * 0.6;
+    if (ch === 0) fade = smooth(lt / 0.6);
+    if (ch === 1) flash = Math.exp(-lt * 6) * 1.2;
+    if (ch === 2) { fade = smooth(lt / 0.2); flash = Math.exp(-lt * 9) * 0.35; }
+    if (ch === 3) { fade = smooth(lt / 0.3); flash = Math.exp(-lt * 9) * 0.25; }
+    if (ch === 1 || ch === 2) fade *= smooth((CHAP - lt) / 0.25);
+    if (ch === 3) fade *= smooth((CHAP - lt) / 0.9);
+
+    const [th, gains, expo] = LOOK[Math.max(0, ch)];
+    const sv = sceneView(), scale = [sv.w / W, sv.h / H];
+    run(P.pass, RT.a1, { uTex: tx(RT.scene), uRes: [RT.a1.w, RT.a1.h], uThresh: th, uScale: scale });
+    blur(RT.a1, RT.b1);
+    run(P.pass, RT.a2, { uTex: tx(RT.a1), uRes: [RT.a2.w, RT.a2.h], uThresh: 0, uScale: [1, 1] }); blur(RT.a2, RT.b2);
+    run(P.pass, RT.a3, { uTex: tx(RT.a2), uRes: [RT.a3.w, RT.a3.h], uThresh: 0, uScale: [1, 1] }); blur(RT.a3, RT.b3); blur(RT.a3, RT.b3);
+    run(P.comp, null, {
+      uScene: tx(RT.scene, 0), uB1: tx(RT.a1, 1), uB2: tx(RT.a2, 2), uB3: tx(RT.a3, 3),
+      uRes: [W, H], uScale: scale, uT: t, uExpo: expo, uFade: fade, uFlash: flash, uBloom: gains,
+    });
+  }
+  function blur(a, b) {
+    run(P.blur, b, { uTex: tx(a), uRes: [b.w, b.h], uDir: [1, 0] });
+    run(P.blur, a, { uTex: tx(b), uRes: [a.w, a.h], uDir: [0, 1] });
+  }
+
+  // ================================================================
+  //  HUD
+  // ================================================================
+  const hud = document.getElementById("hud");
+  const actEl = document.getElementById("act"), actNum = document.getElementById("actNum");
+  const actTitle = document.getElementById("actTitle"), actNote = document.getElementById("actNote");
+  const chapLabel = document.getElementById("chapLabel");
+  const fills = [...document.querySelectorAll(".seg i")];
+  const clock = document.getElementById("clock"), fpsEl = document.getElementById("fps");
+  let shownKey = "", swapTimer = 0;
+  const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+  const titlesEl = document.getElementById("titles"), cardEl = document.getElementById("card");
+  const cardNum = document.getElementById("cardNum"), cardTitle = document.getElementById("cardTitle"), cardNote = document.getElementById("cardNote");
+  const creditCards = [...document.querySelectorAll("#credits [data-from]")];
+  const BOUNDS = [0, INTRO, INTRO + CHAP, INTRO + 2 * CHAP, INTRO + 3 * CHAP, CREDITS_AT, LOOP];
+  let cardCh = -1;
+  const setOn = (el, on) => { if (el.classList.contains("on") !== on) el.classList.toggle("on", on); };
+  function showAct(key, num, title, note, label) {
+    if (key === shownKey) return;
+    shownKey = key;
+    actEl.classList.add("out");
+    clearTimeout(swapTimer);
+    if (key === "none") return;
+    swapTimer = setTimeout(() => {
+      actNum.textContent = num; actTitle.textContent = title; actNote.innerHTML = note;
+      if (label) chapLabel.textContent = label;
+      actEl.classList.remove("out");
+    }, 480);
+  }
+  function updateHud(t) {
+    const { mode, ch, lt } = segmentAt(t);
+    if (hud.dataset.mode !== mode) hud.dataset.mode = mode;
+
+    // Opening titles
+    setOn(titlesEl.querySelector(".intro"), mode === "titles" && lt > 0.3 && lt < 4.9);
+
+    // Chapter title cards
+    if (mode === "chapter" && ch !== cardCh) {
+      cardCh = ch;
+      cardNum.textContent = `Chapter ${ROMAN[ch]}`; cardTitle.textContent = CHAPTERS[ch].name; cardNote.textContent = CHAPTERS[ch].tag;
+    }
+    const cardUp = mode === "chapter" && lt > 0.1 && lt < 2.1;
+    setOn(cardEl, cardUp);
+
+    // End credits
+    creditCards.forEach((el) => setOn(el, mode === "credits" && lt >= +el.dataset.from && lt < +el.dataset.to));
+
+    // Lower-third caption
+    if (mode !== "chapter" || cardUp) showAct("none");
+    else {
+      const label = `Chapter ${ROMAN[ch]} · ${CHAPTERS[ch].name}`;
+      if (ch === 0) {
+        const f = Math.min(4, Math.floor((lt + 0.3) / 3));
+        showAct("f" + f, `Chapter I · Form ${f + 1} of 5`, FORMS[f][0], FORMS[f][1], label);
+      } else showAct("c" + ch, `Chapter ${ROMAN[ch]}`, CHAPTERS[ch].title, CHAPTERS[ch].note, label);
+    }
+
+    fills.forEach((f, i) => {
+      const a = BOUNDS[i], b = BOUNDS[i + 1];
+      f.style.transform = `scaleX(${t >= b ? 1 : t <= a ? 0 : (t - a) / (b - a)})`;
+    });
+    clock.innerHTML = `${fmtTime(t)} <em>/ ${fmtTime(LOOP)}</em>`;
+  }
+
+  // ================================================================
+  //  Clock, audio, loop
+  // ================================================================
+  const params = new URLSearchParams(location.search);
+  let paused = params.has("still"), clockT = +(params.get("t") || 0) % LOOP;
+  let actx = null, synth = null, audioStart = 0, muted = false, sched = 0, nextIdx = 0, loopN = 0;
+  const soundBtn = document.getElementById("sound"), soundLabel = document.getElementById("soundLabel");
+  let EVENTS = [];
+  function loadScore() {
+    try {
+      EVENTS = JSON.parse(document.getElementById("score-data").textContent);
+      document.getElementById("noteCount").textContent = EVENTS.length.toLocaleString("en");
+      soundBtn.disabled = false; soundLabel.textContent = "Play with sound";
+    }
+    catch { soundLabel.textContent = "Sound unavailable"; }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadScore, { once: true }); else loadScore();
+
+  // Look-ahead scheduler: every 40 ms, hand the synth any notes due in the next 250 ms.
+  function schedule() {
+    if (!actx || actx.state !== "running" || !EVENTS.length) return;
+    const now = actx.currentTime, horizon = now + 0.25;
+    for (let guard = 0; guard < 400; guard++) {
+      const ev = EVENTS[nextIdx], when = audioStart + loopN * LOOP + ev[0];
+      if (when > horizon) break;
+      if (when >= now - 0.03) synth.play(ev, Math.max(when, now));
+      if (++nextIdx >= EVENTS.length) { nextIdx = 0; loopN++; }
+    }
+  }
+  function startAudio() {
+    if (!EVENTS.length) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    synth = createSynth(actx);
+    audioStart = actx.currentTime + 0.12 - clockT;
+    loopN = 0; nextIdx = EVENTS.findIndex((e) => e[0] >= clockT - 0.001);
+    if (nextIdx < 0) { nextIdx = 0; loopN = 1; }
+    sched = setInterval(schedule, 40); schedule();
+    if (paused) actx.suspend();
+  }
+  function setSoundUI() {
+    soundBtn.classList.add("on");
+    soundLabel.textContent = muted ? "Sound off · M" : "Sound on · M";
+  }
+  soundBtn.addEventListener("click", () => {
+    if (!actx) { startAudio(); setSoundUI(); return; }
+    toggleMute();
+  });
+  function toggleMute() {
+    if (!actx) return;
+    muted = !muted; synth.out.gain.setTargetAtTime(muted ? 0 : 1, actx.currentTime, 0.05); setSoundUI();
+  }
+  function audioTime() {
+    const lat = actx.outputLatency || actx.baseLatency || 0;
+    return ((actx.currentTime - audioStart - lat) % LOOP + LOOP) % LOOP;
+  }
+
+  let last = performance.now(), fpsN = 0, fpsLast = last, ema = 16, resTimer = 0;
+  function frame(now) {
+    const rawDt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    let dt = 0;
+    if (actx && actx.state === "running") {
+      const nt = audioTime();
+      dt = ((nt - clockT) % LOOP + LOOP) % LOOP;
+      if (dt > 0.2) dt = 1 / 60;
+      clockT = nt;
+    } else if (!paused) {
+      clockT = (clockT + rawDt) % LOOP; dt = rawDt;
+    }
+    render(clockT, Math.min(dt, 1 / 30));
+    updateHud(clockT);
+
+    // Dynamic resolution keeps the raymarched chapters smooth on smaller GPUs.
+    ema = ema * 0.92 + rawDt * 1000 * 0.08;
+    resTimer += rawDt;
+    if (resTimer > 0.75) {
+      resTimer = 0;
+      if (ema > 21 && rs > 0.5) rs = Math.max(0.5, rs - 0.1);
+      else if (ema < 14 && rs < 1) rs = Math.min(1, rs + 0.05);
+    }
+    fpsN++;
+    if (now - fpsLast > 500) { fpsEl.textContent = Math.round(fpsN * 1000 / (now - fpsLast)); fpsN = 0; fpsLast = now; }
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("keydown", (ev) => {
+    if (ev.target === soundBtn && (ev.code === "Space" || ev.code === "Enter")) return;
+    if (ev.code === "Space") {
+      paused = !paused; hud.classList.toggle("paused", paused); ev.preventDefault();
+      if (actx) paused ? actx.suspend() : actx.resume();
+    } else if (ev.key === "m" || ev.key === "M") {
+      if (!actx) { startAudio(); setSoundUI(); } else toggleMute();
+    } else if (ev.key === "h" || ev.key === "H") hud.classList.toggle("hidden");
+    else if (ev.key === "f" || ev.key === "F") {
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      else document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  });
+  canvas.addEventListener("dblclick", () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+  });
+  if (paused) hud.classList.add("paused");
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script type="application/json" id="score-data">
+[[0,"pad",[62,69,74,76,81],3,0.2,"strings",1600,5],[0,"pad",[38,50],3,0.26,"pad",420,3],[0,"impact",0.3,"fx"],[0.75,"bell",69,0.16,"bell",3.2,0],[1.5,"bell",74,0.16,"bell",3.2,0],[3,"pad",[58,65,69,74,77],1.5,0.2,"strings",1600,5],[3,"pad",[34,46],1.5,0.26,"pad",420,3],[3,"bell",77,0.16,"bell",3.2,0],[3.75,"riser",2.25,0.24,"fx",9000],[4.5,"pad",[57,64,69,73,76],1.5,0.2,"strings",1600,5],[4.5,"pad",[33,45],1.5,0.26,"pad",420,3],[4.5,"bell",76,0.16,"bell",3.2,0],[6,"pad",[50,57,60,64,65],3,0.3,"pad",1100,3],[6,"bass",38,3,0.42,"bass",260],[6,"pluck",69,0.07,"pluck",-0.35,3000],[6,"bell",74,0.2,"bell",1.5,-0.2],[6,"impact",0.55,"fx"],[6.1875,"pluck",76,0.049,"pluck",0.35,3000],[6.375,"pluck",72,0.049,"pluck",-0.35,3000],[6.5625,"pluck",77,0.049,"pluck",0.35,3000],[6.75,"pluck",76,0.07,"pluck",-0.35,3000],[6.75,"bell",76,0.2,"bell",1.4,0.2],[6.9375,"pluck",81,0.049,"pluck",0.35,3000],[7.125,"pluck",77,0.049,"pluck",-0.35,3000],[7.125,"bell",77,0.2,"bell",1.4,-0.2],[7.3125,"pluck",84,0.049,"pluck",0.35,3000],[7.5,"pluck",81,0.07,"pluck",-0.35,3000],[7.5,"bell",81,0.2,"bell",2.25,0.2],[7.6875,"pluck",88,0.049,"pluck",0.35,3000],[7.875,"pluck",84,0.049,"pluck",-0.35,3000],[8.0625,"pluck",89,0.049,"pluck",0.35,3000],[8.25,"pluck",88,0.07,"pluck",-0.35,3000],[8.4375,"pluck",81,0.049,"pluck",0.35,3000],[8.625,"pluck",77,0.049,"pluck",-0.35,3000],[8.625,"bell",79,0.2,"bell",1.4,-0.2],[8.8125,"pluck",72,0.049,"pluck",0.35,3000],[9,"pad",[46,53,57,62,65],3,0.3,"pad",1100,3],[9,"bass",34,3,0.42,"bass",260],[9,"pluck",65,0.088,"pluck",-0.35,3000],[9,"kick",0.5,"drums"],[9,"bell",77,0.2,"bell",1.5,0.2],[9.1875,"pluck",74,0.0616,"pluck",0.35,3000],[9.375,"pluck",69,0.0616,"pluck",-0.35,3000],[9.5625,"pluck",77,0.0616,"pluck",0.35,3000],[9.75,"pluck",74,0.088,"pluck",-0.35,3000],[9.75,"bell",74,0.2,"bell",1.5,-0.2],[9.9375,"pluck",77,0.0616,"pluck",0.35,3000],[10.125,"pluck",77,0.0616,"pluck",-0.35,3000],[10.3125,"pluck",81,0.0616,"pluck",0.35,3000],[10.5,"pluck",77,0.088,"pluck",-0.35,3000],[10.5,"bell",76,0.2,"bell",1.4,0.2],[10.6875,"pluck",86,0.0616,"pluck",0.35,3000],[10.875,"pluck",81,0.0616,"pluck",-0.35,3000],[10.875,"bell",77,0.2,"bell",1.4,-0.2],[11.0625,"pluck",89,0.0616,"pluck",0.35,3000],[11.25,"pluck",86,0.088,"pluck",-0.35,3000],[11.25,"bell",74,0.2,"bell",1.5,0.2],[11.4375,"pluck",77,0.0616,"pluck",0.35,3000],[11.625,"pluck",77,0.0616,"pluck",-0.35,3000],[11.8125,"pluck",69,0.0616,"pluck",0.35,3000],[12,"pad",[41,53,57,60,67],3,0.3,"pad",1100,3],[12,"bass",29,3,0.42,"bass",260],[12,"pluck",65,0.106,"pluck",-0.35,3000],[12,"kick",0.5,"drums"],[12,"bell",72,0.2,"bell",2.25,-0.2],[12.1875,"pluck",72,0.0742,"pluck",0.35,3000],[12.375,"pluck",69,0.0742,"pluck",-0.35,3000],[12.375,"hat",0.035,"drums",0,0.3],[12.5625,"pluck",79,0.0742,"pluck",0.35,3000],[12.75,"pluck",72,0.106,"pluck",-0.35,3000],[12.75,"hat",0.035,"drums",0,0.3],[12.9375,"pluck",77,0.0742,"pluck",0.35,3000],[13.125,"pluck",79,0.0742,"pluck",-0.35,3000],[13.125,"hat",0.035,"drums",0,0.3],[13.125,"bell",69,0.2,"bell",1.4,0.2],[13.3125,"pluck",81,0.0742,"pluck",0.35,3000],[13.5,"pluck",77,0.106,"pluck",-0.35,3000],[13.5,"hat",0.035,"drums",0,0.3],[13.5,"bell",72,0.2,"bell",1.5,-0.2],[13.6875,"pluck",84,0.0742,"pluck",0.35,3000],[13.875,"pluck",81,0.0742,"pluck",-0.35,3000],[13.875,"hat",0.035,"drums",0,0.3],[14.0625,"pluck",91,0.0742,"pluck",0.35,3000],[14.25,"pluck",84,0.106,"pluck",-0.35,3000],[14.25,"hat",0.035,"drums",0,0.3],[14.25,"bell",77,0.2,"bell",1.5,0.2],[14.4375,"pluck",77,0.0742,"pluck",0.35,3000],[14.625,"pluck",79,0.0742,"pluck",-0.35,3000],[14.625,"hat",0.035,"drums",0,0.3],[14.8125,"pluck",69,0.0742,"pluck",0.35,3000],[15,"hat",0.035,"drums",0,0.3],[15,"pad",[48,55,62,64,67],3,0.3,"pad",1100,3],[15,"bass",36,3,0.42,"bass",260],[15,"pluck",67,0.124,"pluck",-0.35,3000],[15,"kick",0.5,"drums"],[15,"bell",76,0.2,"bell",3,-0.2],[15.1875,"pluck",76,0.0868,"pluck",0.35,3000],[15.375,"pluck",74,0.0868,"pluck",-0.35,3000],[15.375,"hat",0.035,"drums",0,0.3],[15.5625,"pluck",79,0.0868,"pluck",0.35,3000],[15.75,"pluck",76,0.124,"pluck",-0.35,3000],[15.75,"hat",0.035,"drums",0,0.3],[15.9375,"pluck",79,0.0868,"pluck",0.35,3000],[16.125,"pluck",79,0.0868,"pluck",-0.35,3000],[16.125,"hat",0.035,"drums",0,0.3],[16.3125,"pluck",86,0.0868,"pluck",0.35,3000],[16.5,"pluck",79,0.124,"pluck",-0.35,3000],[16.5,"hat",0.035,"drums",0,0.3],[16.5,"bell",74,0.2,"bell",1.5,0.2],[16.6875,"pluck",88,0.0868,"pluck",0.35,3000],[16.875,"pluck",86,0.0868,"pluck",-0.35,3000],[16.875,"hat",0.035,"drums",0,0.3],[17.0625,"pluck",91,0.0868,"pluck",0.35,3000],[17.25,"pluck",88,0.124,"pluck",-0.35,3000],[17.25,"hat",0.035,"drums",0,0.3],[17.25,"bell",72,0.2,"bell",1.4,-0.2],[17.4375,"pluck",79,0.0868,"pluck",0.35,3000],[17.625,"pluck",79,0.0868,"pluck",-0.35,3000],[17.625,"hat",0.035,"drums",0,0.3],[17.625,"bell",74,0.2,"bell",1.4,0.2],[17.8125,"pluck",74,0.0868,"pluck",0.35,3000],[18,"hat",0.035,"drums",0,0.3],[18,"pad",[45,52,57,62,64],1.5,0.3,"pad",1100,3],[18,"bass",33,1.5,0.42,"bass",260],[18,"pluck",64,0.142,"pluck",-0.35,3000],[18,"kick",0.5,"drums"],[18,"bell",74,0.2,"bell",3,-0.2],[18.1875,"pluck",74,0.0994,"pluck",0.35,3000],[18.375,"pluck",69,0.0994,"pluck",-0.35,3000],[18.375,"hat",0.035,"drums",0,0.3],[18.5625,"pluck",76,0.0994,"pluck",0.35,3000],[18.75,"pluck",74,0.142,"pluck",-0.35,3000],[18.75,"hat",0.035,"drums",0,0.3],[18.75,"riser",2.25,0.22,"fx",9000],[18.9375,"pluck",76,0.0994,"pluck",0.35,3000],[19.125,"pluck",76,0.0994,"pluck",-0.35,3000],[19.125,"hat",0.035,"drums",0,0.3],[19.3125,"pluck",81,0.0994,"pluck",0.35,3000],[19.5,"pad",[45,52,57,61,64],1.5,0.3,"pad",1100,3],[19.5,"bass",33,1.5,0.42,"bass",260],[19.5,"pluck",76,0.142,"pluck",-0.35,3000],[19.5,"hat",0.035,"drums",0,0.3],[19.5,"bell",76,0.2,"bell",1.5,0.2],[19.6875,"pluck",85,0.0994,"pluck",0.35,3000],[19.875,"pluck",81,0.0994,"pluck",-0.35,3000],[19.875,"hat",0.035,"drums",0,0.3],[20.0625,"pluck",88,0.0994,"pluck",0.35,3000],[20.25,"pluck",85,0.142,"pluck",-0.35,3000],[20.25,"hat",0.035,"drums",0,0.3],[20.25,"bell",73,0.2,"bell",1.5,-0.2],[20.4375,"pluck",76,0.0994,"pluck",0.35,3000],[20.625,"pluck",76,0.0994,"pluck",-0.35,3000],[20.625,"hat",0.035,"drums",0,0.3],[20.8125,"pluck",69,0.0994,"pluck",0.35,3000],[21,"hat",0.035,"drums",0,0.3],[21,"pad",[46,57,62,64,65],3,0.36,"pad",800,3],[21,"bass",34,3,0.32,"bass",200],[21,"kick",0.34,"drums"],[21,"bell",89,0.035,"bell",1.8,0.5693],[21,"bell",86,0.035,"bell",1.8,-0.6899],[21,"bell",74,0.26,"bell",3.4,0],[21,"bell",62,0.08,"bell",2.4,0],[21,"impact",0.7,"fx"],[21.22,"kick",0.22,"drums"],[22.125,"bell",76,0.26,"bell",3.4,0],[22.125,"bell",64,0.08,"bell",2.4,0],[22.5,"kick",0.3,"drums"],[22.5,"bell",86,0.035,"bell",1.8,0.1681],[22.5,"bell",77,0.26,"bell",3.4,0],[22.5,"bell",65,0.08,"bell",2.4,0],[22.72,"kick",0.18,"drums"],[23.25,"bell",89,0.035,"bell",1.8,-0.1311],[23.625,"bell",81,0.035,"bell",1.8,0.18],[23.8125,"bell",89,0.035,"bell",1.8,0.05],[24,"pad",[43,58,62,65,69],3,0.36,"pad",800,3],[24,"bass",31,3,0.32,"bass",200],[24,"kick",0.34,"drums"],[24,"bell",81,0.26,"bell",3.4,0],[24,"bell",69,0.08,"bell",2.4,0],[24.1875,"bell",86,0.035,"bell",1.8,0.3986],[24.1875,"bell",93,0.035,"bell",1.8,-0.0724],[24.1875,"bell",86,0.035,"bell",1.8,-0.6176],[24.22,"kick",0.22,"drums"],[24.9375,"bell",93,0.035,"bell",1.8,-0.5138],[25.5,"kick",0.3,"drums"],[25.72,"kick",0.18,"drums"],[26.25,"bell",89,0.035,"bell",1.8,-0.6647],[26.25,"bell",79,0.26,"bell",3.4,0],[26.25,"bell",67,0.08,"bell",2.4,0],[26.4375,"bell",86,0.035,"bell",1.8,-0.2201],[27,"pad",[39,55,58,62,67],3,0.36,"pad",800,3],[27,"bass",27,3,0.32,"bass",200],[27,"kick",0.34,"drums"],[27,"bell",74,0.26,"bell",3.4,0],[27,"bell",62,0.08,"bell",2.4,0],[27.22,"kick",0.22,"drums"],[27.75,"bell",79,0.035,"bell",1.8,0.6731],[27.9375,"bell",86,0.035,"bell",1.8,-0.2996],[28.5,"kick",0.3,"drums"],[28.5,"bell",79,0.26,"bell",3.4,0],[28.5,"bell",67,0.08,"bell",2.4,0],[28.72,"kick",0.18,"drums"],[29.0625,"bell",86,0.035,"bell",1.8,-0.3044],[29.4375,"bell",79,0.035,"bell",1.8,0.2009],[29.625,"bell",86,0.035,"bell",1.8,-0.3748],[29.8125,"bell",82,0.035,"bell",1.8,-0.0247],[30,"pad",[48,55,58,62,63],3,0.36,"pad",800,3],[30,"bass",36,3,0.32,"bass",200],[30,"kick",0.34,"drums"],[30,"bell",77,0.26,"bell",3.4,0],[30,"bell",65,0.08,"bell",2.4,0],[30.22,"kick",0.22,"drums"],[30.375,"bell",82,0.035,"bell",1.8,-0.7967],[31.125,"bell",82,0.035,"bell",1.8,0.2214],[31.3125,"bell",86,0.035,"bell",1.8,-0.5202],[31.5,"kick",0.3,"drums"],[31.5,"bell",87,0.035,"bell",1.8,-0.0291],[31.72,"kick",0.18,"drums"],[32.0625,"bell",86,0.035,"bell",1.8,0.6125],[32.25,"bell",86,0.035,"bell",1.8,-0.5685],[32.25,"bell",75,0.26,"bell",3.4,0],[32.25,"bell",63,0.08,"bell",2.4,0],[33,"pad",[50,57,62,66,69],3,0.36,"pad",800,3],[33,"bass",38,3,0.32,"bass",200],[33,"kick",0.34,"drums"],[33,"riser",3,0.3,"fx",7000],[33,"bell",78,0.26,"bell",3.4,0],[33,"bell",66,0.08,"bell",2.4,0],[33.22,"kick",0.22,"drums"],[33.5625,"bell",93,0.035,"bell",1.8,-0.3563],[33.5625,"bell",93,0.035,"bell",1.8,0.0149],[33.75,"bell",81,0.035,"bell",1.8,0.5216],[34.125,"bell",93,0.035,"bell",1.8,-0.2722],[34.5,"kick",0.3,"drums"],[34.5,"bell",81,0.26,"bell",3.4,0],[34.5,"bell",69,0.08,"bell",2.4,0],[34.72,"kick",0.18,"drums"],[35.0625,"bell",93,0.035,"bell",1.8,-0.4659],[35.8125,"bell",93,0.035,"bell",1.8,-0.2809],[36,"pad",[50,57,62,65,69],3,0.16,"pad",2200,3],[36,"pluck",57,0.1,"pluck",-0.35,5200],[36,"bass",38,0.16,0.5,"bass",700],[36,"kick",0.95,"drums"],[36,"hat",0.05,"drums",0,-0.25],[36,"impact",0.5,"fx"],[36.1875,"pluck",65,0.07,"pluck",0.35,5200],[36.1875,"hat",0.05,"drums",0,0.25],[36.375,"pluck",62,0.07,"pluck",-0.35,5200],[36.375,"hat",0.1,"drums",0,-0.25],[36.5625,"pluck",69,0.07,"pluck",0.35,5200],[36.5625,"bass",38,0.16,0.5,"bass",700],[36.5625,"hat",0.05,"drums",0,0.25],[36.75,"pluck",65,0.1,"pluck",-0.35,5200],[36.75,"kick",0.95,"drums"],[36.75,"clap",0.5,"drums"],[36.75,"hat",0.05,"drums",0,-0.25],[36.9375,"pluck",69,0.07,"pluck",0.35,5200],[36.9375,"hat",0.05,"drums",0,0.25],[37.125,"pluck",69,0.07,"pluck",-0.35,5200],[37.125,"bass",38,0.16,0.5,"bass",700],[37.125,"hat",0.1,"drums",1,-0.25],[37.3125,"pluck",74,0.07,"pluck",0.35,5200],[37.3125,"hat",0.05,"drums",0,0.25],[37.5,"pluck",69,0.1,"pluck",-0.35,5200],[37.5,"bass",38,0.16,0.5,"bass",700],[37.5,"kick",0.95,"drums"],[37.5,"hat",0.05,"drums",0,-0.25],[37.6875,"pluck",77,0.07,"pluck",0.35,5200],[37.6875,"hat",0.05,"drums",0,0.25],[37.875,"pluck",74,0.07,"pluck",-0.35,5200],[37.875,"bass",50,0.16,0.5,"bass",700],[37.875,"hat",0.1,"drums",0,-0.25],[38.0625,"pluck",81,0.07,"pluck",0.35,5200],[38.0625,"bass",38,0.16,0.5,"bass",700],[38.0625,"hat",0.05,"drums",0,0.25],[38.25,"pluck",77,0.1,"pluck",-0.35,5200],[38.25,"kick",0.95,"drums"],[38.25,"clap",0.5,"drums"],[38.25,"hat",0.05,"drums",0,-0.25],[38.4375,"pluck",69,0.07,"pluck",0.35,5200],[38.4375,"hat",0.05,"drums",0,0.25],[38.625,"pluck",69,0.07,"pluck",-0.35,5200],[38.625,"bass",50,0.16,0.5,"bass",700],[38.625,"hat",0.1,"drums",1,-0.25],[38.8125,"pluck",62,0.07,"pluck",0.35,5200],[38.8125,"hat",0.05,"drums",0,0.25],[39,"pad",[46,58,62,65,70],3,0.16,"pad",2200,3],[39,"pluck",58,0.1,"pluck",-0.35,5200],[39,"bass",34,0.16,0.5,"bass",700],[39,"kick",0.95,"drums"],[39,"hat",0.05,"drums",0,-0.25],[39.1875,"pluck",65,0.07,"pluck",0.35,5200],[39.1875,"hat",0.05,"drums",0,0.25],[39.375,"pluck",62,0.07,"pluck",-0.35,5200],[39.375,"hat",0.1,"drums",0,-0.25],[39.5625,"pluck",70,0.07,"pluck",0.35,5200],[39.5625,"bass",34,0.16,0.5,"bass",700],[39.5625,"hat",0.05,"drums",0,0.25],[39.75,"pluck",65,0.1,"pluck",-0.35,5200],[39.75,"kick",0.95,"drums"],[39.75,"clap",0.5,"drums"],[39.75,"hat",0.05,"drums",0,-0.25],[39.9375,"pluck",70,0.07,"pluck",0.35,5200],[39.9375,"hat",0.05,"drums",0,0.25],[40.125,"pluck",70,0.07,"pluck",-0.35,5200],[40.125,"bass",34,0.16,0.5,"bass",700],[40.125,"hat",0.1,"drums",1,-0.25],[40.3125,"pluck",74,0.07,"pluck",0.35,5200],[40.3125,"hat",0.05,"drums",0,0.25],[40.5,"pluck",70,0.1,"pluck",-0.35,5200],[40.5,"bass",34,0.16,0.5,"bass",700],[40.5,"kick",0.95,"drums"],[40.5,"hat",0.05,"drums",0,-0.25],[40.6875,"pluck",77,0.07,"pluck",0.35,5200],[40.6875,"hat",0.05,"drums",0,0.25],[40.875,"pluck",74,0.07,"pluck",-0.35,5200],[40.875,"bass",46,0.16,0.5,"bass",700],[40.875,"hat",0.1,"drums",0,-0.25],[41.0625,"pluck",82,0.07,"pluck",0.35,5200],[41.0625,"bass",34,0.16,0.5,"bass",700],[41.0625,"hat",0.05,"drums",0,0.25],[41.25,"pluck",77,0.1,"pluck",-0.35,5200],[41.25,"kick",0.95,"drums"],[41.25,"clap",0.5,"drums"],[41.25,"hat",0.05,"drums",0,-0.25],[41.4375,"pluck",70,0.07,"pluck",0.35,5200],[41.4375,"hat",0.05,"drums",0,0.25],[41.625,"pluck",70,0.07,"pluck",-0.35,5200],[41.625,"bass",46,0.16,0.5,"bass",700],[41.625,"hat",0.1,"drums",1,-0.25],[41.8125,"pluck",62,0.07,"pluck",0.35,5200],[41.8125,"hat",0.05,"drums",0,0.25],[42,"pad",[41,57,60,65,69],3,0.16,"pad",2200,3],[42,"pluck",57,0.1,"pluck",-0.35,5200],[42,"bass",29,0.16,0.5,"bass",700],[42,"kick",0.95,"drums"],[42,"hat",0.05,"drums",0,-0.25],[42.1875,"pluck",65,0.07,"pluck",0.35,5200],[42.1875,"hat",0.05,"drums",0,0.25],[42.375,"pluck",60,0.07,"pluck",-0.35,5200],[42.375,"hat",0.1,"drums",0,-0.25],[42.5625,"pluck",69,0.07,"pluck",0.35,5200],[42.5625,"bass",29,0.16,0.5,"bass",700],[42.5625,"hat",0.05,"drums",0,0.25],[42.75,"pluck",65,0.1,"pluck",-0.35,5200],[42.75,"kick",0.95,"drums"],[42.75,"clap",0.5,"drums"],[42.75,"hat",0.05,"drums",0,-0.25],[42.9375,"pluck",69,0.07,"pluck",0.35,5200],[42.9375,"hat",0.05,"drums",0,0.25],[43.125,"pluck",69,0.07,"pluck",-0.35,5200],[43.125,"bass",29,0.16,0.5,"bass",700],[43.125,"hat",0.1,"drums",1,-0.25],[43.3125,"pluck",72,0.07,"pluck",0.35,5200],[43.3125,"hat",0.05,"drums",0,0.25],[43.5,"pluck",69,0.1,"pluck",-0.35,5200],[43.5,"bass",29,0.16,0.5,"bass",700],[43.5,"kick",0.95,"drums"],[43.5,"hat",0.05,"drums",0,-0.25],[43.6875,"pluck",77,0.07,"pluck",0.35,5200],[43.6875,"hat",0.05,"drums",0,0.25],[43.875,"pluck",72,0.07,"pluck",-0.35,5200],[43.875,"bass",41,0.16,0.5,"bass",700],[43.875,"hat",0.1,"drums",0,-0.25],[44.0625,"pluck",81,0.07,"pluck",0.35,5200],[44.0625,"bass",29,0.16,0.5,"bass",700],[44.0625,"hat",0.05,"drums",0,0.25],[44.25,"pluck",77,0.1,"pluck",-0.35,5200],[44.25,"kick",0.95,"drums"],[44.25,"clap",0.5,"drums"],[44.25,"hat",0.05,"drums",0,-0.25],[44.4375,"pluck",69,0.07,"pluck",0.35,5200],[44.4375,"hat",0.05,"drums",0,0.25],[44.625,"pluck",69,0.07,"pluck",-0.35,5200],[44.625,"bass",41,0.16,0.5,"bass",700],[44.625,"hat",0.1,"drums",1,-0.25],[44.8125,"pluck",60,0.07,"pluck",0.35,5200],[44.8125,"hat",0.05,"drums",0,0.25],[45,"pad",[48,55,60,64,67],3,0.16,"pad",2200,3],[45,"pluck",55,0.1,"pluck",-0.35,5200],[45,"bass",36,0.16,0.5,"bass",700],[45,"kick",0.95,"drums"],[45,"hat",0.05,"drums",0,-0.25],[45.1875,"pluck",64,0.07,"pluck",0.35,5200],[45.1875,"hat",0.05,"drums",0,0.25],[45.375,"pluck",60,0.07,"pluck",-0.35,5200],[45.375,"hat",0.1,"drums",0,-0.25],[45.5625,"pluck",67,0.07,"pluck",0.35,5200],[45.5625,"bass",36,0.16,0.5,"bass",700],[45.5625,"hat",0.05,"drums",0,0.25],[45.75,"pluck",64,0.1,"pluck",-0.35,5200],[45.75,"kick",0.95,"drums"],[45.75,"clap",0.5,"drums"],[45.75,"hat",0.05,"drums",0,-0.25],[45.9375,"pluck",67,0.07,"pluck",0.35,5200],[45.9375,"hat",0.05,"drums",0,0.25],[46.125,"pluck",67,0.07,"pluck",-0.35,5200],[46.125,"bass",36,0.16,0.5,"bass",700],[46.125,"hat",0.1,"drums",1,-0.25],[46.3125,"pluck",72,0.07,"pluck",0.35,5200],[46.3125,"hat",0.05,"drums",0,0.25],[46.5,"pluck",67,0.1,"pluck",-0.35,5200],[46.5,"bass",36,0.16,0.5,"bass",700],[46.5,"kick",0.95,"drums"],[46.5,"hat",0.05,"drums",0,-0.25],[46.6875,"pluck",76,0.07,"pluck",0.35,5200],[46.6875,"hat",0.05,"drums",0,0.25],[46.875,"pluck",72,0.07,"pluck",-0.35,5200],[46.875,"bass",48,0.16,0.5,"bass",700],[46.875,"hat",0.1,"drums",0,-0.25],[47.0625,"pluck",79,0.07,"pluck",0.35,5200],[47.0625,"bass",36,0.16,0.5,"bass",700],[47.0625,"hat",0.05,"drums",0,0.25],[47.25,"pluck",76,0.1,"pluck",-0.35,5200],[47.25,"kick",0.95,"drums"],[47.25,"clap",0.5,"drums"],[47.25,"hat",0.05,"drums",0,-0.25],[47.4375,"pluck",67,0.07,"pluck",0.35,5200],[47.4375,"hat",0.05,"drums",0,0.25],[47.625,"pluck",67,0.07,"pluck",-0.35,5200],[47.625,"bass",48,0.16,0.5,"bass",700],[47.625,"hat",0.1,"drums",1,-0.25],[47.8125,"pluck",60,0.07,"pluck",0.35,5200],[47.8125,"hat",0.05,"drums",0,0.25],[48,"pad",[43,58,62,67,70],1.5,0.16,"pad",2200,3],[48,"pluck",58,0.1,"pluck",-0.35,5200],[48,"bass",31,0.16,0.5,"bass",700],[48,"kick",0.95,"drums"],[48,"hat",0.05,"drums",0,-0.25],[48,"riser",3,0.32,"fx",7000],[48.1875,"pluck",67,0.07,"pluck",0.35,5200],[48.1875,"hat",0.05,"drums",0,0.25],[48.375,"pluck",62,0.07,"pluck",-0.35,5200],[48.375,"hat",0.1,"drums",0,-0.25],[48.5625,"pluck",70,0.07,"pluck",0.35,5200],[48.5625,"bass",31,0.16,0.5,"bass",700],[48.5625,"hat",0.05,"drums",0,0.25],[48.75,"pluck",67,0.1,"pluck",-0.35,5200],[48.75,"kick",0.95,"drums"],[48.75,"clap",0.5,"drums"],[48.75,"hat",0.05,"drums",0,-0.25],[48.9375,"pluck",70,0.07,"pluck",0.35,5200],[48.9375,"hat",0.05,"drums",0,0.25],[49.125,"pluck",70,0.07,"pluck",-0.35,5200],[49.125,"bass",31,0.16,0.5,"bass",700],[49.125,"hat",0.1,"drums",1,-0.25],[49.3125,"pluck",74,0.07,"pluck",0.35,5200],[49.3125,"hat",0.05,"drums",0,0.25],[49.5,"pad",[45,57,61,64,69],1.5,0.16,"pad",2200,3],[49.5,"pluck",69,0.1,"pluck",-0.35,5200],[49.5,"bass",33,0.16,0.5,"bass",700],[49.5,"kick",0.95,"drums"],[49.5,"hat",0.05,"drums",0,-0.25],[49.5,"clap",0.18,"drums"],[49.6875,"pluck",76,0.07,"pluck",0.35,5200],[49.6875,"hat",0.05,"drums",0,0.25],[49.6875,"clap",0.23,"drums"],[49.875,"pluck",73,0.07,"pluck",-0.35,5200],[49.875,"bass",45,0.16,0.5,"bass",700],[49.875,"hat",0.1,"drums",0,-0.25],[49.875,"clap",0.28,"drums"],[50.0625,"pluck",81,0.07,"pluck",0.35,5200],[50.0625,"bass",33,0.16,0.5,"bass",700],[50.0625,"hat",0.05,"drums",0,0.25],[50.0625,"clap",0.33,"drums"],[50.25,"pluck",76,0.1,"pluck",-0.35,5200],[50.25,"kick",0.95,"drums"],[50.25,"clap",0.5,"drums"],[50.25,"hat",0.05,"drums",0,-0.25],[50.25,"clap",0.38,"drums"],[50.4375,"pluck",69,0.07,"pluck",0.35,5200],[50.4375,"hat",0.05,"drums",0,0.25],[50.4375,"clap",0.43,"drums"],[50.625,"pluck",69,0.07,"pluck",-0.35,5200],[50.625,"bass",45,0.16,0.5,"bass",700],[50.625,"hat",0.1,"drums",1,-0.25],[50.625,"clap",0.48,"drums"],[50.8125,"pluck",61,0.07,"pluck",0.35,5200],[50.8125,"hat",0.05,"drums",0,0.25],[50.8125,"clap",0.53,"drums"],[51,"pad",[58,65,70,74,77],3,0.34,"strings",2600,5],[51,"pad",[34,46],3,0.3,"pad",600,3],[51,"bass",34,0.3,0.4,"bass",420],[51,"pluck",70,0.07,"pluck",-0.45,2600],[51,"kick",0.9,"drums"],[51,"tom",43,0.45,"drums"],[51,"hat",0.05,"drums",0,0.3],[51,"brass",62,0.7125,0.26,"lead"],[51,"bell",74,0.05,"bell",1.6,0.3],[51,"impact",0.8,"fx"],[51.375,"bass",34,0.3,0.4,"bass",420],[51.375,"pluck",74,0.07,"pluck",0.45,2600],[51.375,"hat",0.05,"drums",0,0.3],[51.75,"bass",34,0.3,0.4,"bass",420],[51.75,"pluck",77,0.07,"pluck",-0.45,2600],[51.75,"clap",0.4,"drums"],[51.75,"hat",0.05,"drums",0,0.3],[51.75,"brass",64,0.3562,0.26,"lead"],[51.75,"bell",76,0.05,"bell",1.6,0.3],[52.125,"bass",34,0.3,0.4,"bass",420],[52.125,"pluck",70,0.07,"pluck",0.45,2600],[52.125,"tom",43,0.45,"drums"],[52.125,"hat",0.05,"drums",0,0.3],[52.125,"brass",65,0.3562,0.26,"lead"],[52.125,"bell",77,0.05,"bell",1.6,0.3],[52.5,"bass",34,0.3,0.4,"bass",420],[52.5,"pluck",74,0.07,"pluck",-0.45,2600],[52.5,"kick",0.8,"drums"],[52.5,"tom",41,0.45,"drums"],[52.5,"hat",0.05,"drums",0,0.3],[52.5,"brass",69,1.0687,0.26,"lead"],[52.5,"bell",81,0.05,"bell",1.6,0.3],[52.875,"bass",34,0.3,0.4,"bass",420],[52.875,"pluck",77,0.07,"pluck",0.45,2600],[52.875,"hat",0.05,"drums",0,0.3],[53.25,"bass",34,0.3,0.4,"bass",420],[53.25,"pluck",70,0.07,"pluck",-0.45,2600],[53.25,"tom",43,0.45,"drums"],[53.25,"clap",0.45,"drums"],[53.25,"hat",0.05,"drums",0,0.3],[53.625,"bass",34,0.3,0.4,"bass",420],[53.625,"pluck",74,0.07,"pluck",0.45,2600],[53.625,"tom",38,0.45,"drums"],[53.625,"hat",0.05,"drums",0,0.3],[53.625,"brass",67,0.3562,0.26,"lead"],[53.625,"bell",79,0.05,"bell",1.6,0.3],[54,"pad",[60,67,72,76,79],3,0.34,"strings",2600,5],[54,"pad",[36,48],3,0.3,"pad",600,3],[54,"bass",36,0.3,0.4,"bass",420],[54,"pluck",72,0.07,"pluck",-0.45,2600],[54,"kick",0.9,"drums"],[54,"tom",43,0.45,"drums"],[54,"hat",0.05,"drums",0,0.3],[54,"brass",67,0.7125,0.26,"lead"],[54,"bell",79,0.05,"bell",1.6,0.3],[54.375,"bass",36,0.3,0.4,"bass",420],[54.375,"pluck",76,0.07,"pluck",0.45,2600],[54.375,"hat",0.05,"drums",0,0.3],[54.75,"bass",36,0.3,0.4,"bass",420],[54.75,"pluck",79,0.07,"pluck",-0.45,2600],[54.75,"clap",0.4,"drums"],[54.75,"hat",0.05,"drums",0,0.3],[54.75,"brass",64,0.7125,0.26,"lead"],[54.75,"bell",76,0.05,"bell",1.6,0.3],[55.125,"bass",36,0.3,0.4,"bass",420],[55.125,"pluck",72,0.07,"pluck",0.45,2600],[55.125,"tom",43,0.45,"drums"],[55.125,"hat",0.05,"drums",0,0.3],[55.5,"bass",36,0.3,0.4,"bass",420],[55.5,"pluck",76,0.07,"pluck",-0.45,2600],[55.5,"kick",0.8,"drums"],[55.5,"tom",41,0.45,"drums"],[55.5,"hat",0.05,"drums",0,0.3],[55.5,"brass",65,0.3562,0.26,"lead"],[55.5,"bell",77,0.05,"bell",1.6,0.3],[55.875,"bass",36,0.3,0.4,"bass",420],[55.875,"pluck",79,0.07,"pluck",0.45,2600],[55.875,"hat",0.05,"drums",0,0.3],[55.875,"brass",67,0.3562,0.26,"lead"],[55.875,"bell",79,0.05,"bell",1.6,0.3],[56.25,"bass",36,0.3,0.4,"bass",420],[56.25,"pluck",72,0.07,"pluck",-0.45,2600],[56.25,"tom",43,0.45,"drums"],[56.25,"clap",0.45,"drums"],[56.25,"hat",0.05,"drums",0,0.3],[56.25,"brass",64,0.7125,0.26,"lead"],[56.25,"bell",76,0.05,"bell",1.6,0.3],[56.625,"bass",36,0.3,0.4,"bass",420],[56.625,"pluck",76,0.07,"pluck",0.45,2600],[56.625,"tom",38,0.45,"drums"],[56.625,"hat",0.05,"drums",0,0.3],[57,"pad",[62,69,74,77,81],3,0.34,"strings",2600,5],[57,"pad",[38,50],3,0.3,"pad",600,3],[57,"bass",38,0.3,0.4,"bass",420],[57,"pluck",74,0.07,"pluck",-0.45,2600],[57,"kick",0.9,"drums"],[57,"tom",43,0.45,"drums"],[57,"hat",0.05,"drums",0,0.3],[57,"brass",69,1.0687,0.26,"lead"],[57,"bell",81,0.05,"bell",1.6,0.3],[57.375,"bass",38,0.3,0.4,"bass",420],[57.375,"pluck",77,0.07,"pluck",0.45,2600],[57.375,"hat",0.05,"drums",0,0.3],[57.75,"bass",38,0.3,0.4,"bass",420],[57.75,"pluck",81,0.07,"pluck",-0.45,2600],[57.75,"clap",0.4,"drums"],[57.75,"hat",0.05,"drums",0,0.3],[58.125,"bass",38,0.3,0.4,"bass",420],[58.125,"pluck",74,0.07,"pluck",0.45,2600],[58.125,"tom",43,0.45,"drums"],[58.125,"hat",0.05,"drums",0,0.3],[58.125,"brass",65,0.3562,0.26,"lead"],[58.125,"bell",77,0.05,"bell",1.6,0.3],[58.5,"bass",38,0.3,0.4,"bass",420],[58.5,"pluck",77,0.07,"pluck",-0.45,2600],[58.5,"kick",0.8,"drums"],[58.5,"tom",41,0.45,"drums"],[58.5,"hat",0.05,"drums",0,0.3],[58.5,"brass",69,0.7125,0.26,"lead"],[58.5,"bell",81,0.05,"bell",1.6,0.3],[58.875,"bass",38,0.3,0.4,"bass",420],[58.875,"pluck",81,0.07,"pluck",0.45,2600],[58.875,"hat",0.05,"drums",0,0.3],[59.25,"bass",38,0.3,0.4,"bass",420],[59.25,"pluck",74,0.07,"pluck",-0.45,2600],[59.25,"tom",43,0.45,"drums"],[59.25,"clap",0.45,"drums"],[59.25,"hat",0.05,"drums",0,0.3],[59.25,"brass",74,0.7125,0.26,"lead"],[59.25,"bell",86,0.05,"bell",1.6,0.3],[59.625,"bass",38,0.3,0.4,"bass",420],[59.625,"pluck",77,0.07,"pluck",0.45,2600],[59.625,"tom",38,0.45,"drums"],[59.625,"hat",0.05,"drums",0,0.3],[60,"pad",[55,67,70,74,79],3,0.34,"strings",2600,5],[60,"pad",[31,43],3,0.3,"pad",600,3],[60,"bass",31,0.3,0.4,"bass",420],[60,"pluck",70,0.07,"pluck",-0.45,2600],[60,"kick",0.9,"drums"],[60,"tom",43,0.45,"drums"],[60,"hat",0.05,"drums",0,0.3],[60,"brass",72,1.425,0.26,"lead"],[60,"bell",84,0.05,"bell",1.6,0.3],[60.375,"bass",31,0.3,0.4,"bass",420],[60.375,"pluck",74,0.07,"pluck",0.45,2600],[60.375,"hat",0.05,"drums",0,0.3],[60.75,"bass",31,0.3,0.4,"bass",420],[60.75,"pluck",79,0.07,"pluck",-0.45,2600],[60.75,"clap",0.4,"drums"],[60.75,"hat",0.05,"drums",0,0.3],[61.125,"bass",31,0.3,0.4,"bass",420],[61.125,"pluck",70,0.07,"pluck",0.45,2600],[61.125,"tom",43,0.45,"drums"],[61.125,"hat",0.05,"drums",0,0.3],[61.5,"bass",31,0.3,0.4,"bass",420],[61.5,"pluck",74,0.07,"pluck",-0.45,2600],[61.5,"kick",0.8,"drums"],[61.5,"tom",41,0.45,"drums"],[61.5,"hat",0.05,"drums",0,0.3],[61.5,"brass",70,0.7125,0.26,"lead"],[61.5,"bell",82,0.05,"bell",1.6,0.3],[61.875,"bass",31,0.3,0.4,"bass",420],[61.875,"pluck",79,0.07,"pluck",0.45,2600],[61.875,"hat",0.05,"drums",0,0.3],[62.25,"bass",31,0.3,0.4,"bass",420],[62.25,"pluck",70,0.07,"pluck",-0.45,2600],[62.25,"tom",43,0.45,"drums"],[62.25,"clap",0.45,"drums"],[62.25,"hat",0.05,"drums",0,0.3],[62.25,"brass",69,0.3562,0.26,"lead"],[62.25,"bell",81,0.05,"bell",1.6,0.3],[62.625,"bass",31,0.3,0.4,"bass",420],[62.625,"pluck",74,0.07,"pluck",0.45,2600],[62.625,"tom",38,0.45,"drums"],[62.625,"hat",0.05,"drums",0,0.3],[62.625,"brass",67,0.3562,0.26,"lead"],[62.625,"bell",79,0.05,"bell",1.6,0.3],[63,"pad",[57,64,69,74,76],1.5,0.34,"strings",2600,5],[63,"pad",[33,45],1.5,0.3,"pad",600,3],[63,"bass",33,0.3,0.4,"bass",420],[63,"pluck",69,0.07,"pluck",-0.45,2600],[63,"kick",0.9,"drums"],[63,"tom",43,0.45,"drums"],[63,"hat",0.05,"drums",0,0.3],[63,"brass",69,1.425,0.26,"lead"],[63,"bell",81,0.05,"bell",1.6,0.3],[63.375,"bass",33,0.3,0.4,"bass",420],[63.375,"pluck",74,0.07,"pluck",0.45,2600],[63.375,"hat",0.05,"drums",0,0.3],[63.75,"bass",33,0.3,0.4,"bass",420],[63.75,"pluck",76,0.07,"pluck",-0.45,2600],[63.75,"clap",0.4,"drums"],[63.75,"hat",0.05,"drums",0,0.3],[63.75,"riser",2.25,0.3,"fx",10000],[64.125,"bass",33,0.3,0.4,"bass",420],[64.125,"pluck",69,0.07,"pluck",0.45,2600],[64.125,"tom",43,0.45,"drums"],[64.125,"hat",0.05,"drums",0,0.3],[64.5,"pad",[57,67,73,76,79],1.5,0.34,"strings",2600,5],[64.5,"pad",[33,45],1.5,0.3,"pad",600,3],[64.5,"bass",33,0.3,0.4,"bass",420],[64.5,"pluck",76,0.07,"pluck",-0.45,2600],[64.5,"kick",0.8,"drums"],[64.5,"tom",41,0.45,"drums"],[64.5,"hat",0.05,"drums",0,0.3],[64.5,"tom",45,0.3,"drums"],[64.5,"brass",64,0.7125,0.26,"lead"],[64.5,"bell",76,0.05,"bell",1.6,0.3],[64.6875,"tom",44,0.34,"drums"],[64.875,"bass",33,0.3,0.4,"bass",420],[64.875,"pluck",79,0.07,"pluck",0.45,2600],[64.875,"hat",0.05,"drums",0,0.3],[64.875,"tom",43,0.38,"drums"],[65.0625,"tom",42,0.42,"drums"],[65.25,"bass",33,0.3,0.4,"bass",420],[65.25,"pluck",73,0.07,"pluck",-0.45,2600],[65.25,"tom",43,0.45,"drums"],[65.25,"clap",0.45,"drums"],[65.25,"hat",0.05,"drums",0,0.3],[65.25,"tom",41,0.46,"drums"],[65.25,"brass",61,0.7125,0.26,"lead"],[65.25,"bell",73,0.05,"bell",1.6,0.3],[65.4375,"tom",40,0.5,"drums"],[65.625,"bass",33,0.3,0.4,"bass",420],[65.625,"pluck",76,0.07,"pluck",0.45,2600],[65.625,"tom",38,0.45,"drums"],[65.625,"hat",0.05,"drums",0,0.3],[65.625,"tom",39,0.54,"drums"],[65.8125,"tom",38,0.58,"drums"],[66,"pad",[50,57,62,65,69],3,0.26,"pad",900,3],[66,"bass",38,3,0.28,"bass",220],[66,"pluck",69,0.045,"pluck",-0.4,1800],[66,"bell",74,0.17,"bell",1.8,-0.25],[66,"impact",0.4,"fx"],[66.375,"pluck",74,0.045,"pluck",0.4,1800],[66.75,"pluck",77,0.045,"pluck",-0.4,1800],[66.75,"bell",76,0.17,"bell",1.8,0.25],[67.125,"pluck",81,0.045,"pluck",0.4,1800],[67.125,"bell",77,0.17,"bell",1.8,-0.25],[67.5,"pluck",69,0.045,"pluck",-0.4,1800],[67.5,"bell",81,0.17,"bell",2.7,0.25],[67.875,"pluck",74,0.045,"pluck",0.4,1800],[68.25,"pluck",77,0.045,"pluck",-0.4,1800],[68.625,"pluck",81,0.045,"pluck",0.4,1800],[68.625,"bell",79,0.17,"bell",1.8,-0.25],[69,"pad",[46,57,62,65,69],3,0.26,"pad",900,3],[69,"bass",34,3,0.28,"bass",220],[69,"pluck",69,0.045,"pluck",-0.4,1800],[69,"bell",77,0.17,"bell",1.8,0.25],[69.375,"pluck",74,0.045,"pluck",0.4,1800],[69.75,"pluck",77,0.045,"pluck",-0.4,1800],[69.75,"bell",74,0.17,"bell",1.8,-0.25],[70.125,"pluck",81,0.045,"pluck",0.4,1800],[70.5,"pluck",69,0.045,"pluck",-0.4,1800],[70.5,"bell",76,0.17,"bell",1.8,0.25],[70.875,"pluck",74,0.045,"pluck",0.4,1800],[70.875,"bell",77,0.17,"bell",1.8,-0.25],[71.25,"pluck",77,0.045,"pluck",-0.4,1800],[71.25,"bell",74,0.17,"bell",1.8,0.25],[71.625,"pluck",81,0.045,"pluck",0.4,1800],[72,"pad",[43,58,62,65,69],3,0.26,"pad",900,3],[72,"bass",31,3,0.28,"bass",220],[72,"pluck",70,0.045,"pluck",-0.4,1800],[72,"bell",72,0.17,"bell",2.7,-0.25],[72.375,"pluck",74,0.045,"pluck",0.4,1800],[72.75,"pluck",77,0.045,"pluck",-0.4,1800],[73.125,"pluck",81,0.045,"pluck",0.4,1800],[73.125,"bell",69,0.17,"bell",1.8,0.25],[73.5,"pluck",70,0.045,"pluck",-0.4,1800],[73.5,"bell",72,0.17,"bell",1.8,-0.25],[73.875,"pluck",74,0.045,"pluck",0.4,1800],[74.25,"pluck",77,0.045,"pluck",-0.4,1800],[74.25,"bell",77,0.17,"bell",1.8,0.25],[74.625,"pluck",81,0.045,"pluck",0.4,1800],[75,"pad",[41,53,57,60,67],3,0.26,"pad",900,3],[75,"bass",29,3,0.28,"bass",220],[75,"pluck",65,0.045,"pluck",-0.4,1800],[75,"bell",76,0.17,"bell",3.6,-0.25],[75.375,"pluck",69,0.045,"pluck",0.4,1800],[75.75,"pluck",72,0.045,"pluck",-0.4,1800],[76.125,"pluck",79,0.045,"pluck",0.4,1800],[76.5,"pluck",65,0.045,"pluck",-0.4,1800],[76.5,"bell",74,0.17,"bell",1.8,0.25],[76.875,"pluck",69,0.045,"pluck",0.4,1800],[77.25,"pluck",72,0.045,"pluck",-0.4,1800],[77.25,"bell",72,0.17,"bell",1.8,-0.25],[77.625,"pluck",79,0.045,"pluck",0.4,1800],[77.625,"bell",74,0.17,"bell",1.8,0.25],[78,"pad",[45,52,57,62,64],1.5,0.26,"pad",900,3],[78,"bass",33,1.5,0.28,"bass",220],[78,"pluck",64,0.027,"pluck",-0.4,1800],[78,"bell",74,0.17,"bell",3.6,-0.25],[78.375,"pluck",69,0.027,"pluck",0.4,1800],[78.75,"pluck",74,0.027,"pluck",-0.4,1800],[79.125,"pluck",76,0.027,"pluck",0.4,1800],[79.5,"pad",[45,55,61,64,67],1.5,0.26,"pad",900,3],[79.5,"bass",33,1.5,0.28,"bass",220],[79.5,"pluck",67,0.027,"pluck",-0.4,1800],[79.5,"bell",76,0.17,"bell",1.8,0.25],[79.875,"pluck",73,0.027,"pluck",0.4,1800],[80.25,"pluck",76,0.027,"pluck",-0.4,1800],[80.25,"bell",73,0.17,"bell",1.8,-0.25],[80.625,"pluck",79,0.027,"pluck",0.4,1800]]
+</script>
+
+</body></html>

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lemonade Stand Screensaver</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&amp;display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F7FA 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Press Start 2P', cursive;
+            position: relative;
+        }
+
+        .scene {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background: #fff;
+            border: 12px solid #3a2a1f;
+            border-radius: 8px;
+            box-shadow: 0 0 0 20px #f4a261,
+                        0 0 0 28px #e76f51,
+                        0 25px 50px -12px rgb(0 0 0 / 0.4);
+            overflow: hidden;
+        }
+
+        .sky {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 45%;
+            background: linear-gradient(#4fc3f7, #81d4fa);
+            z-index: 1;
+        }
+
+        .sun {
+            position: absolute;
+            top: 80px;
+            right: 100px;
+            width: 90px;
+            height: 90px;
+            background: #ffeb3b;
+            border-radius: 50%;
+            box-shadow: 0 0 60px 30px #ffeb3b,
+                        0 0 120px 60px #ffd700;
+            z-index: 2;
+            animation: sun-pulse 8s infinite ease-in-out;
+        }
+
+        @keyframes sun-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        .cloud {
+            position: absolute;
+            background: white;
+            border-radius: 50px;
+            z-index: 3;
+            opacity: 0.9;
+            animation: drift linear infinite;
+        }
+
+        .cloud::before,
+        .cloud::after {
+            content: '';
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .cloud1 { width: 140px; height: 50px; top: 80px; animation-duration: 45s; }
+        .cloud1::before { width: 70px; height: 70px; top: -35px; left: 20px; }
+        .cloud1::after { width: 80px; height: 60px; top: -25px; right: 20px; }
+
+        .cloud2 { width: 110px; height: 45px; top: 160px; animation-duration: 65s; animation-delay: -20s; }
+        .cloud2::before { width: 55px; height: 55px; top: -30px; left: 15px; }
+        .cloud2::after { width: 65px; height: 50px; top: -20px; right: 25px; }
+
+        .grass {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 55%;
+            background: linear-gradient(#4ade80, #22c55e);
+            z-index: 4;
+        }
+
+        .stand {
+            position: absolute;
+            bottom: 85px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 380px;
+            height: 260px;
+            background: #f59e0b;
+            border: 12px solid #854d0e;
+            z-index: 10;
+            box-shadow: 0 15px 0 #854d0e;
+        }
+
+        .stand::before {
+            content: '';
+            position: absolute;
+            top: -40px;
+            left: 30px;
+            width: 20px;
+            height: 80px;
+            background: #854d0e;
+        }
+
+        .stand::after {
+            content: '';
+            position: absolute;
+            top: -40px;
+            right: 30px;
+            width: 20px;
+            height: 80px;
+            background: #854d0e;
+        }
+
+        .roof {
+            position: absolute;
+            top: -68px;
+            left: -25px;
+            width: 430px;
+            height: 90px;
+            background: #ef4444;
+            clip-path: polygon(0% 100%, 20% 0%, 50% 35%, 80% 0%, 100% 100%);
+            z-index: 11;
+            border: 12px solid #b91c1c;
+        }
+
+        .sign {
+            position: absolute;
+            top: -125px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            color: #b91c1c;
+            padding: 12px 48px;
+            font-size: 32px;
+            font-weight: bold;
+            border: 8px solid #854d0e;
+            box-shadow: 0 8px 0 #854d0e;
+            z-index: 20;
+            text-align: center;
+            line-height: 1;
+            animation: sign-bob 3s infinite ease-in-out;
+        }
+
+        .lemon {
+            position: absolute;
+            width: 52px;
+            height: 52px;
+            background: #facc15;
+            border-radius: 50% 40% 50% 40%;
+            z-index: 15;
+            box-shadow: inset 12px 12px 0 #eab308,
+                        0 4px 12px rgba(0,0,0,0.3);
+            animation: lemon-bob 2.2s infinite ease-in-out;
+        }
+
+        .lemon::after {
+            content: '🍋';
+            position: absolute;
+            font-size: 36px;
+            top: 4px;
+            left: 6px;
+        }
+
+        .lemon1 { top: 210px; left: 140px; animation-delay: 0s; }
+        .lemon2 { top: 235px; left: 210px; animation-delay: 0.6s; }
+        .lemon3 { top: 195px; left: 290px; animation-delay: 1.3s; }
+
+        .jar {
+            position: absolute;
+            bottom: 110px;
+            right: 65px;
+            width: 72px;
+            height: 110px;
+            background: #67e8f9;
+            border: 12px solid #164e63;
+            border-top: 28px solid #164e63;
+            border-radius: 8px 8px 32px 32px;
+            z-index: 12;
+            overflow: hidden;
+        }
+
+        .liquid {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(#facc15, #eab308);
+            animation: fill-jar 60s linear infinite;
+        }
+
+        .straw {
+            position: absolute;
+            top: -38px;
+            right: 18px;
+            width: 14px;
+            height: 80px;
+            background: #f43f5e;
+            transform: rotate(-25deg);
+            z-index: 13;
+            border-radius: 20px;
+        }
+
+        .label {
+            position: absolute;
+            top: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            color: #b91c1c;
+            font-size: 11px;
+            padding: 2px 18px;
+            border: 4px solid #164e63;
+            font-weight: bold;
+            z-index: 14;
+        }
+
+        .price {
+            position: absolute;
+            bottom: 42px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            color: #166534;
+            font-size: 26px;
+            padding: 4px 24px;
+            border: 6px solid #166534;
+            font-weight: bold;
+            z-index: 21;
+            box-shadow: 0 6px 0 #166534;
+        }
+
+        .customer {
+            position: absolute;
+            bottom: 70px;
+            left: 40px;
+            font-size: 68px;
+            z-index: 25;
+            animation: customer-walk 12s linear infinite;
+            filter: drop-shadow(4px 8px 6px rgba(0,0,0,0.3));
+        }
+
+        .title {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #166534;
+            font-size: 42px;
+            text-shadow: 
+                -4px -4px 0 #fff,
+                4px -4px 0 #fff,
+                -4px 4px 0 #fff,
+                4px 4px 0 #fff;
+            z-index: 30;
+            animation: title-glow 4s infinite alternate;
+        }
+
+        .sales {
+            position: absolute;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #166534;
+            font-size: 18px;
+            font-weight: bold;
+            background: rgba(255,255,255,0.9);
+            padding: 6px 24px;
+            border: 4px solid #166534;
+            z-index: 30;
+            animation: sales-count 1.5s steps(5) infinite;
+        }
+
+        .cup {
+            position: absolute;
+            font-size: 42px;
+            bottom: 95px;
+            animation: serve-drink 4s infinite;
+            z-index: 22;
+        }
+
+        @keyframes drift {
+            from { transform: translateX(-300px); }
+            to { transform: translateX(1100px); }
+        }
+
+        @keyframes lemon-bob {
+            0%, 100% { transform: translateY(0) rotate(-8deg); }
+            50% { transform: translateY(-18px) rotate(8deg); }
+        }
+
+        @keyframes sign-bob {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-12px); }
+        }
+
+        @keyframes fill-jar {
+            0% { height: 12%; }
+            100% { height: 92%; }
+        }
+
+        @keyframes customer-walk {
+            0% { transform: translateX(-180px) scale(1); }
+            25% { transform: translateX(120px) scale(1); }
+            26% { transform: translateX(120px) scale(-1,1); }
+            50% { transform: translateX(-180px) scale(-1,1); }
+            51% { transform: translateX(-180px) scale(1); }
+            100% { transform: translateX(-180px) scale(1); }
+        }
+
+        @keyframes title-glow {
+            from { text-shadow: 0 0 20px #4ade80; }
+            to { text-shadow: 0 0 40px #86efac, 0 0 60px #4ade80; }
+        }
+
+        .bubble {
+            position: absolute;
+            background: rgba(255,255,255,0.85);
+            border-radius: 50%;
+            bottom: 110px;
+            right: 85px;
+            animation: bubble-rise 3s linear infinite;
+            z-index: 16;
+            box-shadow: 0 0 8px rgba(255,255,255,0.9);
+        }
+
+        .info {
+            position: absolute;
+            bottom: 12px;
+            right: 20px;
+            font-size: 13px;
+            color: #166534;
+            background: rgba(255,255,255,0.7);
+            padding: 4px 12px;
+            border-radius: 4px;
+            z-index: 50;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="scene">
+        <!-- Sky -->
+        <div class="sky">
+            <!-- Sun -->
+            <div class="sun"></div>
+            
+            <!-- Clouds -->
+            <div class="cloud cloud1" style="top: 65px;"></div>
+            <div class="cloud cloud2" style="top: 115px;"></div>
+            <div class="cloud cloud1" style="top: 175px; animation-duration: 52s;"></div>
+        </div>
+
+        <!-- Grass -->
+        <div class="grass"></div>
+
+        <!-- Lemonade Stand -->
+        <div class="stand">
+            <!-- Roof -->
+            <div class="roof"></div>
+            
+            <!-- Sign -->
+            <div class="sign">
+                FRESH<br>LEMONADE
+            </div>
+
+            <!-- Lemons -->
+            <div class="lemon lemon1"></div>
+            <div class="lemon lemon2"></div>
+            <div class="lemon lemon3"></div>
+
+            <!-- Jar -->
+            <div class="jar">
+                <div class="liquid"></div>
+                <div class="label">LEMONADE</div>
+                <div class="straw"></div>
+            </div>
+
+            <!-- Price -->
+            <div class="price">$1</div>
+
+            <!-- Customer -->
+            <div class="customer">🧍‍♂️</div>
+
+            <!-- Cup being served -->
+            <div class="cup" style="left: 310px; animation-delay: 0.8s;">🥤</div>
+            <div class="cup" style="left: 390px; animation-delay: 2.4s;">🥤</div>
+        </div>
+
+        <!-- Title -->
+        <div class="title">LEMONADE STAND</div>
+
+        <!-- Sales counter -->
+        <div class="sales">SOLD TODAY: <span id="sales-count">247</span></div>
+
+        <!-- Info -->
+        <div class="info">60 SECOND LOOP • SCREENSAVER MODE</div>
+    </div>
+
+    <script>
+        // Sales counter that increments realistically
+        let sales = 247;
+        const salesEl = document.getElementById('sales-count');
+        
+        setInterval(() => {
+            sales += Math.floor(Math.random() * 3) + 1;
+            salesEl.textContent = sales;
+        }, 2800);
+
+        // Occasional flying lemons
+        function createFlyingLemon() {
+            const lemon = document.createElement('div');
+            lemon.textContent = '🍋';
+            lemon.style.position = 'absolute';
+            lemon.style.fontSize = '42px';
+            lemon.style.left = Math.random() * 100 + 'vw';
+            lemon.style.top = '-60px';
+            lemon.style.zIndex = '100';
+            lemon.style.transition = 'transform 4s linear, opacity 4s';
+            lemon.style.opacity = '0.9';
+            document.body.appendChild(lemon);
+            
+            setTimeout(() => {
+                const rot = (Math.random() - 0.5) * 800;
+                lemon.style.transform = `translateY(${window.innerHeight + 200}px) rotate(${rot}deg)`;
+                lemon.style.opacity = '0';
+            }, 50);
+            
+            setTimeout(() => lemon.remove(), 5000);
+        }
+
+        // Launch flying lemons occasionally
+        setInterval(() => {
+            if (Math.random() > 0.6) createFlyingLemon();
+        }, 1700);
+
+        // Add a few bubbles in the jar
+        function addBubbles() {
+            const jar = document.querySelector('.jar');
+            for (let i = 0; i < 6; i++) {
+                const bubble = document.createElement('div');
+                bubble.className = 'bubble';
+                const size = 6 + Math.random() * 11;
+                bubble.style.width = `${size}px`;
+                bubble.style.height = `${size}px`;
+                bubble.style.left = `${18 + Math.random() * 38}px`;
+                bubble.style.animationDuration = `${1.8 + Math.random() * 1.6}s`;
+                bubble.style.animationDelay = `-${Math.random() * 3}s`;
+                jar.appendChild(bubble);
+                
+                setTimeout(() => {
+                    bubble.remove();
+                }, 8000);
+            }
+        }
+
+        // Start bubbles
+        setInterval(addBubbles, 1400);
+        addBubbles();
+
+        // Keyboard shortcuts for screensaver feel
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                location.reload();
+            }
+        });
+
+        // Make it feel alive - random happy messages
+        const messages = [
+            "BEST IN TOWN!",
+            "ICE COLD 🍋",
+            "FRESH SQUEEZED",
+            "KIDS LOVE IT!",
+            "ONLY $1"
+        ];
+        
+        let msgIndex = 0;
+        setInterval(() => {
+            const sign = document.querySelector('.sign');
+            sign.style.transition = 'all 0.6s';
+            sign.style.transform = 'translateX(-50%) scale(0.85)';
+            
+            setTimeout(() => {
+                sign.innerHTML = messages[msgIndex % messages.length] + '<br><span style="font-size:18px">🍋</span>';
+                sign.style.transform = 'translateX(-50%) scale(1)';
+                msgIndex++;
+            }, 300);
+            
+            setTimeout(() => {
+                sign.innerHTML = 'FRESH<br>LEMONADE';
+            }, 2200);
+        }, 9200);
+
+        console.log('%c🍋 Lemonade Stand Screensaver ready! 60-second looping animation. Press R to restart.', 'color:#eab308; font-family:monospace');
+    </script>
+</body>
+</html>

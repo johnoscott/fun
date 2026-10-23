@@ -1,0 +1,755 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Phosphor Pasture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<style>
+/* Layout: one full-bleed CRT tube; a fixed 64-row character grid letterboxed inside it. Single dark look by design. */
+:root{
+  --tube:#000;
+  --phosphor:#40ff6e;
+  --phosphor-dim:#1c7a3a;
+  --glass:#010603;
+  --mono:'VT323','Courier New',ui-monospace,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;background:var(--tube);color:var(--phosphor);overflow:hidden}
+#tube{position:fixed;inset:0;background:var(--glass);cursor:none}
+#tube.pointer{cursor:default}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#glow{filter:blur(6px) brightness(1.5);opacity:.55;mix-blend-mode:screen;pointer-events:none}
+.layer{position:absolute;inset:0;pointer-events:none}
+.scan{background:repeating-linear-gradient(to bottom,rgba(0,0,0,.32) 0 1px,transparent 1px 3px)}
+.vignette{background:radial-gradient(ellipse 85% 80% at 50% 50%,transparent 60%,rgba(0,0,0,.8) 100%);box-shadow:inset 0 0 90px 10px rgba(0,0,0,.85);border-radius:22px}
+.roll{height:22%;top:-22%;bottom:auto;background:linear-gradient(to bottom,transparent,rgba(64,255,110,.045) 60%,transparent);animation:roll 8s linear infinite}
+@keyframes roll{to{transform:translateY(560%)}}
+#hint{position:absolute;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  font:18px/1.2 var(--mono);letter-spacing:.06em;color:var(--phosphor);text-shadow:0 0 6px var(--phosphor-dim);
+  background:rgba(1,6,3,.82);border:1px solid var(--phosphor-dim);padding:4px 12px;white-space:nowrap;
+  max-width:calc(100% - 32px);overflow:hidden;text-overflow:ellipsis;transition:opacity .8s;opacity:1}
+#hint.off{opacity:0}
+@media (prefers-reduced-motion:reduce){.roll{display:none}}
+</style>
+
+<div id="tube">
+  <canvas id="glow" aria-hidden="true"></canvas>
+  <canvas id="screen" role="img" aria-label="Animated green-screen terminal: a 24 hour day passes every 60 seconds while 47 cowsay characters come and go under changing weather."></canvas>
+  <div class="layer scan"></div>
+  <div class="layer roll"></div>
+  <div class="layer vignette"></div>
+  <div id="hint">CLICK: FULL SCREEN &middot; SPACE: PAUSE &middot; &larr; &rarr;: SKIP AN HOUR</div>
+</div>
+
+<script>
+(() => {
+const DATA = {"art":{"apt":["       \u0001 (__)","         (oo)","   /------\\/","  / |    ||"," *  /\\---/\\","    ~~   ~~"],"bud-frogs":["     \u0001","      \u0001","          oO)-.                       .-(Oo","         /__  _\\                     /_  __\\","         \\  \\(  |     ()~()         |  )/  /","          \\__|\\ |    (-___-)        | /|__/","          '  '--'    ==`-'==        '--'  '"],"bunny":["  \u0001","   \u0001   \\","        \\ /\\","        ( )","      .( o )."],"calvin":[" \u0001                   .,","   \u0001         .      .TR   d'","     \u0001      k,l    .R.b  .t .Je","       \u0001   .P q.   a|.b .f .Z%","           .b .h  .E` # J: 2`     .","      .,.a .E  ,L.M'  ?:b `| ..J9!`.,","       q,.h.M`   `..,   ..,\"\"` ..2\"`","       .M, J8`   `:       `   3;","   .    Jk              ...,   `^7\"90c.","    j,  ,!     .7\"'`j,.|   .n.   ...","   j, 7'     .r`     4:      L   `...","  ..,m.      J`    ..,|..    J`  7TWi","  ..JJ,.:    %    oo      ,. ....,","    .,E      3     7`g.M:    P  41","   JT7\"'      O.   .J,;     ``  V\"7N.","   G.           \"\"Q+  .Zu.,!`      Z`","   .9.. .         J&..J!       .  ,:","      7\"9a                    JM\"!","         .5J.     ..        ..F`","            78a..   `    ..2'","                J9Ksaw0\"'","               .EJ?A...a.","               q...g...gi","              .m...qa..,y:","              .HQFNB&...mm","               ,Z|,m.a.,dp","            .,?f` ,E?:\"^7b","            `A| . .F^^7'^4,","             .MMMMMMMMMMMQzna,","         ...f\"A.JdT     J:    Jp,","          `JNa..........A....af`","               `^^^^^'`"],"cheese":["   \u0001","    \u0001","      _____   _________","     /     \\_/         |","    |                 ||","    |                 ||","   |    ###\\  /###   | |","   |     0  \\/  0    | |","  /|                 | |"," / |        <        |\\ \\","| /|                 | | |","| |     \\_______/   |  | |","| |                 | / /","/||                 /|||","   ----------------|","        | |    | |","        ***    ***","       /___\\  /___\\"],"cock":["    \u0001","     \u0001  /\\/\\","       \\   /","       |  0 >>","       |___|"," __((_<|   |","(          |","(__________)","   |      |","   |      |","   /\\     /\\"],"cower":["     \u0001","      \u0001","        ,__, |    |","        (oo)\\|    |___","        (__)\\|    |   )\\_","             |    |_w |  \\","             |    |  ||   *"],"daemon":["   \u0001         ,        ,","    \u0001       /(        )`","     \u0001      \\ \\___   / |","            /- _  `-/  '","           (/\\/ \\ \\   /\\","           / /   | `    \\","           O O   ) /    |","           `-^--'`<     '","          (_.)  _  )   /","           `.___/`    /","             `-----' /","<----.     __ / __   \\","<----|====O)))==) \\) /====","<----'    `--' `.__,' \\","             |        |","              \\       /","        ______( (_  / \\______","      ,'  ,-----'   |        \\","      `--{__________)        \\/"],"default":["        \u0001   ^__^","         \u0001  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||"],"dragon":["      \u0001                    / \\  //\\","       \u0001    |\\___/|      /   \\//  \\\\","            /0  0  \\__  /    //  | \\ \\","           /     /  \\/_/    //   |  \\  \\","           @_^_@'/   \\/_   //    |   \\   \\","           //_^_/     \\/_ //     |    \\    \\","        ( //) |        \\///      |     \\     \\","      ( / /) _|_ /   )  //       |      \\     _\\","    ( // /) '/,_ _ _/  ( ; -.    |    _ _\\.-~        .-~~~^-.","  (( / / )) ,-{        _      `-.|.-~-.           .~         `."," (( // / ))  '/\\      /                 ~-. _ .-~      .-~^-.  \\"," (( /// ))      `.   {            }                   /      \\  \\","  (( / ))     .----~-.\\        \\-'                 .~         \\  `. \\^-.","             ///.----..>        \\             _ -~             `.  ^-`  ^-_","               ///-._ _ _ _ _ _ _}^ - - - - ~                     ~-- ,.-~","                                                                  /.-~"],"dragon-and-cow":["                       \u0001                    ^    /^","                        \u0001                  / \\  // \\","                         \u0001   |\\___/|      /   \\//  .\\","                          \u0001  /O  O  \\__  /    //  | \\ \\           *----*","                            /     /  \\/_/    //   |  \\  \\          \\   |","                            @___@`    \\/_   //    |   \\   \\         \\/\\ \\","                           0/0/|       \\/_ //     |    \\    \\         \\  \\","                       0/0/0/0/|        \\///      |     \\     \\       |  |","                    0/0/0/0/0/_|_ /   (  //       |      \\     _\\     |  /","                 0/0/0/0/0/0/`/,_ _ _/  ) ; -.    |    _ _\\.-~       /   /","                             ,-}        _      *-.|.-~-.           .~    ~","            \\     \\__/        `/\\      /                 ~-. _ .-~      /","             \\____(oo)           *.   }            {                   /","             (    (--)          .----~-.\\        \\-`                 .~","             //__\\\\  \\__ Ack!   ///.----..<        \\             _ -~","            //    \\\\               ///-._ _ _ _ _ _ _{^ - - - - ~"],"duck":[" \u0001","  \u0001","   \u0001 >()_","      (__)__ _"],"elephant":[" \u0001     /\\  ___  /\\","  \u0001   // \\/   \\/ \\\\","     ((    O O    ))","      \\\\ /     \\ //","       \\/  | |  \\/","        |  | |  |","        |  | |  |","        |   o   |","        | |   | |","        |m|   |m|"],"elephant-in-snake":["       \u0001","        \u0001  ....","          .    ........","          .            .","          .             .","    .......              .........","    .............................."],"eyes":["    \u0001","     \u0001","                                   .::!!!!!!!:.","  .!!!!!:.                        .:!!!!!!!!!!!!","  ~~~~!!!!!!.                 .:!!!!!!!!!UWWW$$$","      :$$NWX!!:           .:!!!!!!XUWW$$$$$$$$$P","      $$$$$##WX!:      .<!!!!UW$$$$\"  $$$$$$$$#","      $$$$$  $$$UX   :!!UW$$$$$$$$$   4$$$$$*","      ^$$$B  $$$$\\     $$$$$$$$$$$$   d$$R\"","        \"*$bd$$$$      '*$$$$$$$$$$$o+#\"","             \"\"\"\"          \"\"\"\"\"\"\""],"flaming-sheep":["  \u0001            .    .     .","   \u0001      .  . .     `  ,","    \u0001    .; .  : .' :  :  : .","     \u0001   i..`: i` i.i.,i  i .","      \u0001   `,--.|i |i|ii|ii|i:","           UooU\\.'@@@@@@`.||'","           \\__/(@@@@@@@@@@)'","                (@@@@@@@@)","                `YY~~~~YY'","                 ||    ||"],"fox":["         \u0001     ,-.      .-,","          \u0001    |-.\\ __ /.-|","           \u0001   \\  `    `  /","                /_     _ \\","              <  _`q  p _  >","              <.._=/  \\=_. >","                 {`\\()/`}`\\","                 {      }  \\","                 |{    }    \\","                 \\ '--'   .- \\","                 |-      /    \\","                 | | | | |     ;","                 | | |.;.,..__ |","               .-\"\";`         `|","              /    |           /","              `-../____,..---'`"],"ghostbusters":["          \u0001","           \u0001","            \u0001          __---__","                    _-       /--______","               __--( /     \\ )XXXXXXXXXXX\\v.","             .-XXX(   O   O  )XXXXXXXXXXXXXXX-","            /XXX(       U     )        XXXXXXX\\","          /XXXXX(              )--_  XXXXXXXXXXX\\","         /XXXXX/ (      O     )   XXXXXX   \\XXXXX\\","         XXXXX/   /            XXXXXX   \\__ \\XXXXX","         XXXXXX__/          XXXXXX         \\__---->"," ---___  XXX__/          XXXXXX      \\__         /","   \\-  --__/   ___/\\  XXXXXX            /  ___--/=","    \\-\\    ___/    XXXXXX              '--- XXXXXX","       \\-\\/XXX\\ XXXXXX                      /XXXXX","         \\XXXXXXXXX   \\                    /XXXXX/","          \\XXXXXX      >                 _/XXXXX/","            \\XXXXX--__/              __-- XXXX/","             -XXXXXXXX---------------  XXXXXX-","                \\XXXXXXXXXXXXXXXXXXXXXXXXXX/","                  \"\"VXXXXXXXXXXXXXXXXXXV\"\""],"gnu":["    \u0001               ,-----._","  .  \u0001         .  ,'        `-.__,------._"," //   \u0001      __\\\\'                        `-.","((    _____-'___))                           |"," `:='/     (alf_/                            |"," `.=|      |='                               |","    |)   O |                                  \\","    |      |                               /\\  \\","    |     /                          .    /  \\  \\","    |    .-..__            ___   .--' \\  |\\   \\  |","   |o o  |     ``--.___.  /   `-'      \\  \\\\   \\ |","    `--''        '  .' / /             |  | |   | \\","                 |  | / /              |  | |   mmm","                 |  ||  |              | /| |","                 ( .' \\ \\              || | |","                 | |   \\ \\            // / /","                 | |    \\ \\          || |_|","                /  |    |_/         /_|","               /__/"],"hellokitty":["  \u0001","   \u0001","      /\\_)o<","     |      \\","     | O . O|","      \\_____/"],"kangaroo":["  \u0001       .","   \u0001      l\\ /\\","    \u0001     !)Y.))","         _\\| //","       ,/oo  \\","    .-+    _ /","   `-_--=-'/","         / /","        /  \\_","       Y  .  )"," .--v--^--' /\"\\"," \\/~\\/~T\"--' _ \\","       !  ./~ \" \\","       `\\.Y      Y    _","       (~~|      |   |^Y","       `\\. \\     |   l |","         T~\\^. Y |   / |","         | |\\| | !  l  |","         ! | Y | `\\/'. |","   ______L_j l j   ~\"  l"," _/,_/, __ ~\"__ }____,/","~~~~~~~~~~~~~~~~~~~~~~~~~~~"],"kiss":["     \u0001","      \u0001","             ,;;;;;;;,","            ;;;;;;;;;;;,","           ;;;;;'_____;'","           ;;;(/))))|((\\","           _;;((((((|))))","          / |_\\\\\\\\\\\\\\\\\\\\\\\\","     .--~(  \\ ~))))))))))))","    /     \\  `\\-(((((((((((\\\\","    |    | `\\   ) |\\       /|)","     |    |  `. _/  \\_____/ |","      |    , `\\~            /","       |    \\  \\           /","      | `.   `\\|          /","      |   ~-   `\\        /","       \\____~._/~ -_,   (\\","        |-----|\\   \\    ';;","       |      | :;;;'     \\","      |  /    |            |","      |       |            |"],"koala":["  \u0001","   \u0001","       ___","     {~._.~}","      ( Y )","     ()~*~()","     (_)-(_)"],"kosh":["    \u0001","     \u0001","      \u0001","  ___       _____     ___"," /   \\     /    /|   /   \\","|     |   /    / |  |     |","|     |  /____/  |  |     |","|     |  |    |  |  |     |","|     |  | {} | /   |     |","|     |  |____|/    |     |","|     |    |==|     |     |","|      \\___________/      |","|                         |","|                         |"],"luke-koala":["  \u0001","   \u0001          .","       ___   //","     {~._.~}//","      ( Y )K/","     ()~*~()","     (_)-(_)"],"mech-and-cow":["                                   ,-----.","                                   |     |","                                ,--|     |-.","                         __,----|  |     | |","                       ,;::     |  `_____' |","                       `._______|    i^i   |","                                `----| |---'| .","                           ,-------._| |== ||//","                           |       |_|P`.  /'/","                           `-------' 'Y Y/'/'","                                     .== /_","   ^__^                             /   /'|  `i","   (oo)_______                   /'   /  |   |","   (__)       )/             /'    /   |   `i","       ||----w |           ___,;`----'.___L_,-'`__","       ||     ||          i_____;----.____i\"\"____"],"milk":[" \u0001     ____________","  \u0001    |__________|","      /           /\\","     /           /  \\","    /___________/___/|","    |          |     |","    |  ==\\ /== |     |","    |   O   O  | \\ \\ |","    |     <    |  \\ \\|","   /|          |   \\ \\","  / |  \\_____/ |   / /"," / /|          |  / /|","/||\\|          | /||\\/","    -------------|","        | |    | |","       <__/    \\__>"],"moofasa":["       \u0001    ____","        \u0001  /    \\","          | ^__^ |","          | (oo) |______","          | (__) |      )\\/\\","           \\____/|----w |","                ||     ||"],"moose":["  \u0001","   \u0001   \\_\\_    _/_/","    \u0001      \\__/","           (oo)\\_______","           (__)\\       )\\/\\","               ||----w |","               ||     ||"],"pony":["       \u0001          /\\/\\","        \u0001         \\/\\/","         \u0001        /   -\\","          \u0001     /  oo   -\\","           \u0001  /           \\","             |    ---\\    -\\","             \\--/     \\     \\","                       |      -\\","                        \\       -\\         -------------\\    /-\\","                         \\        \\-------/              ---/    \\","                          \\                                  |\\   \\","                           |                                 / |  |","                           \\                                |  \\  |","                            |                              /    \\ |","                            |                             /     \\ |","                             \\                             \\     \\|","                              -              /--------\\    |      o","                               \\+   +---------          \\   |","                                |   |                   |   \\","                                |   |                    \\   |","                                |   |                    |   \\","                                |   |                     \\   |","                                 \\  |                     |   |","                                 |  |                      \\  \\","                                 |  |                      |   |","                                 +--+                       ---+"],"pony-smaller":["     \u0001      _^^","      \u0001   _- oo\\","          \\----- \\______","                \\       )\\","                ||-----|| \\","                ||     ||"],"ren":["   \u0001","    \u0001","    ____","   /# /_\\_","  |  |/o\\o\\","  |  \\\\_/_/"," / |_   |","|  ||\\_ ~|","|  ||| \\/","|  |||_"," \\//  |","  ||  |","  ||_  \\","  \\_|  o|","  /\\___/"," /  ||||__","    (___)_)"],"sheep":["  \u0001","   \u0001","       __","      UooU\\.'@@@@@@`.","      \\__/(@@@@@@@@@@)","           (@@@@@@@@)","           `YY~~~~YY'","            ||    ||"],"skeleton":["          \u0001      (__)","           \u0001     /oo|","            \u0001   (_\"_)*+++++++++*","                   //I#\\\\\\\\\\\\\\\\I\\","                   I[I|I|||||I I `","                   I`I'///'' I I","                   I I       I I","                   ~ ~       ~ ~"],"snowman":["   \u0001"," ___###","   /oo\\ |||","   \\  / \\|/","   /\"\"\\  I","()|    |(I)","   \\  /  I","  /\"\"\"\"\\ I"," |      |I"," |      |I","  \\____/ I"],"stegosaurus":["\u0001                             .       ."," \u0001                           / `.   .' \"","  \u0001                  .---.  <    > <    >  .---.","   \u0001                 |    \\  \\ - ~ ~ - /  /    |","         _____          ..-~             ~-..-~","        |     |   \\~~~\\.'                    `./~~~/","       ---------   \\__/                        \\__/","      .'  O    \\     /               /       \\  \"","     (_____,    `._.'               |         }  \\/~~~/","      `----.          /       }     |        /    \\__/","            `-.      |       /      |       /      `. ,~~|","                ~-.__|      /_ - ~ ^|      /- _      `..-'","                     |     /        |     /     ~-.     `-. _  _  _","                     |_____|        |_____|         ~ - . _ _ _ _ _>"],"stimpy":["  \u0001     .    _  .","   \u0001    |\\_|/__/|","       / / \\/ \\  \\","      /__|O||O|__ \\","     |/_ \\_/\\_/ _\\ |","     | | (____) | ||","     \\/\\___/\\__/  //","     (_/         ||","      |          ||","      |          ||\\","       \\        //_/","        \\______//","       __ || __||","      (____(____)"],"suse":["  \u0001","   \u0001____","  /@    ~-.","  \\/ __ .- |","   // //  @"],"three-eyes":["        \u0001  ^___^","         \u0001 (ooo)\\_______","           (___)\\       )\\/\\","                ||----w |","                ||     ||"],"turkey":["  \u0001                                  ,+*^^*+___+++_","   \u0001                           ,*^^^^              )","    \u0001                       _+*                     ^**+_","     \u0001                    +^       _ _++*+_+++_,         )","              _+^^*+_    (     ,+*^ ^          \\+_        )","             {       )  (    ,(    ,_+--+--,      ^)      ^\\","            { (@)    } f   ,(  ,+-^ __*_*_  ^^\\_   ^\\       )","           {:;-/    (_+*-+^^^^^+*+*<_ _++_)_    )    )      /","          ( /  (    (        ,___    ^*+_+* )   <    <      \\","           U _/     )    *--<  ) ^\\-----++__)   )    )       )","            (      )  _(^)^^))  )  )\\^^^^^))^*+/    /       /","          (      /  (_))_^)) )  )  ))^^^^^))^^^)__/     +^^","         (     ,/    (^))^))  )  ) ))^^^^^^^))^^)       _)","          *+__+*       (_))^)  ) ) ))^^^^^^))^^^^^)____*^","          \\             \\_)^)_)) ))^^^^^^^^^^))^^^^)","           (_             ^\\__^^^^^^^^^^^^))^^^^^^^)","             ^\\___            ^\\__^^^^^^))^^^^^^^^)\\\\","                  ^^^^^\\uuu/^^\\uuu/^^^^\\^\\^\\^\\^\\^\\^\\^\\","                     ___) >____) >___   ^\\_\\_\\_\\_\\_\\_\\)","                    ^^^//\\\\_^^//\\\\_^       ^(\\_\\_\\_\\)","                      ^^^ ^^ ^^^ ^"],"turtle":["    \u0001                                  ___-------___","     \u0001                             _-~~             ~~-_","      \u0001                         _-~                    /~-_","             /^\\__/^\\         /~  \\                   /    \\","           /|  O|| O|        /      \\_______________/        \\","          | |___||__|      /       /                \\          \\","          |          \\    /      /                    \\          \\","          |   (_______) /______/                        \\_________ \\","          |         / /         \\                      /            \\","           \\         \\^\\\\         \\                  /               \\     /","             \\         ||           \\______________/      _-_       //\\__//","               \\       ||------_-~~-_ ------------- \\ --/~   ~\\    || __/","                 ~-----||====/~     |==================|       |/~~~~~","                  (_(__/  ./     /                    \\_\\      \\.","                         (_(___/                         \\_____)_)"],"tux":["   \u0001","    \u0001","        .--.","       |o_o |","       |:_/ |","      //   \\ \\","     (|     | )","    /'\\_   _/`\\","    \\___)=(___/"],"unipony":["   \u0001             \\","    \u0001             \\_","     \u0001             \\\\","      \u0001             \\\\/\\","       \u0001            _\\\\/","        \u0001         /   -\\","         \u0001      /  oo   -\\","          \u0001   /           \\","             |    ---\\    -\\","             \\--/     \\     \\","                       |      -\\","                        \\       -\\         -------------\\    /-\\","                         \\        \\-------/              ---/    \\","                          \\                                  |\\   \\","                           |                                 / |  |","                           \\                                |  \\  |","                            |                              /    \\ |","                            |                             /     \\ |","                             \\                             \\     \\|","                              -              /--------\\    |      o","                               \\+   +---------          \\   |","                                |   |                   |   \\","                                |   |                    \\   |","                                |   |                    |   \\","                                |   |                     \\   |","                                 \\  |                     |   |","                                 |  |                      \\  \\","                                 |  |                      |   |","                                 +--+                       ---+"],"unipony-smaller":["   \u0001        \\","    \u0001        \\","     \u0001       _\\^","      \u0001    _- oo\\","           \\---- \\______","                 \\       )\\","                ||-----||  \\","                ||     ||"],"vader":["        \u0001    ,-^-.","         \u0001   !oYo!","          \u0001 /./=\\.\\______","               ##        )\\/\\","                ||-----w||","                ||      ||"],"vader-koala":["   \u0001","    \u0001        .","     .---.  //","    Y|o o|Y//","   /_(i=i)K/","   ~()~*~()~","    (_)-(_)"],"www":["        \u0001   ^__^","         \u0001  (oo)\\_______","            (__)\\       )\\/\\","                ||--WWW |","                ||     ||"]},"labels":{"cower":"Cower....","elephant-in-snake":"Elephant inside ASCII snake","luke-koala":"Luke Skywalker koala","moofasa":"Moofasa","skeleton":"Scowleton","vader":"Cowth Vader","vader-koala":"Darth Vader koala"}};
+const TAIL = '\u0001';
+const DAY = 60, HR = DAY / 24, R = 64, GROUND = R - 6;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- helpers ---------- */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOut = p => 1 - (1 - p) ** 3;
+const easeIn = p => p ** 3;
+const easeInOut = p => p < .5 ? 4 * p ** 3 : 1 - (-2 * p + 2) ** 3 / 2;
+const expoOut = p => p >= 1 ? 1 : 1 - 2 ** (-10 * p);
+const expoIn = p => p <= 0 ? 0 : 2 ** (10 * p - 10);
+function bounceOut(x) {
+  const n = 7.5625, d = 2.75;
+  if (x < 1 / d) return n * x * x;
+  if (x < 2 / d) return n * (x -= 1.5 / d) * x + .75;
+  if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + .9375;
+  return n * (x -= 2.625 / d) * x + .984375;
+}
+function hash(a, b, c = 0) {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 1442695041)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash(xi, yi, 7), b = hash(xi + 1, yi, 7), c = hash(xi, yi + 1, 7), d = hash(xi + 1, yi + 1, 7);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function mulberry(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const bell = (h, c, w) => { const d = ((h - c + 36) % 24) - 12; return Math.exp(-((d / w) ** 2)); };
+const rnd = n => (Math.random() * n) | 0;
+const pick = s => s[rnd(s.length)];
+
+/* ---------- character grid ---------- */
+let C = 200;
+let G = [], I = new Float32Array(0);
+function put(x, y, ch, i, opaque) {
+  x = Math.round(x); y = Math.round(y);
+  if (x < 0 || x >= C || y < 1 || y >= R - 1) return;
+  const k = y * C + x;
+  if (ch === ' ') { if (opaque) { G[k] = ' '; I[k] = 0; } return; }
+  G[k] = ch; I[k] = i;
+}
+const text = (x, y, s, i) => { for (let j = 0; j < s.length; j++) put(x + j, y, s[j], i, true); };
+
+/* ---------- art ---------- */
+const ART = {};
+for (const [name, lines] of Object.entries(DATA.art)) {
+  const h = lines.length, w = Math.max(...lines.map(l => l.length));
+  const fT = [], lT = [], fN = [], lN = [], order = [];
+  lines.forEach((l, r) => {
+    let a = -1, b = -1, an = -1, bn = -1;
+    for (let c = 0; c < l.length; c++) {
+      const ch = l[c];
+      if (ch === ' ') continue;
+      if (a < 0) a = c; b = c;
+      if (ch !== TAIL) { if (an < 0) an = c; bn = c; order.push([r, c]); }
+    }
+    fT.push(a); lT.push(b); fN.push(an); lN.push(bn);
+  });
+  const rank = lines.map(l => new Int32Array(l.length).fill(1e9));
+  order.forEach(([r, c], i) => rank[r][c] = i);
+  ART[name] = { lines, w, h, fT, lT, fN, lN, order, rank };
+}
+
+function stamp(A, x, y, o) {
+  for (let r = 0; r < A.h; r++) {
+    const l = A.lines[r], f = o.tail ? A.fT[r] : A.fN[r], e = o.tail ? A.lT[r] : A.lN[r];
+    if (f < 0) continue;
+    for (let c = f; c <= e; c++) {
+      let ch = l[c] || ' ';
+      if (ch === TAIL) { if (!o.tail) continue; ch = '\\'; }
+      if (o.mask && !o.mask(r, c, ch)) continue;
+      if (o.skip && Math.random() < o.skip) continue;
+      if (o.glyph) ch = o.glyph(r, c, ch);
+      const Y = y + r + (o.colDy ? o.colDy(c) : 0);
+      if (o.clip && Y >= GROUND) continue;
+      put(x + c, Y, ch, o.i, true);
+    }
+  }
+}
+
+/* ---------- speech bubbles, cowsay style ---------- */
+function bubble(msg) {
+  const L = []; let cur = '';
+  for (const wd of msg.split(' ')) {
+    if (cur && (cur + ' ' + wd).length > 26) { L.push(cur); cur = wd; } else cur = cur ? cur + ' ' + wd : wd;
+  }
+  if (cur) L.push(cur);
+  const n = Math.max(...L.map(s => s.length));
+  const out = [' ' + '_'.repeat(n + 2)];
+  if (L.length === 1) out.push('< ' + L[0].padEnd(n) + ' >');
+  else L.forEach((s, i) => {
+    const [a, b] = i === 0 ? ['/', '\\'] : i === L.length - 1 ? ['\\', '/'] : ['|', '|'];
+    out.push(a + ' ' + s.padEnd(n) + ' ' + b);
+  });
+  out.push(' ' + '-'.repeat(n + 2));
+  return { out, L, n, w: n + 4 };
+}
+function drawBubble(b, x, y, k, i) {
+  const bx = clamp(x, 1, C - b.w - 1), by = Math.max(1, y - b.out.length);
+  let budget = Math.floor(k);
+  b.out.forEach((line, j) => {
+    let shown = line.length;
+    if (j > 0 && j <= b.L.length) { shown = 2 + clamp(budget, 0, b.L[j - 1].length); budget -= b.L[j - 1].length + 1; }
+    for (let c = 0; c < line.length; c++) {
+      const inText = j > 0 && j <= b.L.length && c >= 2 && c < b.n + 2;
+      put(bx + c, by + j, inText && c >= shown ? ' ' : line[c], i, true);
+    }
+  });
+}
+
+/* ---------- the cast: who comes on when, and how ----------
+   [cowfile, hour of day, entrance/exit style, direction of travel (-1 left, 1 right), line, extras] */
+const CAST = [
+  ['eyes', 0.3, 'fade', 1, "...who's out there?", { idle: 'blink' }],
+  ['ghostbusters', 1.1, 'float', 1, 'Who you gonna call? Not me.'],
+  ['skeleton', 1.8, 'rise', 1, 'Up past my bedtime. Permanently.'],
+  ['daemon', 2.6, 'rise', 1, 'fork() fork() fork() fork()', { embers: 1 }],
+  ['kosh', 3.2, 'beam', 1, 'Understanding is a three-edged sword.'],
+  ['three-eyes', 3.8, 'beam', 1, 'Take me to your herd.'],
+  ['vader', 4.3, 'walk', -1, 'I find your lack of grass disturbing.'],
+  ['vader-koala', 4.9, 'descend', 1, 'Luke, I am your koala.'],
+  ['fox', 5.3, 'crawl', 1, 'Early fox gets the hens.'],
+  ['moofasa', 5.9, 'rise', 1, 'Everything the light touches is pasture.'],
+  ['cock', 6.3, 'walk', 1, 'COCK-A-DOODLE-DOO!'],
+  ['sheep', 6.8, 'walk', -1, 'Counted myself all night. Still one.'],
+  ['default', 7.2, 'walk', -1, 'Morning. Moo.'],
+  ['moose', 7.6, 'walk', -1, 'Moose. Not a typo.'],
+  ['duck', 8.0, 'fly', -1, "Quack. Is it bread o'clock?"],
+  ['bunny', 8.4, 'hop', 1, 'hop hop hop'],
+  ['bud-frogs', 8.7, 'hop', 1, 'Ribbit. Ribbit.', { hopH: 3 }],
+  ['apt', 9.1, 'teletype', 1, 'Reading package lists... Done'],
+  ['suse', 9.5, 'magic', -1, "Blending in. You can't see me.", { nospark: 1 }],
+  ['tux', 9.9, 'slide', 1, 'Sliding into your kernel.'],
+  ['gnu', 10.3, 'walk', -1, "It's GNU/Moo, actually."],
+  ['www', 10.6, 'teletype', 1, '404: grass not found'],
+  ['kangaroo', 11.0, 'hop', -1, "G'day! Mail's here.", { hopH: 8 }],
+  ['koala', 11.4, 'descend', 1, 'Woke up. Going back to sleep.'],
+  ['luke-koala', 11.8, 'leap', 1, 'May the forest be with you.'],
+  ['cheese', 12.2, 'drop', 1, 'Lunch is served.'],
+  ['milk', 12.6, 'drop', 1, 'Got milk? You do now.'],
+  ['turkey', 13.0, 'walk', -1, 'Is it November yet? No? Good.'],
+  ['elephant', 13.4, 'stomp', 1, 'I never forget a sunny day.'],
+  ['elephant-in-snake', 13.9, 'slither', -1, 'Ate an elephant. Ask me how.'],
+  ['cower', 14.5, 'peek', -1, "Is that thunder? I'll wait here."],
+  ['hellokitty', 14.9, 'magic', 1, 'Rain! How cute.'],
+  ['ren', 15.3, 'walk', 1, "You eediot! It's pouring!"],
+  ['stimpy', 15.7, 'hop', 1, 'Happy happy joy joy!', { idle: 'hop', hopH: 4 }],
+  ['mech-and-cow', 16.1, 'stomp', -1, 'MOO.EXE has stopped responding.'],
+  ['stegosaurus', 16.6, 'stomp', -1, 'Rain again. Very Jurassic.'],
+  ['turtle', 17.0, 'crawl', -1, 'Got here as fast as I could.', { e: 4.2, x: 4.2 }],
+  ['unipony', 17.4, 'magic', -1, 'Behold! A rainbow! In green.'],
+  ['unipony-smaller', 17.8, 'magic', -1, 'Me too! Me too!'],
+  ['pony', 18.1, 'gallop', -1, 'Sunset gallop!'],
+  ['pony-smaller', 18.4, 'gallop', -1, 'Wait for me!'],
+  ['calvin', 18.8, 'walk', 1, 'The days are just packed.'],
+  ['flaming-sheep', 19.3, 'burn', -1, 'Who lit the campfire? Oh. Me.'],
+  ['dragon', 20.0, 'fly', -1, 'Night shift. Anyone want toast?', { idle: 'fire' }],
+  ['dragon-and-cow', 20.8, 'gallop', -1, 'RUN!'],
+  ['kiss', 21.6, 'fade', 1, 'Goodnight, everyone.'],
+  ['snowman', 22.6, 'build', 1, 'Finally, my kind of weather.'],
+];
+const MODES = {
+  walk: [2, 2], crawl: [3.2, 3.2], gallop: [1.4, 1.4], burn: [1.4, 1.4], slither: [3, 3], stomp: [2.6, 2.6],
+  slide: [1.6, 1.4], hop: [2, 2], leap: [1.6, 1.6], fly: [2.2, 2.2], drop: [1.6, 1.8], rise: [2.4, 2.2],
+  descend: [2.4, 2], magic: [1.8, 1.6], teletype: [2.4, 1.6], beam: [2.6, 2.2], fade: [2, 2],
+  peek: [1.2, .6], build: [2.6, 2.6], float: [2.4, 2.2],
+};
+const actors = CAST.map(([name, hour, mode, dir, quote, ex = {}], id) => {
+  const A = ART[name], [e, x] = MODES[mode];
+  const E = ex.e || e, X = ex.x || x, D = 3.8;
+  return { id, name, A, w: A.w, h: A.h, mode, dir, ex, E, D, X, T: E + D + X, start: hour * HR, x0: 0,
+    label: DATA.labels[name] || name, bub: bubble(quote) };
+});
+
+/* ---------- per-day layout: stage positions, clouds, scenery ---------- */
+let clouds = [], stars = [], farRidge = [], nearRidge = [], plannedDay = -1;
+function timeOverlap(a, b) {
+  let o = 0;
+  for (const k of [-DAY, 0, DAY]) o += Math.max(0, Math.min(a.start + a.T, b.start + b.T + k) - Math.max(a.start, b.start + k));
+  return o;
+}
+function ridge(seed, base, amp, freq) {
+  const L = new Array(C + 1); let cur = Math.round(base + amp * vnoise(seed, 0));
+  for (let c = 0; c <= C; c++) {
+    const target = Math.round(base + amp * vnoise(c * freq + seed, seed) + amp * .4 * vnoise(c * freq * 3 + seed, 3));
+    cur += Math.sign(target - cur); L[c] = Math.max(0, cur);
+  }
+  return L;
+}
+function plan(day) {
+  plannedDay = day;
+  const rng = mulberry(day * 9973 + C);
+  const placed = [];
+  for (const a of [...actors].sort((p, q) => p.start - q.start)) {
+    if (a.mode === 'peek') { a.x0 = C - Math.round(a.w * .75); placed.push(a); continue; }
+    let best = Infinity, bx = 2;
+    const hi = Math.max(2, C - a.w - 2);
+    for (let x = 2; x <= hi; x += 2) {
+      let cost = rng() * 4 + Math.abs(x + a.w / 2 - C / 2) * .01;
+      for (const b of placed) {
+        const o = timeOverlap(a, b); if (!o) continue;
+        const ov = Math.max(0, Math.min(x + Math.max(a.w, a.bub.w), b.x0 + Math.max(b.w, b.bub.w)) + 3 - Math.max(x, b.x0));
+        cost += o * ov;
+      }
+      if (cost < best) { best = cost; bx = x; }
+    }
+    a.x0 = bx; placed.push(a);
+  }
+  clouds = Array.from({ length: 16 }, (_, k) => ({
+    x0: rng() * (C + 70), y: 2 + Math.floor(rng() * 15), spd: 1.2 + rng() * 2.4,
+    big: k % 3 !== 0, th: k / 16 * .95, id: k,
+  }));
+  stars = Array.from({ length: Math.round(C * .7) }, () => ({
+    x: Math.floor(rng() * C), y: 1 + Math.floor(rng() * (GROUND - 16)), ch: rng() < .85 ? '.' : rng() < .5 ? '+' : '*',
+    ph: rng() * 6.28, sp: 1 + rng() * 3,
+  }));
+  farRidge = ridge(day * 3.1 + 11, 8, 8, .025);
+  nearRidge = ridge(day * 1.7 + 47, 2, 5, .045);
+}
+
+/* ---------- sky furniture ---------- */
+const SUN = [
+  '     \\   |   /',
+  "   '. .-----. .'",
+  ' -- -(       )- --',
+  "   .' '-----' '.",
+  '     /   |   \\',
+];
+const MOON = ['  .--.', " /  .'", '|  (', " \\  '.", "  '--'"];
+const CLOUD_S = ['   .--.', '.-(    ).', '(___.__)__)'];
+const CLOUD_B = [
+  '         _.-~~-._',
+  '    .-~~(        )~~-.',
+  '  .(                  ).',
+  ' (                      )',
+  "  `-.__.-~~-.__.-~~-.__.'",
+];
+function drawShape(lines, x, y, i, fill) {
+  lines.forEach((l, r) => {
+    const f = l.search(/\S/), e = l.length - 1;
+    if (f < 0) return;
+    for (let c = f; c <= e; c++) {
+      let ch = l[c], ii = i;
+      if (ch === ' ' && fill) { const f2 = fill(c, r); if (f2) { ch = f2; ii = i * .45; } }
+      put(x + c, y + r, ch, ii, true);
+    }
+  });
+}
+function drawRidge(L, i, tex) {
+  for (let c = 0; c < C; c++) {
+    const a = L[c], b = L[c + 1], row = GROUND - 1 - Math.min(a, b);
+    put(c, row, b > a ? '/' : b < a ? '\\' : '_', i, true);
+    for (let y = row + 1; y < GROUND; y++) put(c, y, hash(c, y, 5) < tex ? '.' : ' ', i * .4, true);
+  }
+}
+
+/* ---------- state ---------- */
+let simT = 9.6 * HR, paused = false, last = performance.now(), lastDraw = 0;
+let shake = 0, flashAt = -9, bolt = [], meteor = null;
+
+function dust(x0, x1, y, n, chars, i) {
+  for (let k = 0; k < n; k++) put(x0 + Math.random() * (x1 - x0), y - (Math.random() < .3 ? 1 : 0), pick(chars), i, false);
+}
+
+/* ---------- actors: entrances, dwell, exits ---------- */
+function drawActor(a, lt, T, amb, front) {
+  const A = a.A, w = a.w, h = a.h, yb = GROUND - h;
+  let x = a.x0, y = yb, ph, p;
+  if (lt < a.E) { ph = 0; p = lt / a.E; } else if (lt < a.E + a.D) { ph = 1; p = (lt - a.E) / a.D; } else { ph = 2; p = (lt - a.E - a.D) / a.X; }
+  const from = a.dir < 0 ? C + 1 : -w - 1, to = a.dir < 0 ? -w - 1 : C + 1;
+  const moving = ph !== 1;
+  const o = { i: amb, tail: ph === 1 };
+  const trail = (len, ch, i) => {
+    const s = a.dir < 0 ? x + w : x - len;
+    for (let k = 0; k < len; k++) if (Math.random() < .7) put(s + k, GROUND - 1, ch, i, false);
+  };
+  let draw = true;
+
+  switch (a.mode) {
+    case 'walk': case 'crawl': case 'gallop': case 'burn': case 'slither': {
+      const linear = a.mode === 'crawl' || a.mode === 'slither';
+      if (ph === 0) x = lerp(from, a.x0, linear ? p : easeOut(p));
+      else if (ph === 2) x = lerp(a.x0, to, linear ? p : easeIn(p));
+      if (!moving) break;
+      if (a.mode === 'gallop' || a.mode === 'burn') {
+        y -= Math.floor(T * 12) % 2;
+        dust(a.dir < 0 ? x + w : x - 8, a.dir < 0 ? x + w + 8 : x, GROUND - 1, 5, ".,'`", amb * .7);
+      }
+      if (a.mode === 'crawl') trail(6, '.', amb * .35);
+      if (a.mode === 'slither') o.colDy = c => Math.round(Math.sin(c * .45 - T * 9) * .6);
+      if (a.mode === 'walk' && Math.floor(T * 5) % 2) dust(x + w * .3, x + w * .7, GROUND - 1, 1, '.', amb * .4);
+      break;
+    }
+    case 'stomp': {
+      const steps = 6, s = Math.floor(p * steps), f = p * steps - s;
+      const sp = (s + easeInOut(Math.min(1, f * 1.6))) / steps;
+      if (ph === 0) x = lerp(from, a.x0, sp); else if (ph === 2) x = lerp(a.x0, to, sp);
+      if (moving && f > .62 && f < .8) { shake = Math.max(shake, 1); dust(x - 3, x + w + 3, GROUND - 1, 10, ".,'`", amb); }
+      break;
+    }
+    case 'slide': {
+      let speed = 0;
+      if (ph === 0) { x = lerp(from, a.x0, expoOut(p)); speed = 2 ** (-10 * p); }
+      else if (ph === 2) { x = lerp(a.x0, to, expoIn(p)); speed = 2 ** (10 * p - 10); }
+      if (speed > .02) trail(Math.round(4 + 18 * speed), pick('~='), amb * .6);
+      break;
+    }
+    case 'hop': case 'leap': {
+      const n = a.mode === 'leap' ? 1 : (a.ex.hops || 3), hh = a.mode === 'leap' ? 16 : (a.ex.hopH || 5);
+      if (moving) {
+        x = ph === 0 ? lerp(from, a.x0, p) : lerp(a.x0, to, p);
+        const s = Math.abs(Math.sin(Math.PI * n * p));
+        y = yb - Math.round(s * hh);
+        if (s < .15) dust(x, x + w, GROUND - 1, 3, ".,", amb * .6);
+        if (a.mode === 'leap' && ph === 0 && p > .94) shake = Math.max(shake, .6);
+      } else if (a.ex.idle === 'hop') y = yb - Math.round(Math.abs(Math.sin(Math.PI * 5 * p)) * 2);
+      break;
+    }
+    case 'fly': {
+      const flutter = moving ? Math.round(Math.sin(T * 14) * .6) : 0;
+      if (ph === 0) { x = lerp(from, a.x0, easeOut(p)); y = Math.round(lerp(2 - h * .3, yb, easeInOut(p))) + flutter; }
+      else if (ph === 2) { x = lerp(a.x0, to, easeIn(p)); y = Math.round(lerp(yb, 1 - h, easeIn(p))) + flutter; }
+      if (a.ex.idle === 'fire' && ph === 1 && p > .35 && p < .75) {
+        for (let k = 0; k < 26; k++) put(x + 6 - k * 1.1 - Math.random() * 2, y + 5 + Math.round(Math.sin(k * .7 + T * 20) * .8),
+          pick(k < 6 ? '*#@' : '~=-<*.'), 1.25, false);
+      }
+      break;
+    }
+    case 'drop': {
+      if (ph === 0) {
+        y = Math.round(lerp(1 - h, yb, bounceOut(p)));
+        if (p > .34 && p < .48) { shake = Math.max(shake, .8); dust(x - 3, x + w + 3, GROUND - 1, 12, ".,'*", amb); }
+      } else if (ph === 2) {
+        y = yb + Math.round(easeIn(p) * h); o.clip = true;
+        dust(x, x + w, GROUND - 1, 6, ".:,", amb * .7);
+      }
+      break;
+    }
+    case 'rise': {
+      if (ph === 0) { y = yb + Math.round((1 - easeOut(p)) * h); o.clip = true; if (p < .95) dust(x, x + w, GROUND - 1, 10, ".:,'", amb * .8); }
+      else if (ph === 2) { y = yb + Math.round(easeIn(p) * h); o.clip = true; dust(x, x + w, GROUND - 1, 8, ".:,'", amb * .8); }
+      if (a.ex.embers) for (let k = 0; k < 8; k++) put(x + 4 + Math.random() * (w - 8), y + h - 1 - ((T * 6 + k * 2.3) % 14), pick("'.*^"), 1.1, false);
+      break;
+    }
+    case 'descend': {
+      if (ph === 0) y = Math.round(lerp(-h, yb, easeOut(p)));
+      else if (ph === 2) y = Math.round(lerp(yb, -h, easeIn(p)));
+      if (moving) {
+        const rc = Math.floor(w / 2) + 2;
+        let top = 0; while (top < h && (A.lines[top][rc] || ' ') === ' ') top++;
+        for (let r = 1; r < y + Math.min(top, h); r++) put(x + rc, r, '|', amb * .6, false);
+      }
+      break;
+    }
+    case 'magic': {
+      const pp = ph === 0 ? p : ph === 2 ? 1 - p : 1;
+      if (pp < 1) {
+        const id = a.id + 100;
+        o.mask = (r, c) => hash(r, c, id) < pp;
+        o.glyph = (r, c, ch) => ch !== ' ' && hash(r, c, id) > pp - .14 ? pick(a.ex.nospark ? '.:' : "*+.'`") : ch;
+        if (!a.ex.nospark) {
+          const n = Math.round(Math.sin(Math.PI * pp) * w * h * .05);
+          for (let k = 0; k < n; k++) put(x - 3 + Math.random() * (w + 6), y + Math.random() * h, pick('*+.'), 1.3, false);
+        }
+      }
+      break;
+    }
+    case 'teletype': {
+      const N = A.order.length;
+      const n = ph === 0 ? Math.floor(p * N) : ph === 2 ? Math.floor((1 - p) * N) : N;
+      if (ph === 0) text(x, y - 2, ('$ cowsay -f ' + a.name).slice(0, 2 + Math.floor(p * 40)), amb * .8);
+      if (n < N) {
+        o.mask = (r, c) => A.rank[r][c] < n;
+        const [r, c] = A.order[Math.min(n, N - 1)];
+        if (Math.floor(T * 6) % 2) put(x + c, y + r, '█', 1.1, true);
+      }
+      break;
+    }
+    case 'beam': {
+      let bs = 0, rev = 1;
+      if (ph === 0) { if (p < .4) { bs = p / .4; rev = 0; } else { bs = 1 - (p - .4) / .6 * .8; rev = (p - .4) / .6; } }
+      else if (ph === 2) { if (p < .6) { bs = .2 + p / .6 * .8; rev = 1 - p / .6; } else { bs = 1 - (p - .6) / .4; rev = 0; } }
+      if (bs > .02) for (let cc = 0; cc < w; cc++) for (let Y = 1; Y < GROUND; Y++) {
+        const hv = hash(x + cc, Y + Math.floor(T * 24), a.id);
+        if (hv < .22 * bs) put(x + cc, Y, hv < .08 ? '|' : hv < .15 ? ':' : '.', .3 + .8 * bs, false);
+      }
+      if (rev < 1) o.mask = r => r < rev * h;
+      break;
+    }
+    case 'fade': {
+      const pp = ph === 0 ? p : ph === 2 ? 1 - p : 1;
+      o.i = amb * Math.max(.15, pp) * (Math.random() < .08 ? .5 : 1);
+      if (pp < .7) o.skip = .7 - pp;
+      if (a.ex.idle === 'blink' && ph === 1 && (lt - a.E) % 1.3 < .13) draw = false;
+      break;
+    }
+    case 'peek': {
+      if (ph === 0) x = lerp(C + 1, a.x0, easeOut(p));
+      else if (ph === 2) x = lerp(a.x0, C + 1, easeIn(p));
+      else x = a.x0 + (Math.floor(T * 20) % 2);
+      break;
+    }
+    case 'build': {
+      if (ph === 0) {
+        const k = Math.ceil(easeOut(p) * h);
+        o.mask = r => r >= h - k;
+        for (let j = 0; j < 4; j++) put(x + Math.random() * w, y + h - k - Math.random() * 3, '*', 1.1, false);
+      } else if (ph === 2) {
+        const k = Math.floor(p * h);
+        o.mask = r => r >= k;
+        const pw = Math.round(w * (.4 + .9 * p)), px = x + Math.round((w - pw) / 2);
+        for (let c = 0; c < pw; c++) put(px + c, GROUND, c % 3 ? '~' : '-', amb * .9, true);
+        for (let j = 0; j < 3; j++) put(x + 1 + Math.random() * (w - 2), y + k + Math.random() * (h - k), '.', amb, false);
+      }
+      break;
+    }
+    case 'float': {
+      const bob = Math.round(Math.sin(T * 2.2 + a.id) * 1.2) - 4;
+      if (ph === 0) { x = lerp(from, a.x0, easeOut(p)); o.i = amb * (.15 + .7 * p); }
+      else if (ph === 2) { x = lerp(a.x0, to, easeIn(p)); y -= Math.round(p * 10); o.i = amb * .85 * (1 - p); }
+      else o.i = amb * .85;
+      y += bob; o.skip = .12; o.i *= .85 + .15 * Math.sin(T * 9);
+      break;
+    }
+  }
+
+  x = Math.round(x);
+  if (a.mode === 'burn') {
+    for (let k = 0; k < 10; k++) put(x + w * .15 + Math.random() * w * .7, y + 2 - Math.random() * 4, pick("()^'*"), 1.3, false);
+    if (moving) dust(a.dir < 0 ? x + w : x - 10, a.dir < 0 ? x + w + 10 : x, y + 3 + Math.random() * 4, 4, "*'.", 1.1);
+  }
+  if (draw) stamp(A, x, y, o);
+  if (ph === 1) front.push(() => {
+    drawBubble(a.bub, x, y, (lt - a.E) * 32, Math.max(.9, amb));
+    const lab = '[ ' + a.label + ' ]';
+    text(clamp(Math.round(x + w / 2 - lab.length / 2), 0, C - lab.length), GROUND + 2, lab, .35 + .3 * amb);
+  });
+}
+
+/* ---------- the scene ---------- */
+function scene(T) {
+  const t = ((T % DAY) + DAY) % DAY, h = t / HR, day = Math.floor(T / DAY) + 1;
+  if (day !== plannedDay) plan(day);
+  G.fill(' '); I.fill(0); shake = 0;
+
+  const alt = -Math.cos(2 * Math.PI * h / 24);
+  const light = clamp((alt + .18) / .48, 0, 1);
+  const cloud = clamp(.12 + .55 * bell(h, 12.5, 1.5) + bell(h, 15.6, 1.4) + .6 * bell(h, 23, 1.6) + .25 * bell(h, 6, .8), 0, 1);
+  const rain = clamp(1.3 * bell(h, 15.6, 1) - .15, 0, 1);
+  const storm = clamp(1.4 * bell(h, 15.7, .6) - .3, 0, 1);
+  const snow = clamp(1.3 * bell(h, 23.2, 1) - .15, 0, 1);
+  const fog = clamp(1.2 * bell(h, 6.1, .9) - .1, 0, 1);
+  const bow = clamp(1.4 * bell(h, 17.7, .55) - .2, 0, 1) * (1 - rain);
+  const wind = .3 + .5 * storm;
+  const cover = h >= 22 ? (h - 22) / 2 * .8 : h < 7.5 ? .8 : h < 10 ? .8 * (1 - (h - 7.5) / 2.5) : 0;
+  const wet = clamp(1.2 * bell(h, 16.8, 1.6) - .2, 0, 1);
+  const amb = (.5 + .5 * light) * (1 - .15 * cloud);
+
+  // lightning
+  const now = T;
+  if (storm > .05 && !reduce && now - flashAt > .9 && Math.random() < storm * .03) {
+    flashAt = now; bolt = [];
+    let bx = Math.floor(C * (.15 + Math.random() * .7));
+    for (let y = 8 + rnd(4); y < GROUND; y++) { const d = rnd(3) - 1; bolt.push([bx, y, d < 0 ? '/' : d > 0 ? '\\' : '|']); bx += d; }
+  }
+  const since = now - flashAt;
+  let flash = since >= 0 && since < .3 ? (1 - since / .3) * (since > .07 && since < .11 ? .3 : 1) : 0;
+  if (since > .35 && since < .6) shake = Math.max(shake, .5);
+
+  // dawn and dusk glow: a dither that thickens toward the horizon
+  const glow = Math.max(bell(h, 6, 1.1), bell(h, 18, 1.1)) * (1 - .6 * cloud);
+  const sf = (h - 6) / 12, sunX = lerp(-10, C - 10, clamp(sf, 0, 1)) + 9;
+  if (glow > .03) for (let y = GROUND - 24; y < GROUND; y++) {
+    const up = (GROUND - y) / 24;
+    for (let x = 0; x < C; x++) {
+      const d = glow * (1 - up) ** 1.6 * .5 * (1 + 1.4 * Math.exp(-(((x - sunX) / 34) ** 2)));
+      const hv = hash(x, y, 3);
+      if (hv < d) put(x, y, hv < d * .35 ? ':' : '.', .14 + .3 * d, false);
+    }
+  }
+
+  // stars and a meteor
+  const night = 1 - light;
+  if (night > .05) for (const s of stars) put(s.x, s.y, s.ch, night * (.3 + .3 * Math.sin(T * s.sp + s.ph) + (s.ch === '.' ? 0 : .2)), false);
+  for (const mh of [2.3, 20.6]) {
+    const mt = ((h - mh + 24) % 24) * HR;
+    if (mt < .8 && night > .5) {
+      const mx = C * .75 - mt * 90 + (mh > 12 ? -C * .3 : 0), my = 3 + mt * 14;
+      put(mx, my, '*', 1.3, false);
+      for (let k = 1; k < 9; k++) put(mx + k * 2, my - k * .3, k < 4 ? '-' : '.', 1 - k / 10, false);
+    }
+  }
+
+  // moon
+  const mf = ((h - 18.5 + 24) % 24) / 11;
+  if (mf <= 1) drawShape(MOON, Math.round(lerp(-6, C - 2, mf)), Math.round(GROUND - 5 - Math.sin(Math.PI * mf) * (GROUND - 14)), .95, null);
+
+  // sun
+  if (sf > -.06 && sf < 1.06) {
+    const sx = Math.round(lerp(-10, C - 10, sf)), sy = Math.round(GROUND - 5 - Math.sin(Math.PI * clamp(sf, 0, 1)) * (GROUND - 16));
+    const pulse = Math.floor(T * 3) % 2;
+    SUN.forEach((l, r) => {
+      const f = l.search(/\S/);
+      for (let c = f; c < l.length; c++) {
+        const core = r >= 1 && r <= 3 && c >= 5 && c <= 13;
+        const ch = l[c];
+        if (!core && ch !== ' ' && pulse && (ch === '|' || ch === '-')) continue;
+        put(sx + c, sy + r, ch, (core ? 1.35 : 1.0) * (1 - .7 * rain), core || ch !== ' ');
+      }
+    });
+  }
+
+  // rainbow
+  if (bow > .02) {
+    const cx = C * .6, cy = GROUND + 4, ry = 30, rx = ry * 2.3, chars = '=~-:.';
+    for (let y = Math.max(1, cy - ry - 1); y < GROUND; y++) for (let x = Math.floor(cx - rx - 3); x < cx + rx + 3; x++) {
+      const rho = Math.hypot((x - cx) / rx, (y - cy) / ry) * ry;
+      const band = Math.floor(ry - rho);
+      if (band >= 0 && band < 5) put(x, y, chars[band], bow * (1 - band * .13), false);
+    }
+  }
+
+  // clouds
+  for (const cl of clouds) {
+    if (cloud <= cl.th) continue;
+    const ci = clamp((cloud - cl.th) * 4, 0, 1) * (.35 + .5 * light) + .1 * flash;
+    const shape = cl.big || storm > .3 ? CLOUD_B : CLOUD_S;
+    const span = C + 70, x = ((cl.x0 + T * cl.spd * (.6 + wind)) % span) - 35;
+    drawShape(shape, Math.round(x), cl.y, ci, storm > .15 ? (c, r) => hash(c, r, cl.id) < storm * .7 ? ':' : null : null);
+  }
+
+  // hills
+  drawRidge(farRidge, .32 * (.5 + .5 * light), .03);
+  drawRidge(nearRidge, .45 * (.5 + .5 * light), .06);
+
+  // ground
+  for (let x = 0; x < C; x++) {
+    const hv = hash(x, 1, 9);
+    let ch = '",\'.`_'[Math.floor(hv * 6)], i = .5 * amb;
+    if (hash(x, 2, 9) < cover) { ch = hv < .5 ? '*' : '_'; i = .85; }
+    else if (hash(x, 3, 9) < wet * .35) { ch = '~'; i = .6 * amb; }
+    put(x, GROUND, ch, i, true);
+    for (let y = GROUND + 1; y < R - 1; y++) if (hash(x, y, 4) < .07) put(x, y, '.', .14, false);
+  }
+
+  // actors, tallest at the back
+  const front = [];
+  const on = [];
+  for (const a of actors) { const lt = ((T - a.start) % DAY + DAY) % DAY; if (lt < a.T) on.push([a, lt]); }
+  on.sort((p, q) => q[0].h - p[0].h);
+  for (const [a, lt] of on) drawActor(a, lt, T, amb, front);
+
+  // precipitation
+  if (rain > .01) {
+    const n = Math.floor(520 * rain), ch = wind > .45 ? '/' : '|';
+    for (let k = 0; k < n; k++) {
+      const yy = (hash(k, 1, 21) * GROUND + T * (26 + hash(k, 2, 21) * 14)) % GROUND;
+      put(hash(k, 3, 21) * (C + 40) - yy * wind * .9, yy, ch, .5 + .2 * hash(k, 4, 21), false);
+    }
+    for (let k = 0; k < 40 * rain; k++) put(Math.random() * C, GROUND - 1, pick("o.'"), .55, false);
+  }
+  if (snow > .01) {
+    const n = Math.floor(320 * snow);
+    for (let k = 0; k < n; k++) {
+      const yy = (hash(k, 1, 33) * GROUND + T * (3 + hash(k, 2, 33) * 5)) % GROUND;
+      put(hash(k, 3, 33) * (C + 20) + Math.sin(T * 1.3 + k) * 2.5 - yy * .2, yy, '*.+'[k % 3], .75, false);
+    }
+  }
+  if (flash > .1) for (const [bx, by, ch] of bolt) put(bx, by, ch, 1.6, true);
+
+  // fog banks, drifting in front of everything
+  if (fog > .02) for (let y = GROUND - 16; y < GROUND; y++) {
+    const low = 1 - (GROUND - y) / 18;
+    for (let x = 0; x < C; x++) {
+      const v = vnoise(x * .05 - T * .5, y * .35 + T * .08) * fog * (.35 + .6 * low);
+      if (v > .38) put(x, y, v > .55 ? '~' : v > .46 ? '-' : '.', .22 + .3 * v, true);
+    }
+  }
+
+  for (const f of front) f();
+
+  // status lines
+  const hh = Math.floor(h), mm = Math.floor((h % 1) * 60);
+  const clock = String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  const sky = storm > .3 ? 'THUNDERSTORM' : rain > .25 ? 'RAIN' : snow > .25 ? 'SNOW' : fog > .3 ? 'FOG'
+    : bow > .3 ? 'RAINBOW' : cloud > .6 ? 'OVERCAST' : cloud > .3 ? 'PARTLY CLOUDY' : 'CLEAR';
+  const part = h < 4.5 ? 'NIGHT' : h < 5.6 ? 'DAWN' : h < 6.6 ? 'SUNRISE' : h < 11.5 ? 'MORNING' : h < 13 ? 'NOON'
+    : h < 17.4 ? 'AFTERNOON' : h < 18.6 ? 'SUNSET' : h < 20 ? 'DUSK' : 'NIGHT';
+  const temp = Math.round(11 + 9 * Math.sin((h - 9) / 24 * 2 * Math.PI) - 5 * rain - 6 * snow);
+  const left = ` COWSAY/TTY0  DAY ${String(day).padStart(3, '0')}  ${clock}  ${part}  ${sky}  ${temp}C`;
+  const right = `ON STAGE ${String(on.length).padStart(2, '0')}/47 ${paused ? ' PAUSED ' : ''}`;
+  hud.top = (left + ' '.repeat(Math.max(1, C - left.length - right.length)) + right).slice(0, C);
+  const names = on.sort((p, q) => p[0].start - q[0].start).map(([a]) => a.name).join('  ');
+  hud.bottom = ('> ' + names + (Math.floor(T * 2) % 2 ? '_' : ' ')).slice(0, C);
+  return { light, flash, amb };
+}
+const hud = { top: '', bottom: '' };
+
+/* ---------- canvas ---------- */
+const tube = document.getElementById('tube');
+const cv = document.getElementById('screen'), ctx = cv.getContext('2d');
+const gv = document.getElementById('glow'), gtx = gv.getContext('2d');
+let W = 0, H = 0, cw = 0, chH = 0, ox = 0, oy = 0, fs = 12, ratio = .45, dpr = 1;
+const FONT = '"VT323","Courier New",monospace';
+const P = [64, 255, 110], HOT = [215, 255, 228];
+const styles = Array.from({ length: 21 }, (_, L) => {
+  if (L <= 10) return `rgba(${P},${L / 10})`;
+  const t = (L - 10) / 10;
+  return `rgb(${P.map((v, i) => Math.round(lerp(v, HOT[i], t)))})`;
+});
+
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.round(tube.clientWidth * dpr); H = Math.round(tube.clientHeight * dpr);
+  cv.width = W; cv.height = H;
+  gv.width = Math.round(W / 2); gv.height = Math.round(H / 2);
+  chH = H / R; cw = chH / 2.05;
+  const want = Math.floor(W / cw);
+  C = clamp(want, 110, 300);
+  if (want < 110) { cw = W / C; chH = cw * 2.05; }
+  ox = (W - C * cw) / 2; oy = (H - R * chH) / 2;
+  fs = Math.min(chH * 1.05, cw / ratio * .98);
+  G = new Array(C * R).fill(' '); I = new Float32Array(C * R);
+  plannedDay = -1;
+  ctx.fillStyle = '#010603'; ctx.fillRect(0, 0, W, H);
+}
+
+const buckets = Array.from({ length: 21 }, () => []);
+function render(st) {
+  const bgL = st.light * .9 + st.flash * 1.4;
+  const bg = [1 + 4 * bgL, 6 + 14 * bgL, 3 + 7 * bgL].map(Math.round);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = `rgba(${bg},${reduce ? 1 : .6})`;
+  ctx.fillRect(0, 0, W, H);
+  const sx = !reduce && shake ? (Math.random() - .5) * shake * cw * 1.2 : 0;
+  const sy = !reduce && shake ? (Math.random() - .5) * shake * chH * .5 : 0;
+  ctx.translate(ox + sx, oy + sy);
+  ctx.font = `${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const gain = 1 + st.flash * .5;
+  for (const b of buckets) b.length = 0;
+  for (let k = C; k < C * (R - 1); k++) {
+    if (G[k] === ' ') continue;
+    const L = Math.round(clamp(I[k] * gain, 0, 2) * 10);
+    if (L > 0) buckets[L].push(k);
+  }
+  const yAdj = chH * .04;
+  for (let L = 1; L <= 20; L++) {
+    const b = buckets[L]; if (!b.length) continue;
+    ctx.fillStyle = styles[L];
+    for (const k of b) { const x = k % C, y = (k / C) | 0; ctx.fillText(G[k], x * cw + cw / 2, y * chH + chH / 2 + yAdj); }
+  }
+  // top bar in inverse video, bottom prompt in normal video
+  ctx.fillStyle = styles[8]; ctx.fillRect(0, 0, C * cw, chH);
+  ctx.fillStyle = `rgb(${bg})`;
+  for (let x = 0; x < hud.top.length; x++) if (hud.top[x] !== ' ') ctx.fillText(hud.top[x], x * cw + cw / 2, chH / 2 + yAdj);
+  ctx.fillStyle = styles[7];
+  for (let x = 0; x < hud.bottom.length; x++) if (hud.bottom[x] !== ' ') ctx.fillText(hud.bottom[x], x * cw + cw / 2, (R - 1) * chH + chH / 2 + yAdj);
+  gtx.clearRect(0, 0, gv.width, gv.height);
+  gtx.drawImage(cv, 0, 0, gv.width, gv.height);
+}
+
+function frame(now) {
+  const dt = Math.min(.1, (now - last) / 1000); last = now;
+  if (!paused) simT += dt;
+  if (now - lastDraw >= 33) { lastDraw = now; render(scene(simT)); }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- controls ---------- */
+const hint = document.getElementById('hint');
+let hintTimer;
+function showHint() {
+  hint.classList.remove('off'); tube.classList.add('pointer');
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => { hint.classList.add('off'); tube.classList.remove('pointer'); }, 4000);
+}
+tube.addEventListener('mousemove', showHint);
+tube.addEventListener('click', () => {
+  try {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else tube.requestFullscreen?.()?.catch?.(() => {});
+  } catch (e) {}
+});
+addEventListener('keydown', e => {
+  if (e.key === ' ') { paused = !paused; e.preventDefault(); }
+  else if (e.key === 'ArrowRight') simT += HR;
+  else if (e.key === 'ArrowLeft') simT = Math.max(0, simT - HR);
+  else if (e.key === 'f' || e.key === 'F') tube.click();
+  else return;
+  showHint();
+});
+addEventListener('resize', resize);
+try { navigator.wakeLock?.request('screen').catch(() => {}); } catch (e) {}
+
+function measure() {
+  const m = document.createElement('canvas').getContext('2d');
+  m.font = `100px ${FONT}`;
+  ratio = m.measureText('M').width / 100 || .45;
+}
+const start = () => { measure(); resize(); showHint(); requestAnimationFrame(t => { last = t; frame(t); }); };
+Promise.race([document.fonts.load(`20px VT323`), new Promise(r => setTimeout(r, 1500))]).then(start, start);
+})();
+</script>
+
+</body></html>

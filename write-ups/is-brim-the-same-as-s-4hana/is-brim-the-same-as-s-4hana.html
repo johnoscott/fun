@@ -1,0 +1,294 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Is BRIM the Same as S/4HANA?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+  :root {
+    --bg:        #F5F7F9;
+    --surface:   #FFFFFF;
+    --surface-2: #EDF1F4;
+    --ink:       #141A21;
+    --muted:     #5A6673;
+    --rule:      #D9DFE6;
+    --brim:      #0E7C86;
+    --brim-tint: rgba(14, 124, 134, 0.09);
+    --brim-chip: rgba(14, 124, 134, 0.13);
+    --cross:     #A15A1E;
+    --cross-tint:rgba(161, 90, 30, 0.10);
+    --warn:      #A1341E;
+    --warn-tint: rgba(161, 52, 30, 0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #11161C;
+      --surface:   #191F26;
+      --surface-2: #212932;
+      --ink:       #E4E9EF;
+      --muted:     #94A1B0;
+      --rule:      #2A323C;
+      --brim:      #45B8C2;
+      --brim-tint: rgba(69, 184, 194, 0.13);
+      --brim-chip: rgba(69, 184, 194, 0.18);
+      --cross:     #D89154;
+      --cross-tint:rgba(216, 145, 84, 0.14);
+      --warn:      #E0836A;
+      --warn-tint: rgba(224, 131, 106, 0.14);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #11161C;
+    --surface:   #191F26;
+    --surface-2: #212932;
+    --ink:       #E4E9EF;
+    --muted:     #94A1B0;
+    --rule:      #2A323C;
+    --brim:      #45B8C2;
+    --brim-tint: rgba(69, 184, 194, 0.13);
+    --brim-chip: rgba(69, 184, 194, 0.18);
+    --cross:     #D89154;
+    --cross-tint:rgba(216, 145, 84, 0.14);
+    --warn:      #E0836A;
+    --warn-tint: rgba(224, 131, 106, 0.14);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 3.5rem 1.5rem 5rem;
+  }
+
+  .wrap { max-width: 62rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.75rem; }
+  .prose { max-width: 40rem; display: flex; flex-direction: column; gap: 1rem; }
+
+  h1, h2, h3 { font-family: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif; text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(2rem, 1.3rem + 2.6vw, 3rem); font-weight: 700; line-height: 1.08; letter-spacing: -0.02em; }
+  h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.012em; }
+  h3 { font-size: 1.0625rem; font-weight: 700; letter-spacing: -0.005em; }
+  p  { margin: 0; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .lede { font-size: 1.1875rem; color: var(--muted); max-width: 38rem; }
+
+  code, .tech {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+    font-weight: 600;
+  }
+  code { background: var(--surface-2); padding: 0.1em 0.36em; border-radius: 3px; }
+
+  section { display: flex; flex-direction: column; gap: 1.15rem; }
+
+  figure { margin: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+  .figbox {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 1.5rem 1.25rem 1.25rem;
+    overflow-x: auto;
+  }
+  .figbox svg { display: block; width: 100%; min-width: 660px; max-width: 100%; height: auto; }
+  figcaption { color: var(--muted); font-size: 0.9375rem; max-width: 44rem; }
+
+  /* SVG theming — every colour comes from the token set. */
+  .d-brim-fill   { fill: var(--brim-tint); }
+  .d-brim-stroke { stroke: var(--brim); }
+  .d-cross-stroke{ stroke: var(--cross); }
+  .d-surface     { fill: var(--surface); }
+  .d-ink         { fill: var(--ink); }
+  .d-muted       { fill: var(--muted); }
+  .d-brim-text   { fill: var(--brim); }
+  .d-cross-text  { fill: var(--cross); }
+  .d-rule        { stroke: var(--rule); }
+  .d-ink-stroke  { stroke: var(--ink); }
+  .d-label       { font-family: "Source Sans 3", sans-serif; font-size: 13px; font-weight: 600; }
+  .d-sub         { font-family: "Source Sans 3", sans-serif; font-size: 11.5px; }
+  .d-zone        { font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; }
+  .d-title       { font-family: "Bricolage Grotesque", sans-serif; font-size: 14px; font-weight: 700; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+  th, td { text-align: left; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  thead th {
+    font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+    background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+
+  .pill {
+    display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px;
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.01em;
+  }
+  .pill-brim  { background: var(--brim-chip);  color: var(--brim); }
+  .pill-cross { background: var(--cross-tint); color: var(--cross); }
+
+  .callout {
+    background: var(--warn-tint);
+    border-left: 3px solid var(--warn);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.15rem;
+    display: flex; flex-direction: column; gap: 0.6rem;
+    max-width: 44rem;
+  }
+  .callout h3 { color: var(--warn); }
+
+  ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  li::marker { color: var(--muted); }
+
+  hr { border: none; border-top: 1px solid var(--rule); margin: 0; }
+</style>
+
+<div class="wrap">
+
+  <header class="prose">
+    <p class="eyebrow">006 ER/Studio L2P · SAP BRIM platform model</p>
+    <h1>Is BRIM the same as S/4HANA?</h1>
+    <p class="lede">No — and they aren't nested either. One names a solution, the other names a system, and the modelled tables sit in the overlap.</p>
+  </header>
+
+  <section>
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 900 400" role="img"
+             aria-label="Two overlapping regions. SAP BRIM, a solution portfolio, spans Convergent Charging and Convergent Mediation which run outside S/4HANA, plus FI-CA, Convergent Invoicing and Subscription Order Management which run inside it. S/4HANA also contains SAP Business Partner and Business Address Services, which are not part of BRIM. Nine of the twelve modelled tables sit in the overlap; three sit in the S/4HANA-only region.">
+
+          <!-- region labels -->
+          <text x="34" y="34" class="d-title d-brim-text">SAP BRIM</text>
+          <text x="34" y="52" class="d-sub d-muted">solution portfolio — a bundle of components</text>
+          <text x="866" y="34" class="d-title d-ink" text-anchor="end">S/4HANA</text>
+          <text x="866" y="52" class="d-sub d-muted" text-anchor="end">the system the tables physically live in</text>
+
+          <!-- BRIM region -->
+          <rect x="30" y="78" width="610" height="292" rx="14"
+                class="d-brim-fill d-brim-stroke" stroke-width="1.5"/>
+          <!-- S/4HANA region -->
+          <rect x="290" y="78" width="580" height="292" rx="14"
+                fill="none" class="d-ink-stroke" stroke-width="1.5" stroke-dasharray="6 4"/>
+
+          <!-- zone captions -->
+          <text x="160" y="104" class="d-zone d-muted" text-anchor="middle">BRIM ONLY</text>
+          <text x="465" y="104" class="d-zone d-brim-text" text-anchor="middle">BOTH</text>
+          <text x="755" y="104" class="d-zone d-cross-text" text-anchor="middle">S/4HANA ONLY</text>
+
+          <!-- BRIM-only components -->
+          <rect x="50" y="122" width="220" height="56" rx="7" class="d-surface d-brim-stroke" stroke-width="1.25"/>
+          <text x="64" y="145" class="d-label d-ink">Convergent Charging</text>
+          <text x="64" y="164" class="d-sub d-muted">separate system · not modelled</text>
+
+          <rect x="50" y="192" width="220" height="56" rx="7" class="d-surface d-brim-stroke" stroke-width="1.25"/>
+          <text x="64" y="215" class="d-label d-ink">Convergent Mediation</text>
+          <text x="64" y="234" class="d-sub d-muted">partner product · not modelled</text>
+
+          <!-- overlap components -->
+          <rect x="310" y="122" width="310" height="56" rx="7" class="d-surface d-brim-stroke" stroke-width="1.25"/>
+          <text x="326" y="145" class="d-label d-ink">FI-CA</text>
+          <text x="326" y="164" class="d-sub d-muted">Contract Accounts Receivable &amp; Payable</text>
+          <text x="604" y="152" class="d-label d-brim-text" text-anchor="end">6 tables</text>
+
+          <rect x="310" y="192" width="310" height="56" rx="7" class="d-surface d-brim-stroke" stroke-width="1.25"/>
+          <text x="326" y="215" class="d-label d-ink">Convergent Invoicing</text>
+          <text x="326" y="234" class="d-sub d-muted">invoicing documents, billable items</text>
+          <text x="604" y="222" class="d-label d-brim-text" text-anchor="end">3 tables</text>
+
+          <rect x="310" y="262" width="310" height="56" rx="7" class="d-surface d-brim-stroke" stroke-width="1.25"/>
+          <text x="326" y="285" class="d-label d-ink">Subscription Order Management</text>
+          <text x="326" y="304" class="d-sub d-muted">not in scope for this model</text>
+          <text x="604" y="292" class="d-label d-muted" text-anchor="end">none</text>
+
+          <!-- S/4HANA-only components -->
+          <rect x="660" y="122" width="190" height="56" rx="7" class="d-surface d-cross-stroke" stroke-width="1.25"/>
+          <text x="674" y="145" class="d-label d-ink">Business Partner</text>
+          <text x="674" y="164" class="d-sub d-muted">master data</text>
+          <text x="836" y="152" class="d-label d-cross-text" text-anchor="end">2</text>
+
+          <rect x="660" y="192" width="190" height="56" rx="7" class="d-surface d-cross-stroke" stroke-width="1.25"/>
+          <text x="674" y="215" class="d-label d-ink">Address Services</text>
+          <text x="674" y="234" class="d-sub d-muted">master data</text>
+          <text x="836" y="222" class="d-label d-cross-text" text-anchor="end">1</text>
+
+          <text x="755" y="290" class="d-sub d-cross-text" text-anchor="middle">cross-application —</text>
+          <text x="755" y="306" class="d-sub d-cross-text" text-anchor="middle">every SAP solution uses these</text>
+
+          <!-- footer note -->
+          <text x="34" y="392" class="d-sub d-muted">Teal outline = a BRIM component.  Dashed boundary = the S/4HANA system.  Copper = in S/4HANA but outside BRIM.</text>
+        </svg>
+      </div>
+      <figcaption>BRIM and S/4HANA are overlapping regions, not one inside the other. Two BRIM components run outside S/4HANA entirely; two S/4HANA areas this model touches are not BRIM at all.</figcaption>
+    </figure>
+  </section>
+
+  <section class="prose">
+    <h2>The three labels</h2>
+    <p>Each modelled table carries three different kinds of name, and they answer three different questions.</p>
+    <ul>
+      <li><strong>Solution</strong> — which BRIM component owns it. <em>Answers: what business capability is this?</em></li>
+      <li><strong>System</strong> — S/4HANA, for all twelve. <em>Answers: where does the data physically live?</em></li>
+      <li><strong>Business entity label</strong> — the human name in the mapping sheet, paired with the technical SAP table name. <em>Answers: what does a reader call this?</em></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Technical</th>
+            <th>Business entity label</th>
+            <th>Solution component</th>
+            <th>System</th>
+            <th class="num">Cols</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="tech">DFKKOP</td><td>FICA Business Partner Item</td><td><span class="pill pill-brim">FI-CA</span></td><td>S/4HANA</td><td class="num">20</td></tr>
+          <tr><td class="tech">DFKKZP</td><td>FICA Payment Lot Item</td><td><span class="pill pill-brim">FI-CA</span></td><td>S/4HANA</td><td class="num">20</td></tr>
+          <tr><td class="tech">DFKKKO</td><td>FICA Document Header</td><td><span class="pill pill-brim">FI-CA</span></td><td>S/4HANA</td><td class="num">10</td></tr>
+          <tr><td class="tech">DFKKOPKC</td><td>FICA Card Payment</td><td><span class="pill pill-brim">FI-CA</span></td><td>S/4HANA</td><td class="num">10</td></tr>
+          <tr><td class="tech">DFKKRAPT</td><td>FICA Clearing Reversal History</td><td><span class="pill pill-brim">FI-CA</span></td><td>S/4HANA</td><td class="num">8</td></tr>
+          <tr><td class="tech">DFKKOPK</td><td>FICA General Ledger Item</td><td><span class="pill pill-brim">FI-CA</span></td><td>S/4HANA</td><td class="num">4</td></tr>
+          <tr><td class="tech">1FE_0ZAP14IT00</td><td>Billable Item</td><td><span class="pill pill-brim">Convergent Invoicing</span></td><td>S/4HANA</td><td class="num">28</td></tr>
+          <tr><td class="tech">DFKKINVDOC_I</td><td>Invoice Item</td><td><span class="pill pill-brim">Convergent Invoicing</span></td><td>S/4HANA</td><td class="num">10</td></tr>
+          <tr><td class="tech">DFKKINVDOC_H</td><td>Invoice Header</td><td><span class="pill pill-brim">Convergent Invoicing</span></td><td>S/4HANA</td><td class="num">6</td></tr>
+          <tr><td class="tech">ADRC</td><td>Address</td><td><span class="pill pill-cross">Address Services</span></td><td>S/4HANA</td><td class="num">7</td></tr>
+          <tr><td class="tech">BUT000</td><td>Business Partner</td><td><span class="pill pill-cross">Business Partner</span></td><td>S/4HANA</td><td class="num">4</td></tr>
+          <tr><td class="tech">BUT021_FS</td><td>Business Partner Address</td><td><span class="pill pill-cross">Business Partner</span></td><td>S/4HANA</td><td class="num">4</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="prose">
+    <h2>How we know it's S/4HANA, not older ECC</h2>
+    <p>Two things in the model itself settle it, rather than an assumption:</p>
+    <ul>
+      <li>The custom fields follow the <code>ZZ1_&lt;name&gt;_&lt;context&gt;</code> pattern — that is S/4HANA key-user extensibility specifically, from the Custom Fields &amp; Logic app.</li>
+      <li><code>DFKKOP</code> declares <code>cds_view_name: I_CADOCUMENTBPITEMLOGICAL</code>, an S/4HANA CDS interface view.</li>
+    </ul>
+  </section>
+
+  <section class="prose">
+    <div class="callout">
+      <h3>What this exposes in the model</h3>
+      <p>The <code>datastore</code> field disagrees with itself: ten entities say <code>SAP_HANA</code>, but <code>1FE_0ZAP14IT00</code> and <code>DFKKINVDOC_H</code> say <code>SAP_BRIM</code>. Those aren't two spellings of one thing — one is a database, the other a solution portfolio — and the split follows no pattern. It came in from the upstream <code>00T</code> YAML.</p>
+      <p><code>schema</code> has a similar split, but that one is <em>informative</em>: <code>SAP_BP</code> for the three master-data tables, <code>SAP_BRIM</code> for the other nine — which matches the diagram exactly.</p>
+      <p>There's also a question for the SAP team: <code>ADRC</code>, <code>BUT000</code> and <code>BUT021_FS</code> currently carry the <code>SAP - BRIM</code> platform tag in column C of the export, and by the diagram above they shouldn't.</p>
+    </div>
+  </section>
+
+</div>
+
+</body></html>

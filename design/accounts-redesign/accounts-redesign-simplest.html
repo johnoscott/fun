@@ -1,0 +1,295 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accounts Redesign — Simplest</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --bg: #f6f6f4; --surface: #ffffff; --surface-2: #efefec; --surface-3: #e6e5e1;
+  --ink: #1b1b19; --ink-2: #5c5b56; --line: #e2e1dc; --line-strong: #c9c7c0; --control: #8f8d86;
+  --accent: #2453c9; --accent-hover: #1d46b0; --on-accent: #ffffff; --accent-tint: #e9eefa;
+  --ok: #1d7a37; --ok-tint: #e8f2eb; --warn: #8a5a00; --warn-tint: #f3eee6; --bad: #c1272d; --bad-tint: #f9e9ea;
+  --off: #6b6a64; --off-tint: #f0f0f0;
+  --scrim: rgb(20 20 18 / 0.32); --shadow: 0 1px 2px rgb(20 20 18 / 0.14); --shadow-3: 0 18px 48px rgb(20 20 18 / 0.2);
+  --r-sm: 5px; --r-md: 7px; --r-lg: 10px; --r-xl: 14px; --r-pill: 999px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131312; --surface: #1b1b1a; --surface-2: #242422; --surface-3: #2d2d2a;
+    --ink: #ecebe7; --ink-2: #a6a49c; --line: #2d2d2a; --line-strong: #3d3c39; --control: #76746d;
+    --accent: #86a1ff; --accent-hover: #a3b8ff; --on-accent: #0d1330; --accent-tint: #2c303f;
+    --ok: #4fc770; --ok-tint: #233728; --warn: #e6b54a; --warn-tint: #3b3422; --bad: #ff7b72; --bad-tint: #3f2a28;
+    --off: #9a9890; --off-tint: #2f2f2d; --scrim: rgb(0 0 0 / 0.6); --shadow: 0 1px 2px rgb(0 0 0 / 0.55); --shadow-3: 0 18px 48px rgb(0 0 0 / 0.55);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131312; --surface: #1b1b1a; --surface-2: #242422; --surface-3: #2d2d2a;
+  --ink: #ecebe7; --ink-2: #a6a49c; --line: #2d2d2a; --line-strong: #3d3c39; --control: #76746d;
+  --accent: #86a1ff; --accent-hover: #a3b8ff; --on-accent: #0d1330; --accent-tint: #2c303f;
+  --ok: #4fc770; --ok-tint: #233728; --warn: #e6b54a; --warn-tint: #3b3422; --bad: #ff7b72; --bad-tint: #3f2a28;
+  --off: #9a9890; --off-tint: #2f2f2d; --scrim: rgb(0 0 0 / 0.6); --shadow: 0 1px 2px rgb(0 0 0 / 0.55); --shadow-3: 0 18px 48px rgb(0 0 0 / 0.55);
+}
+:root[data-theme="light"] { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 15px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
+code { font-family: var(--mono); font-size: 13px; }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+.mk-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.mk-bar b { color: var(--ink); }
+.seg-ctl { display: inline-flex; gap: 2px; padding: 2px; background: var(--surface-2); border-radius: var(--r-md); flex-wrap: wrap; }
+.seg-ctl button { border: 0; background: transparent; color: var(--ink-2); font: 500 13px/1 var(--font); padding: 7px 10px; border-radius: var(--r-sm); cursor: pointer; }
+.seg-ctl button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow), 0 0 0 1px var(--line-strong); }
+
+.page { max-width: 720px; margin: 0 auto; padding: 22px 16px 60px; }
+.head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+.sub { color: var(--ink-2); margin: 0 0 18px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 14px; font: 500 15px/1 var(--font); color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-md); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--accent); }
+.btn.danger { color: var(--bad); }
+.btn.block { width: 100%; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.alert { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 4px 10px; padding: 12px 14px; border-radius: var(--r-lg); background: var(--bad-tint);
+  border: 1px solid color-mix(in srgb, var(--bad) 30%, var(--surface)); margin: 0 0 16px; }
+.alert .icon { color: var(--bad); margin-top: 2px; }
+.alert p { margin: 0; }
+.alert .acts { grid-column: 2; display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+.group { margin: 0 0 18px; }
+.group h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0 4px 6px; display: flex; gap: 6px; align-items: baseline; }
+.group h2 .for { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: none; color: inherit;
+  font: inherit; text-align: left; cursor: pointer; min-height: 56px; }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--surface-2); }
+.row .main { flex: 1; min-width: 0; }
+.row .name { font-weight: 600; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.row .where { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .chev { color: var(--ink-2); }
+.badge { font: 600 11px/1 var(--font); padding: 4px 7px; border-radius: var(--r-pill); background: var(--accent-tint); color: var(--accent); }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px 0 8px; border-radius: var(--r-pill); font: 600 13px/1 var(--font); white-space: nowrap; flex: none; }
+.pill .icon { width: 13px; height: 13px; stroke-width: 2.4; }
+.st-ok { color: var(--ok); background: var(--ok-tint); }
+.st-fail { color: var(--bad); background: var(--bad-tint); }
+.st-off { color: var(--ink-2); background: var(--off-tint); }
+.add-row { display: flex; gap: 8px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); color: var(--accent); font-weight: 500; width: 100%;
+  background: none; border-left: 0; border-right: 0; border-bottom: 0; font: inherit; cursor: pointer; text-align: left; }
+.add-row:hover { background: var(--surface-2); }
+.more { color: var(--ink-2); font-size: 14px; margin: 6px 4px 0; }
+.more button { border: 0; background: none; color: var(--accent); font: inherit; padding: 4px 2px; cursor: pointer; }
+.foot { color: var(--ink-2); font-size: 13px; margin-top: 22px; }
+
+.empty { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px 20px; text-align: center; }
+.empty .big { width: 32px; height: 32px; color: var(--ink-2); }
+.empty h2 { margin: 8px 0 4px; font-size: 18px; }
+.empty p { color: var(--ink-2); margin: 0 0 16px; }
+
+/* Sheet: a bottom sheet on a phone, a centred dialog on a wide screen. */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.scrim[hidden] { display: none; }
+.sheet { background: var(--surface); width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; border-radius: var(--r-xl) var(--r-xl) 0 0; box-shadow: var(--shadow-3);
+  padding: 8px 18px 22px; }
+@media (min-width: 640px) { .scrim { align-items: center; padding: 16px; } .sheet { border-radius: var(--r-xl); } }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 2px auto 10px; }
+.sheet-h { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sheet-h h2 { margin: 0; font-size: 18px; flex: 1; }
+.x { border: 0; background: var(--surface-2); color: var(--ink-2); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 10px 0 16px; font-size: 14px; }
+.facts dt { color: var(--ink-2); } .facts dd { margin: 0; overflow-wrap: anywhere; }
+.acts-col { display: grid; gap: 8px; }
+.field { display: grid; gap: 6px; margin: 0 0 14px; }
+.field > span { font-weight: 500; }
+.field small { color: var(--ink-2); font-size: 13px; }
+input[type=text], input[type=password] { font: 16px var(--font); color: var(--ink); background: var(--surface); border: 1px solid var(--control); border-radius: var(--r-sm); min-height: 40px; padding: 0 10px; width: 100%; }
+input[type=password] { font-family: var(--mono); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: var(--r-pill); padding: 8px 12px; font: 500 14px/1 var(--font); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.check-line { display: flex; gap: 10px; align-items: center; margin: 0 0 16px; }
+.check-line input { width: 18px; height: 18px; accent-color: var(--accent); }
+.result { display: flex; gap: 10px; align-items: flex-start; padding: 14px; border-radius: var(--r-md); background: var(--surface-2); margin: 4px 0 16px; }
+.result p { margin: 2px 0 0; color: var(--ink-2); }
+.cmd { margin: 6px 0 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); font: 13px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+details.other { margin: 0 0 16px; }
+details.other summary { color: var(--accent); cursor: pointer; padding: 6px 0; }
+
+.notes { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 14px; }
+.notes h2 { font-size: 15px; color: var(--ink); margin: 0 0 8px; }
+.notes li { margin: 0 0 6px; }
+.notes b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/></symbol>
+<symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol>
+<symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="12" r="10"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+</svg>
+
+<div class="mk-bar" role="toolbar" aria-label="Mockup controls">
+  <b>Simplest</b>
+  <span class="seg-ctl" id="mk-state"></span>
+  <span class="seg-ctl" id="mk-theme"></span>
+</div>
+<main class="page" id="page"></main>
+<div class="scrim" id="scrim" hidden></div>
+
+<script>
+'use strict';
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (k === 'class') e.className = v; else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return e;
+}
+function icon(n) { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'icon'); s.setAttribute('aria-hidden', 'true');
+  const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#i-' + n); s.append(u); return s; }
+function seg(el, items, cur, on) { el.replaceChildren(...items.map(([v, l]) => h('button', { type: 'button', 'aria-pressed': String(v === cur), onclick: () => on(v) }, l))); }
+
+// Sample data only. One provider = one line; the line shows the key in use. Extra keys live in its sheet.
+const PROVIDERS = [
+  { id: 'anthropic', title: 'Anthropic', tools: 'Claude Code and 6 more' },
+  { id: 'openai', title: 'OpenAI', tools: 'Codex and 11 more' },
+  { id: 'xai', title: 'xAI', tools: 'Grok Build and 34 more' },
+  { id: 'google', title: 'Google AI', tools: 'Gemini CLI and 12 more' },
+  { id: 'openrouter', title: 'OpenRouter', tools: 'many models, one key' },
+  { id: 'vercel-ai-gateway', title: 'Vercel AI Gateway', tools: 'many models, one key' },
+];
+const P = Object.fromEntries(PROVIDERS.map((p) => [p.id, p]));
+// Each provider: the keys it has (label = where it lives), and which one is in use.
+const STATES = {
+  failing: {
+    anthropic: { use: 0, keys: [{ label: 'Your Mac’s Claude login', ok: true }] },
+    google: { use: 0, keys: [{ label: 'Pasted key, added 3 Oct', ok: false }, { label: 'Pasted key, added 14 Oct', ok: true }] },
+    openrouter: { use: 0, keys: [{ label: 'Pasted key', ok: true }] },
+  },
+  many: {
+    anthropic: { use: 0, keys: [{ label: 'Your Mac’s Claude login', ok: true }, { label: 'Pasted API key', ok: true }] },
+    openai: { use: 0, keys: [{ label: 'Pasted key', ok: true }] },
+    xai: { use: 0, keys: [{ label: 'Pasted key', ok: true }, { label: 'From 1Password', ok: true }] },
+    google: { use: 0, keys: [{ label: 'Pasted key', ok: true }] },
+    openrouter: { use: 0, keys: [{ label: 'Pasted key', ok: true }] },
+  },
+  empty: {},
+};
+const ui = { state: 'failing' };
+const st = () => STATES[ui.state];
+
+function statusPill(ok) { return h('span', { class: 'pill ' + (ok ? 'st-ok' : 'st-fail') }, icon(ok ? 'check' : 'x-circle'), ok ? 'Works' : 'Not working'); }
+
+function render() {
+  const page = document.getElementById('page');
+  const have = PROVIDERS.filter((p) => st()[p.id]);
+  page.replaceChildren(h('h1', null, 'Keys'), h('p', { class: 'sub' }, 'What your tools use to reach their AI. Kept on this Mac; sandboxes never see them.'));
+  if (have.length) {
+    page.append(h('div', { class: 'list' }, have.map((p) => {
+      const e = st()[p.id];
+      const k = e.keys[e.use];
+      return h('button', { class: 'row', type: 'button', onclick: () => providerSheet(p) },
+        h('div', { class: 'main' }, h('div', { class: 'name' }, p.title),
+          h('div', { class: 'where' }, k.ok ? k.label + (e.keys.length > 1 ? ' · ' + e.keys.length + ' keys' : '') : 'Key refused — tap to fix')),
+        statusPill(k.ok), icon('chev'));
+    })));
+  } else {
+    page.append(h('div', { class: 'empty' }, h('h2', null, 'No keys yet'), h('p', null, 'Add one for the AI you use. Using Claude Code on this Mac? Its login appears here by itself.')));
+  }
+  page.append(h('div', { style: 'margin-top:16px' }, h('button', { class: 'btn primary block', type: 'button', onclick: () => addSheet(null) }, icon('plus'), 'Add a key')),
+    h('section', { class: 'notes' }, h('h2', null, 'What is simpler than the other two'),
+      h('ul', null,
+        h('li', null, h('b', null, 'One line per provider, not per key. '), 'It shows the key in use and whether it works. Key names, defaults and fingerprints are gone from the page.'),
+        h('li', null, h('b', null, 'A broken key is just a red line. '), 'Tap it: replace the key, or switch to another one that works.'),
+        h('li', null, h('b', null, 'Adding is two taps and a paste. '), 'Pick the provider, paste, done. Everything else (1Password, AWS, custom keys) is Terminal: doz account add.'),
+        h('li', null, h('b', null, 'Left out: '), 'By sandbox, per-sandbox key choice, keep-alive, the details. They stay in the CLI and on each sandbox’s Keys tab.'))));
+}
+
+function openSheet(title, ...body) {
+  const scrim = document.getElementById('scrim');
+  scrim.hidden = false;
+  scrim.onclick = (e) => { if (e.target === scrim) closeSheet(); };
+  scrim.replaceChildren(h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+    h('div', { class: 'grab' }), h('div', { class: 'sheet-h' }, h('h2', null, title), h('button', { class: 'x', type: 'button', 'aria-label': 'Close', onclick: closeSheet }, icon('x'))), ...body));
+}
+function closeSheet() { const s = document.getElementById('scrim'); s.hidden = true; s.replaceChildren(); }
+
+function providerSheet(p) {
+  const e = st()[p.id];
+  const body = [h('p', { class: 'sub', style: 'margin:0 0 12px' }, 'For ' + p.tools + '.')];
+  if (e.keys.length > 1) {
+    body.push(h('div', { class: 'list', role: 'radiogroup', 'aria-label': 'Key in use' }, e.keys.map((k, i) => h('label', { class: 'row' },
+      h('input', { type: 'radio', name: 'use', checked: i === e.use, style: 'width:18px;height:18px;accent-color:var(--accent)', onchange: () => { e.use = i; render(); providerSheet(p); } }),
+      h('div', { class: 'main' }, h('div', { class: 'name' }, k.label), h('div', { class: 'where' }, i === e.use ? 'In use' : 'Not in use')), statusPill(k.ok)))));
+  } else {
+    const k = e.keys[0];
+    body.push(h('div', { class: 'list' }, h('div', { class: 'row', style: 'cursor:default' }, h('div', { class: 'main' }, h('div', { class: 'name' }, k.label)), statusPill(k.ok))));
+  }
+  const k = e.keys[e.use];
+  if (!k.ok) body.push(h('p', { class: 'more' }, p.title + ' refused this key: it is wrong, revoked or out of credit.'));
+  body.push(h('div', { class: 'acts-col', style: 'margin-top:14px' },
+    h('button', { class: 'btn ' + (k.ok ? '' : 'primary ') + 'block', type: 'button', onclick: () => addSheet(p.id) }, k.ok ? 'Add another key' : 'Replace this key'),
+    k.label.startsWith('Your Mac') ? null : h('button', { class: 'btn danger block', type: 'button' }, 'Remove this key')));
+  openSheet(p.title, ...body);
+}
+
+function addSheet(pid) {
+  const f = { provider: pid, done: false };
+  const draw = () => {
+    const p = f.provider ? P[f.provider] : null;
+    if (!p) {
+      openSheet('Add a key', h('p', { class: 'sub', style: 'margin:0 0 12px' }, 'Which AI is it for?'),
+        h('div', { class: 'list' }, PROVIDERS.map((pp) => h('button', { class: 'row', type: 'button', onclick: () => { f.provider = pp.id; draw(); } },
+          h('div', { class: 'main' }, h('div', { class: 'name' }, pp.title), h('div', { class: 'where' }, pp.tools)), icon('chev')))));
+      return;
+    }
+    if (f.done) {
+      openSheet(p.title, h('div', { class: 'result' }, statusPill(true), h('div', null, h('b', null, 'Added.'), h('p', null, 'Your ' + p.title + ' tools use it from now on.'))),
+        h('button', { class: 'btn primary block', type: 'button', onclick: closeSheet }, 'Done'));
+      return;
+    }
+    openSheet('Add a ' + p.title + ' key',
+      h('label', { class: 'field' }, h('span', null, 'Paste the key'), h('input', { type: 'password', autocomplete: 'off', placeholder: 'Paste it here' }),
+        h('small', null, 'Checked with ' + p.title + ' and kept in your Mac’s keychain. Never shown again.')),
+      h('button', { class: 'btn primary block', type: 'button', onclick: () => { f.done = true; draw(); } }, 'Add'),
+      pid ? null : h('button', { class: 'btn quiet block', type: 'button', onclick: () => { f.provider = null; draw(); } }, 'Back'));
+  };
+  draw();
+}
+
+function controls() {
+  const s = document.getElementById('mk-state');
+  const paint = () => seg(s, [['failing', 'A failing key'], ['many', 'Many'], ['empty', 'Empty']], ui.state, (v) => { ui.state = v; paint(); render(); });
+  paint();
+  const t = document.getElementById('mk-theme');
+  let theme = 'auto';
+  const paintT = () => seg(t, [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], theme, (v) => {
+    theme = v; if (v === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', v); paintT(); });
+  paintT();
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+}
+controls(); render();
+</script>
+</body>
+</html>
+
+</body></html>

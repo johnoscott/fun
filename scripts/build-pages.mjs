@@ -4,7 +4,17 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, '_site');
 const ignored = new Set(['.git', '.DS_Store', '.idea', 'node_modules', 'ai', '__pycache__']);
+const categories = { 'html-screensaver': 'Screensavers', design: 'Design', 'write-ups': 'Write-ups', experiments: 'Experiments' };
 const descriptions = {
+ 'khamsin-attract-mode': 'A 198X desert-assault arcade cabinet left running in attract mode, with its own day, weather and high scores.',
+ 'phosphor-pasture': 'A green-phosphor countryside that passes the hours on an old monitor.',
+ 'one-minute-of-light': 'A real-time film in chapters: GPU particles, raymarched matter and fluid flow, scored live by a WebAudio synth.',
+ 'fuji-screensaver': 'Twenty-four hours of weather and light over Mt. Fuji. Made with Grok.',
+ 'lemonade-stand-screensaver': 'A sunny sixty-second loop at a neighbourhood lemonade stand. Made with Grok.',
+ 'accounts-redesign': 'Three takes on an accounts and API keys screen, from the full design to the simplest one that works.',
+ 'chat-surface-streamline': 'How an overnight autonomous loop rebuilt a chat surface one measured rung at a time.',
+ 'claude-model-sheet': 'The Claude lineup on one page: model IDs, context, prices and request parameters that changed.',
+ 'is-brim-the-same-as-s-4hana': 'SAP BRIM and S/4HANA are neither the same nor nested. A diagram of where the tables sit.',
  'paper-savanna-pov': 'Fly low over the folded-paper savanna in first person, through a day of sun, moon and storms in sixty seconds.',
  'paper-savanna-rainbow': 'A folded-paper savanna day: dawn mist, a monsoon storm, a rainbow, and moonrise in sixty looping seconds.',
  'paper-savanna': 'An origami flyover of the African savanna. Sun, moon and weather over a day in sixty seconds.',
@@ -24,7 +34,7 @@ const descriptions = {
  'swiss-station-clock': 'A beautifully precise moment of stillness.',
  'vector-combat-screensaver': 'Neon vectors and an old-school arcade atmosphere.'
 };
-const names = { aquarium: 'Aquarium', cmatrix: 'cmatrix', 'paper-savanna': 'Paper Savanna', 'paper-savanna-rainbow': 'Paper Savanna Rainbow', 'paper-savanna-pov': 'Paper Savanna POV', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
+const names = { 'chat-surface-streamline': 'Chat Surface Streamline', 'one-minute-of-light': 'One Minute of Light', 'accounts-redesign': 'Accounts Redesign', 'fuji-screensaver': 'Mt. Fuji 24 Hours', 'lemonade-stand-screensaver': 'Lemonade Stand', aquarium: 'Aquarium', cmatrix: 'cmatrix', 'paper-savanna': 'Paper Savanna', 'paper-savanna-rainbow': 'Paper Savanna Rainbow', 'paper-savanna-pov': 'Paper Savanna POV', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
 const titleCase = s => s.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 async function walk(dir) {
  let files = [];
@@ -39,7 +49,7 @@ async function walk(dir) {
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 const groups = [];
-for (const category of ['html-screensaver', 'experiments']) {
+for (const category of Object.keys(categories)) {
  const dir = join(root, category);
  await cp(dir, join(out, category), { recursive: true, filter: async path => {
   const parts = relative(dir, path).split('/');
@@ -63,25 +73,32 @@ for (const category of ['html-screensaver', 'experiments']) {
    try { await access(resolve(dirname(file), decodeURIComponent(url.split(/[?#]/)[0]))); }
    catch { playable = false; }
   }
-  const version = path.match(/-v(\d+)\.html$/)?.[1];
-  const item = { path, title, label: version ? `v${version}` : path.split('/').at(-1).replace(/\.html$/, '').replace(/-/g, ' '), playable };
-  if (!map.has(slug)) map.set(slug, { slug, category: category === 'html-screensaver' ? 'Screensavers' : 'Experiments', name: names[slug] || titleCase(slug), description: descriptions[slug] || 'A small experiment from the workshop.', files: [] });
+  const base = path.split('/').at(-1).replace(/\.html$/, '');
+  const [, version, suffix] = base.match(/-v(\d+)(?:-(.+))?$/) || [];
+  // Label an edition by what its filename adds to the project slug: "v2 · titles and credits", "simpler", "zoom track".
+  const extra = base.startsWith(slug) ? base.slice(slug.length).replace(/^-/, '') : base;
+  const label = version ? `v${version}${suffix ? ' · ' + suffix.replace(/-/g, ' ') : ''}` : extra.replace(/-/g, ' ') || 'original';
+  const item = { path, title, label, version: version ? Number(version) : null, playable };
+  if (!map.has(slug)) map.set(slug, { slug, category: categories[category], name: names[slug] || titleCase(slug), description: descriptions[slug] || 'A small experiment from the workshop.', files: [] });
   map.get(slug).files.push(item);
  }
  for (const group of map.values()) {
-  group.files.sort((a,b) => b.path.localeCompare(a.path, undefined, {numeric:true}));
+  // Newest numbered version first, then named editions in their original order.
+  group.files.sort((a,b) => (b.version ?? -1) - (a.version ?? -1) || (a.version === null && b.label === 'original') - (b.version === null && a.label === 'original') || a.path.localeCompare(b.path, undefined, {numeric:true}));
   group.primary = group.files.find(f => f.playable) || group.files[0];
   if (category === 'experiments') group.name = group.primary.title === 'frontend' ? titleCase(group.slug) : group.primary.title;
+  else if (!names[group.slug] && group.files.length === 1 && category !== 'html-screensaver') group.name = group.primary.title;
   groups.push(group);
  }
 }
-groups.sort((a,b) => (a.slug === 'aquarium' ? -1 : b.slug === 'aquarium' ? 1 : (a.category === b.category ? 0 : a.category === 'Screensavers' ? -1 : 1) || a.name.localeCompare(b.name)));
+const order = Object.values(categories);
+groups.sort((a,b) => (a.slug === 'aquarium' ? -1 : b.slug === 'aquarium' ? 1 : order.indexOf(a.category) - order.indexOf(b.category) || a.name.localeCompare(b.name)));
 const template = await readFile(join(root, 'site/index.html'), 'utf8');
 const json = JSON.stringify(groups).replace(/</g, '\\u003c');
-await writeFile(join(out, 'index.html'), template.replace('/* ARTEFACT_DATA */[]', json).replaceAll('__FEATURED_ARTEFACT__', groups.find(g => g.slug === 'aquarium').primary.path.split('/').map(encodeURIComponent).join('/')));
+await writeFile(join(out, 'index.html'), template.replace('/* ARTEFACT_DATA */[]', json).replace('/* CATEGORY_DATA */[]', JSON.stringify(order)).replaceAll('__FEATURED_ARTEFACT__', groups.find(g => g.slug === 'aquarium').primary.path.split('/').map(encodeURIComponent).join('/')));
 await writeFile(join(out, '.nojekyll'), '');
 await writeFile(join(out, 'catalogue.json'), JSON.stringify(groups, null, 2));
 // Verify every generated launch/download target exists in the published tree.
 for (const group of groups) for (const file of group.files) await access(join(out, file.path));
-if (!groups.length || !template.includes('/* ARTEFACT_DATA */[]')) throw new Error('Gallery generation failed');
+if (!groups.length || !template.includes('/* ARTEFACT_DATA */[]') || !template.includes('/* CATEGORY_DATA */[]')) throw new Error('Gallery generation failed');
 console.log(`Built ${groups.length} projects, ${groups.reduce((n,g)=>n+g.files.length,0)} HTML artefacts → _site`);

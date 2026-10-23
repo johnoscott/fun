@@ -1,0 +1,526 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>Claude Model Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  :root {
+    --paper:      #F1F3F2;
+    --card:       #FBFCFB;
+    --ink:        #111B19;
+    --ink-soft:   #47554F;
+    --ink-faint:  #75837D;
+    --rule:       #C9D1CE;
+    --rule-soft:  #DFE5E2;
+    --accent:     #0B6156;
+    --accent-bg:  #E2EDE9;
+    --signal:     #A8492A;
+    --signal-bg:  #F6E7E0;
+
+    --step--1: 0.8125rem;
+    --step-0:  1rem;
+    --step-1:  1.1875rem;
+    --step-2:  1.5rem;
+    --step-3:  2.125rem;
+    --step-4:  3.25rem;
+
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0C1413;
+      --card:       #131D1B;
+      --ink:        #E6ECE9;
+      --ink-soft:   #A3B1AC;
+      --ink-faint:  #76847F;
+      --rule:       #2A3836;
+      --rule-soft:  #1E2A28;
+      --accent:     #5FC6B1;
+      --accent-bg:  #13312D;
+      --signal:     #E38A65;
+      --signal-bg:  #33201A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #0C1413;
+    --card:       #131D1B;
+    --ink:        #E6ECE9;
+    --ink-soft:   #A3B1AC;
+    --ink-faint:  #76847F;
+    --rule:       #2A3836;
+    --rule-soft:  #1E2A28;
+    --accent:     #5FC6B1;
+    --accent-bg:  #13312D;
+    --signal:     #E38A65;
+    --signal-bg:  #33201A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: var(--step-0);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 68rem;
+    margin: 0 auto;
+    padding: clamp(1.75rem, 4vw, 4rem) clamp(1.25rem, 4vw, 3rem) 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead { display: flex; flex-direction: column; gap: 1.25rem; }
+
+  .stamp {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    align-items: baseline;
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  .stamp b { color: var(--accent); font-weight: 600; }
+
+  h1 {
+    font-family: var(--display);
+    font-size: var(--step-4);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    max-width: 34em;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  /* ---------- section chrome ---------- */
+
+  section { display: flex; flex-direction: column; gap: 1.25rem; }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.5rem;
+  }
+  .sec-head h2 {
+    font-family: var(--display);
+    font-size: var(--step-2);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .sec-head span {
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    color: var(--ink-faint);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* ---------- data table ---------- */
+
+  .rail { overflow-x: auto; border: 1px solid var(--rule); background: var(--card); }
+
+  table { border-collapse: collapse; width: 100%; min-width: 44rem; }
+
+  caption {
+    caption-side: bottom;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-size: var(--step--1);
+    color: var(--ink-faint);
+    border-top: 1px solid var(--rule-soft);
+  }
+
+  th, td {
+    text-align: left;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: baseline;
+  }
+
+  thead th {
+    font-family: var(--display);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.is-default { background: var(--accent-bg); }
+
+  .name { font-family: var(--display); font-weight: 600; white-space: nowrap; }
+  .id   { font-family: var(--mono); font-size: var(--step--1); color: var(--accent); }
+  .num  { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+  .tag {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 2px;
+    background: var(--accent);
+    color: var(--card);
+    font-family: var(--display);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    vertical-align: 0.1em;
+  }
+  .tag.quiet { background: transparent; color: var(--ink-faint); border: 1px solid var(--rule); }
+
+  /* ---------- rules grid ---------- */
+
+  .rules {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .rule-card {
+    background: var(--card);
+    padding: 1.25rem 1.25rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .rule-card h3 {
+    font-family: var(--display);
+    font-size: var(--step-0);
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .rule-card p { margin: 0; font-size: var(--step--1); color: var(--ink-soft); line-height: 1.55; }
+
+  .verdict {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    align-self: flex-start;
+    padding: 0.15rem 0.45rem;
+    border-radius: 2px;
+  }
+  .verdict.bad  { background: var(--signal-bg); color: var(--signal); }
+  .verdict.ok   { background: var(--accent-bg); color: var(--accent); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--rule-soft);
+    padding: 0.05em 0.3em;
+    border-radius: 2px;
+  }
+
+  /* ---------- snippet ---------- */
+
+  pre {
+    margin: 0;
+    padding: 1.25rem;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    line-height: 1.7;
+    color: var(--ink);
+  }
+  pre .c { color: var(--ink-faint); }
+  pre .k { color: var(--accent); }
+  pre .s { color: var(--signal); }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    border-top: 2px solid var(--ink);
+    padding-top: 1rem;
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    color: var(--ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+  }
+
+  a { color: var(--accent); text-underline-offset: 0.2em; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+
+<div class="sheet">
+
+  <header class="masthead">
+    <div class="stamp">
+      <span>Spec sheet</span>
+      <span>Claude API &middot; <b>Messages</b></span>
+      <span>Figures as of 2026&#8209;06&#8209;24</span>
+    </div>
+    <h1>Claude Model Sheet</h1>
+    <p class="standfirst">The current lineup, what each one costs, and the request parameters that now return a <code>400</code> instead of the behaviour you remember.</p>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <h2>The lineup</h2>
+      <span>USD per million tokens</span>
+    </div>
+    <div class="rail">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Model</th>
+            <th scope="col">Model ID</th>
+            <th scope="col" class="num">Context</th>
+            <th scope="col" class="num">Input</th>
+            <th scope="col" class="num">Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row" class="name">Claude Fable 5</th>
+            <td class="id">claude-fable-5</td>
+            <td class="num">1M</td>
+            <td class="num">$10.00</td>
+            <td class="num">$50.00</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Claude Mythos 5<span class="tag quiet">Glasswing</span></th>
+            <td class="id">claude-mythos-5</td>
+            <td class="num">1M</td>
+            <td class="num">$10.00</td>
+            <td class="num">$50.00</td>
+          </tr>
+          <tr class="is-default">
+            <th scope="row" class="name">Claude Opus 5<span class="tag">Default</span></th>
+            <td class="id">claude-opus-5</td>
+            <td class="num">1M</td>
+            <td class="num">$5.00</td>
+            <td class="num">$25.00</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Claude Opus 4.8</th>
+            <td class="id">claude-opus-4-8</td>
+            <td class="num">1M</td>
+            <td class="num">$5.00</td>
+            <td class="num">$25.00</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Claude Opus 4.7</th>
+            <td class="id">claude-opus-4-7</td>
+            <td class="num">1M</td>
+            <td class="num">$5.00</td>
+            <td class="num">$25.00</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Claude Opus 4.6</th>
+            <td class="id">claude-opus-4-6</td>
+            <td class="num">1M</td>
+            <td class="num">$5.00</td>
+            <td class="num">$25.00</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Claude Sonnet 5</th>
+            <td class="id">claude-sonnet-5</td>
+            <td class="num">1M</td>
+            <td class="num">$2.00</td>
+            <td class="num">$10.00</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Claude Sonnet 4.6</th>
+            <td class="id">claude-sonnet-4-6</td>
+            <td class="num">1M</td>
+            <td class="num">$3.00</td>
+            <td class="num">$15.00</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Claude Haiku 4.5</th>
+            <td class="id">claude-haiku-4-5</td>
+            <td class="num">200K</td>
+            <td class="num">$1.00</td>
+            <td class="num">$5.00</td>
+          </tr>
+        </tbody>
+        <caption>Model IDs are complete as written &mdash; never append a date suffix. Prices are first-party Anthropic API rates and also apply on Microsoft Foundry; Bedrock and Vertex AI are partner-operated and priced separately.</caption>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Thinking &amp; effort</h2>
+      <span>per model family</span>
+    </div>
+    <div class="rail">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Family</th>
+            <th scope="col">Thinking config</th>
+            <th scope="col">If you omit it</th>
+            <th scope="col">Effort levels</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row" class="name">Fable 5</th>
+            <td>Always on. Omit, or <code>adaptive</code>.</td>
+            <td>Runs adaptive</td>
+            <td class="id">low &rarr; max</td>
+          </tr>
+          <tr class="is-default">
+            <th scope="row" class="name">Opus 5</th>
+            <td><code>adaptive</code>; <code>disabled</code> only at effort <code>high</code> or below</td>
+            <td>Runs adaptive</td>
+            <td class="id">low &rarr; max</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Opus 4.8 / 4.7</th>
+            <td><code>adaptive</code> is the only on-mode</td>
+            <td>Runs <em>without</em> thinking</td>
+            <td class="id">low &rarr; max</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Sonnet 5</th>
+            <td><code>adaptive</code> is the only on-mode</td>
+            <td>Runs adaptive</td>
+            <td class="id">low &rarr; max</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Opus 4.6 / Sonnet 4.6</th>
+            <td><code>adaptive</code> &mdash; auto-enables interleaved thinking</td>
+            <td>No thinking</td>
+            <td class="id">low, medium, high, max</td>
+          </tr>
+          <tr>
+            <th scope="row" class="name">Haiku 4.5 &amp; older</th>
+            <td><code>enabled</code> + <code>budget_tokens</code></td>
+            <td>No thinking</td>
+            <td class="id">&mdash;</td>
+          </tr>
+        </tbody>
+        <caption><code>effort</code> lives inside <code>output_config</code>, not at the top level; the default is <code>high</code>. <code>xhigh</code> sits between <code>high</code> and <code>max</code> and is the sweet spot for coding and agentic work on Fable 5, Opus 4.7/4.8 and Sonnet 5.</caption>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>What changed under you</h2>
+      <span>stale prior &rarr; current API</span>
+    </div>
+    <div class="rules">
+
+      <article class="rule-card">
+        <span class="verdict bad">400</span>
+        <h3>budget_tokens</h3>
+        <p>Removed on Fable 5, Opus 5, Opus 4.8 and 4.7, and Sonnet 5. Still functional on Opus 4.6 and Sonnet 4.6 as a transitional escape hatch only. Reach for <code>effort</code> instead.</p>
+      </article>
+
+      <article class="rule-card">
+        <span class="verdict bad">400</span>
+        <h3>Assistant prefill</h3>
+        <p>Prefilling the last assistant turn errors on every 4.6-and-later model. Shape the output with <code>output_config.format</code> or a system instruction.</p>
+      </article>
+
+      <article class="rule-card">
+        <span class="verdict bad">400</span>
+        <h3>temperature, top_p, top_k</h3>
+        <p>Sampling parameters are gone from Fable 5, Opus 5/4.7/4.8 and Sonnet 5. Opus 4.6 and Sonnet 4.6 still accept them.</p>
+      </article>
+
+      <article class="rule-card">
+        <span class="verdict ok">Silent</span>
+        <h3>Thinking display</h3>
+        <p>Defaults to <code>omitted</code> on Fable 5, Mythos 5, Opus 5/4.8/4.7 and Sonnet 5 &mdash; a change from 4.6, where it was summarised. If you stream reasoning to users it now looks like a long pause; set <code>display: "summarized"</code>.</p>
+      </article>
+
+      <article class="rule-card">
+        <span class="verdict ok">200</span>
+        <h3>stop_reason: refusal</h3>
+        <p>A declined request arrives as a normal 200 with a category in <code>stop_details</code>. Check <code>stop_reason</code> before reading <code>content</code>, and turn on server-side <code>fallbacks</code>.</p>
+      </article>
+
+      <article class="rule-card">
+        <span class="verdict ok">New</span>
+        <h3>Server tool versions</h3>
+        <p>Web search and fetch moved to the <code>_20260209</code> variants with dynamic filtering. They run code execution internally &mdash; don't also declare <code>code_execution</code> alongside them.</p>
+      </article>
+
+      <article class="rule-card">
+        <span class="verdict ok">Fast</span>
+        <h3>Fast mode</h3>
+        <p>Opus 5 and Opus 4.8 only, first-party API only. Needs all three: the beta endpoint, the <code>fast-mode-2026-02-01</code> flag, and top-level <code>speed: "fast"</code>. Billed at $10 / $50.</p>
+      </article>
+
+      <article class="rule-card">
+        <span class="verdict ok">Cache</span>
+        <h3>Mid-conversation system messages</h3>
+        <p>On Opus 5, Opus 4.8, Fable 5 and Mythos 5, append a <code>system</code>-role entry to <code>messages</code> rather than editing the top-level prompt &mdash; the cached prefix survives. Not on Sonnet 5.</p>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>The request to start from</h2>
+      <span>python &middot; anthropic</span>
+    </div>
+<pre><span class="c"># Streaming, because 128K max_tokens will outlast the HTTP timeout.</span>
+<span class="k">with</span> client.messages.stream(
+    model=<span class="s">"claude-opus-5"</span>,
+    max_tokens=<span class="s">64000</span>,
+    thinking={<span class="s">"type"</span>: <span class="s">"adaptive"</span>, <span class="s">"display"</span>: <span class="s">"summarized"</span>},
+    output_config={<span class="s">"effort"</span>: <span class="s">"xhigh"</span>},
+    messages=[{<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: prompt}],
+) <span class="k">as</span> stream:
+    message = stream.get_final_message()
+
+<span class="k">if</span> message.stop_reason == <span class="s">"refusal"</span>:
+    handle(message.stop_details.category)</pre>
+    <p style="margin:0;font-size:var(--step--1);color:var(--ink-soft);max-width:60ch;">No <code>temperature</code>, no <code>budget_tokens</code>, no prefill. A bare <code>Anthropic()</code> picks up an <code>ant auth login</code> profile, so an unset <code>ANTHROPIC_API_KEY</code> doesn't mean you have no credentials.</p>
+  </section>
+
+  <footer>
+    <span>Claude Model Sheet</span>
+    <span>Figures cached 2026-06-24</span>
+    <span>Verify live capabilities via the Models API</span>
+  </footer>
+
+</div>
+
+</body></html>
