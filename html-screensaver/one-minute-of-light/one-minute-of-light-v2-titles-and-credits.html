@@ -1396,7 +1396,7 @@
 
   let last = performance.now(), fpsN = 0, fpsLast = last, ema = 16, resTimer = 0;
   function frame(now) {
-    const rawDt = Math.min(0.1, (now - last) / 1000);
+    const rawDt = Math.max(0, Math.min(0.1, (now - last) / 1000));
     last = now;
     let dt = 0;
     if (actx && actx.state === "running") {

@@ -4,6 +4,10 @@ All notable changes to **One Minute of Light** are documented here. Format follo
 
 ## 2026-10-23
 
+### Fixed
+
+- All four editions: the animation could die on the first frame. A browser frame timestamp earlier than the start time gave a negative time step, so the chapter index became -1 and rendering threw. The time step is now clamped at zero.
+
 ### Added
 
 - `thirty-seconds-of-light.html`: the thirty-second study that came first: 262,144 particles morphing through five forms in one vertex shader.

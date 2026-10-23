@@ -570,7 +570,7 @@
   // ---------- loop ----------
   let paused = false, clockT = 0, last = performance.now(), fpsAcc = 0, fpsN = 0, fpsLast = last;
   function frame(now) {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
     last = now;
     if (!paused) clockT = (clockT + dt) % LOOP;
     render(clockT);
