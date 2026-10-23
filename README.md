@@ -22,7 +22,24 @@ node scripts/build-pages.mjs
 python3 -m http.server 8000 --directory _site
 ```
 
-Open `http://localhost:8000`. Edit `site/index.html` to change the gallery design,
+Open `http://localhost:8000`.
+
+### Thumbnails
+
+Gallery cards show screenshots from `site/thumbs/`. They are captured locally, not in
+CI, and committed. Capturing needs Google Chrome; set `CHROME_PATH` if it lives elsewhere.
+
+```sh
+npm install
+npm run thumbnails                                    # every screensaver and experiment
+npm run thumbnails -- --only aquarium                 # just paths containing "aquarium"
+npm run thumbnails -- --only spirograph --wait 30     # try a different capture time
+```
+
+Each artefact is captured 10 seconds after loading, or at the time listed for it in
+`scripts/capture-thumbnails.mjs`. Cards without a screenshot keep their generated artwork.
+
+ Edit `site/index.html` to change the gallery design,
 or `scripts/build-pages.mjs` to change project names and descriptions. Generated
 `_site/` files are ignored by Git.
 

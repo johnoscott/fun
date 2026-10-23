@@ -2,3 +2,4 @@
 .DS_Store
 **/.deck/ai/
 _site/
+node_modules/

@@ -79,6 +79,9 @@ for (const category of Object.keys(categories)) {
   const extra = base.startsWith(slug) ? base.slice(slug.length).replace(/^-/, '') : base;
   const label = version ? `v${version}${suffix ? ' · ' + suffix.replace(/-/g, ' ') : ''}` : extra.replace(/-/g, ' ') || 'original';
   const item = { path, title, label, version: version ? Number(version) : null, playable };
+  // Screenshot from scripts/capture-thumbnails.mjs, if one has been captured and committed.
+  const thumb = 'thumbs/' + path.replace(/\.html$/, '.jpg');
+  if (await access(join(root, 'site', thumb)).then(() => true, () => false)) item.thumb = thumb;
   if (!map.has(slug)) map.set(slug, { slug, category: categories[category], name: names[slug] || titleCase(slug), description: descriptions[slug] || 'A small experiment from the workshop.', files: [] });
   map.get(slug).files.push(item);
  }
@@ -96,9 +99,10 @@ groups.sort((a,b) => (a.slug === 'aquarium' ? -1 : b.slug === 'aquarium' ? 1 : o
 const template = await readFile(join(root, 'site/index.html'), 'utf8');
 const json = JSON.stringify(groups).replace(/</g, '\\u003c');
 await writeFile(join(out, 'index.html'), template.replace('/* ARTEFACT_DATA */[]', json).replace('/* CATEGORY_DATA */[]', JSON.stringify(order)).replaceAll('__FEATURED_ARTEFACT__', groups.find(g => g.slug === 'aquarium').primary.path.split('/').map(encodeURIComponent).join('/')));
+await cp(join(root, 'site/thumbs'), join(out, 'thumbs'), { recursive: true }).catch(e => { if (e.code !== 'ENOENT') throw e; });
 await writeFile(join(out, '.nojekyll'), '');
 await writeFile(join(out, 'catalogue.json'), JSON.stringify(groups, null, 2));
 // Verify every generated launch/download target exists in the published tree.
-for (const group of groups) for (const file of group.files) await access(join(out, file.path));
+for (const group of groups) for (const file of group.files) { await access(join(out, file.path)); if (file.thumb) await access(join(out, file.thumb)); }
 if (!groups.length || !template.includes('/* ARTEFACT_DATA */[]') || !template.includes('/* CATEGORY_DATA */[]')) throw new Error('Gallery generation failed');
 console.log(`Built ${groups.length} projects, ${groups.reduce((n,g)=>n+g.files.length,0)} HTML artefacts → _site`);

@@ -1,0 +1,12 @@
+{
+  "name": "fun-artefacts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-pages.mjs",
+    "thumbnails": "node scripts/capture-thumbnails.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "23.11.1"
+  }
+}
