@@ -18,31 +18,48 @@ assets link to their source instead of offering a broken launch button.
 To preview locally with Node.js 22 or later:
 
 ```sh
-node scripts/build-pages.mjs
+npm run build                     # same as node scripts/build-pages.mjs
 python3 -m http.server 8000 --directory _site
 ```
 
-Open `http://localhost:8000`.
+Open `http://localhost:8000`. Rebuild after every change; the server shows `_site/`, not the
+source folders. Edit `site/index.html` to change the gallery design, or `scripts/build-pages.mjs`
+to change project names and descriptions. Generated `_site/` files are ignored by Git.
 
 ### Thumbnails
 
-Gallery cards show screenshots from `site/thumbs/`. They are captured locally, not in
-CI, and committed. Capturing needs Google Chrome; set `CHROME_PATH` if it lives elsewhere.
+Gallery cards show screenshots from `site/thumbs/`, which mirrors the artefact paths
+(`html-screensaver/aquarium/aquarium-v2.html` → `site/thumbs/html-screensaver/aquarium/aquarium-v2.jpg`).
+The build attaches a screenshot to every artefact that has one and copies them into `_site/thumbs/`.
+Cards without a screenshot keep their generated artwork.
+
+Screenshots are captured **locally, not in CI**, and committed. CI only copies them.
+Capturing needs Google Chrome; set `CHROME_PATH` if it lives elsewhere.
 
 ```sh
 npm install
 npm run thumbnails                                    # every screensaver and experiment
 npm run thumbnails -- --only aquarium                 # just paths containing "aquarium"
 npm run thumbnails -- --only spirograph --wait 30     # try a different capture time
+npm run thumbnails -- --out /tmp/shots                # write somewhere else to compare
 ```
 
-Each artefact is captured 10 seconds after loading, or at the time listed for it in
-`scripts/capture-thumbnails.mjs`. Cards without a screenshot keep their generated artwork.
+How capturing works (`scripts/capture-thumbnails.mjs`):
 
- Edit `site/index.html` to change the gallery design,
-or `scripts/build-pages.mjs` to change project names and descriptions. Generated
-`_site/` files are ignored by Git.
+- It covers `html-screensaver/` and `experiments/`, using the same playability rules as the build.
+  Design and write-up cards keep their generated artwork.
+- It serves the repository on a temporary local port and opens each page in headless Chrome with the
+  real GPU (Metal) so WebGL renders.
+- Pages are laid out at 1280×720 and saved as 800×450 JPEGs at quality 80.
+- Each page is captured 10 seconds after it loads. Slow starters have longer times in the `waits` map.
+  Pages with nothing worth showing are listed in `skip`.
+- Captures run one at a time. `--jobs` can raise this, but heavy WebGL pages running together starve
+  each other and capture black frames.
+- Each line of output starts with `✓` for a clean capture, `!` when the page threw errors (printed
+  after it), or `✗` when the capture failed.
 
+After adding or changing an artefact, capture it with `--only`, check the image, then commit the JPEG
+with the artefact.
 
 ## `html-screensaver/`
 
