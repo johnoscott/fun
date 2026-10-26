@@ -19,17 +19,23 @@ This is a public repo of self-contained single-file HTML artefacts in `html-scre
 - Versions of a project become an edition picker on one card. Display names and descriptions live in
   maps at the top of the build script.
 - Preview with `python3 -m http.server 8000 --directory _site`.
+- **Featured** = the main edition has a screenshot and the slug isn't in `notFeatured`. The carousel shows
+  the 8 most recently added featured projects, dated from Git (`git log --diff-filter=A`). CI needs
+  `fetch-depth: 0` for this, so don't remove it from the workflow.
 
 ## Thumbnails
 
-- Card screenshots live in `site/thumbs/<artefact path>.jpg`. They are captured **locally, never in
-  CI**, and committed. CI only copies them.
+- Card screenshots live in `site/thumbs/<artefact path>.jpg` and carousel images in
+  `site/heroes/<artefact path>.jpg`, at 1600×900 and for featured main editions only. Both are captured
+  **locally, never in CI**, and committed. CI only copies them.
 - `npm install && npm run thumbnails [-- --only <path substring>] [--wait <s>] [--out <dir>]` runs
   `scripts/capture-thumbnails.mjs`. It uses puppeteer-core with the system Google Chrome
   (`CHROME_PATH` to override) in headless mode with the GPU enabled.
 - Pages are laid out at 1280×720, captured 10s after load and saved as 800×450 JPEGs (quality 80).
   Per-artefact capture times go in `waits`, and exclusions in `skip`.
 - Keep `--jobs 1`. Running WebGL pages in parallel produces black frames.
+- A featured capture takes a single PNG and shrinks it in a blank page to make both JPEGs. A second,
+  scaled screenshot would resize the page and can wipe canvases that draw a little at a time.
 - Always look at the captured images before committing. A capture that ends with `!` threw page
   errors and may be blank.
 - After adding or changing a screensaver or experiment, capture it with `--only` and commit the JPEG

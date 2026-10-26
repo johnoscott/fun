@@ -33,12 +33,25 @@ Gallery cards show screenshots from `site/thumbs/`, which mirrors the artefact p
 The build attaches a screenshot to every artefact that has one and copies them into `_site/thumbs/`.
 Cards without a screenshot keep their generated artwork.
 
+### Featured projects and the carousel
+
+A project is **featured** when its main edition has a screenshot, unless its slug is in `notFeatured` in
+`scripts/build-pages.mjs` (screenshots that don't fill the frame). Featured projects carry a *Featured* tag
+in the grid. The carousel at the top of the page shows the eight most recently added featured projects,
+each with its title, description and a *New* tag for its first three weeks.
+
+"Added" dates come from Git: the first commit that added each HTML file, with a project dated by its newest
+edition. The Pages workflow checks out the full history so the dates are right.
+
+Carousel slides use 1600×900 images from `site/heroes/`, which are captured alongside thumbnails for featured
+projects. Slides fall back to the thumbnail when there isn't one.
+
 Screenshots are captured **locally, not in CI**, and committed. CI only copies them.
 Capturing needs Google Chrome; set `CHROME_PATH` if it lives elsewhere.
 
 ```sh
 npm install
-npm run thumbnails                                    # every screensaver and experiment
+npm run thumbnails                                    # build, then every screensaver and experiment
 npm run thumbnails -- --only aquarium                 # just paths containing "aquarium"
 npm run thumbnails -- --only spirograph --wait 30     # try a different capture time
 npm run thumbnails -- --out /tmp/shots                # write somewhere else to compare
@@ -53,12 +66,15 @@ How capturing works (`scripts/capture-thumbnails.mjs`):
 - Pages are laid out at 1280×720 and saved as 800×450 JPEGs at quality 80.
 - Each page is captured 10 seconds after it loads. Slow starters have longer times in the `waits` map.
   Pages with nothing worth showing are listed in `skip`.
+- Featured projects (read from the last build's `_site/catalogue.json`) are rendered at 1600×900. One
+  screenshot gives both the carousel image in `site/heroes/` and the thumbnail. `npm run thumbnails`
+  builds first, so a project that has just gained its screenshot needs a second run to get its carousel image.
 - Captures run one at a time. `--jobs` can raise this, but heavy WebGL pages running together starve
   each other and capture black frames.
 - Each line of output starts with `✓` for a clean capture, `!` when the page threw errors (printed
   after it), or `✗` when the capture failed.
 
-After adding or changing an artefact, capture it with `--only`, check the image, then commit the JPEG
+After adding or changing an artefact, capture it with `--only`, check the images, then commit the JPEGs
 with the artefact.
 
 ## `html-screensaver/`
