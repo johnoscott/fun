@@ -83,6 +83,7 @@ with the artefact.
 |---|---|
 | aquarium | [aquarium-v1.html](html-screensaver/aquarium/aquarium-v1.html), [aquarium-v2.html](html-screensaver/aquarium/aquarium-v2.html) ([changelog](html-screensaver/aquarium/CHANGELOG.md)) |
 | cmatrix | [cmatrix.html](html-screensaver/cmatrix/cmatrix.html) ([changelog](html-screensaver/cmatrix/CHANGELOG.md)) |
+| crt-weather-pong | [crt-weather-pong.html](html-screensaver/crt-weather-pong/crt-weather-pong.html) ([changelog](html-screensaver/crt-weather-pong/CHANGELOG.md)) |
 | dna-screensaver | [dna-screensaver-v1.html](html-screensaver/dna-screensaver/dna-screensaver-v1.html), [dna-screensaver-v2.html](html-screensaver/dna-screensaver/dna-screensaver-v2.html) ([changelog](html-screensaver/dna-screensaver/CHANGELOG.md)) |
 | evolution-screensaver | [evolution-screensaver-zoom-track.html](html-screensaver/evolution-screensaver/evolution-screensaver-zoom-track.html), [evolution-screensaver.html](html-screensaver/evolution-screensaver/evolution-screensaver.html) ([changelog](html-screensaver/evolution-screensaver/CHANGELOG.md)) |
 | fuji-screensaver | [fuji-screensaver.html](html-screensaver/fuji-screensaver/fuji-screensaver.html) ([changelog](html-screensaver/fuji-screensaver/CHANGELOG.md)) |

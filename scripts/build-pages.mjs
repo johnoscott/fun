@@ -7,6 +7,7 @@ const out = join(root, '_site');
 const ignored = new Set(['.git', '.DS_Store', '.idea', 'node_modules', 'ai', '__pycache__']);
 const categories = { 'html-screensaver': 'Screensavers', design: 'Design', 'write-ups': 'Write-ups', experiments: 'Experiments' };
 const descriptions = {
+ 'crt-weather-pong': 'Pong on a black-and-white CRT, played through a full day of weather. The score is the clock.',
  'khamsin-attract-mode': 'A 198X desert-assault arcade cabinet left running in attract mode, with its own day, weather and high scores.',
  'phosphor-pasture': 'A green-phosphor countryside that passes the hours on an old monitor.',
  'one-minute-of-light': 'A real-time film in chapters: GPU particles, raymarched matter and fluid flow, scored live by a WebAudio synth.',
@@ -50,7 +51,7 @@ try {
  for (const line of log.split('\n')) if (line.startsWith('@')) date = line.slice(1); else if (line) added.set(line, date);
 } catch (e) { console.warn(`No Git history, so the carousel won't be ordered by date: ${e.message}`); }
 const now = new Date().toISOString();
-const names = { 'chat-surface-streamline': 'Chat Surface Streamline', 'one-minute-of-light': 'One Minute of Light', 'accounts-redesign': 'Accounts Redesign', 'fuji-screensaver': 'Mt. Fuji 24 Hours', 'lemonade-stand-screensaver': 'Lemonade Stand', aquarium: 'Aquarium', cmatrix: 'cmatrix', 'paper-savanna': 'Paper Savanna', 'paper-savanna-rainbow': 'Paper Savanna Rainbow', 'paper-savanna-pov': 'Paper Savanna POV', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
+const names = { 'crt-weather-pong': 'CRT Weather Pong', 'chat-surface-streamline': 'Chat Surface Streamline', 'one-minute-of-light': 'One Minute of Light', 'accounts-redesign': 'Accounts Redesign', 'fuji-screensaver': 'Mt. Fuji 24 Hours', 'lemonade-stand-screensaver': 'Lemonade Stand', aquarium: 'Aquarium', cmatrix: 'cmatrix', 'paper-savanna': 'Paper Savanna', 'paper-savanna-rainbow': 'Paper Savanna Rainbow', 'paper-savanna-pov': 'Paper Savanna POV', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
 const titleCase = s => s.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 async function walk(dir) {
  let files = [];
