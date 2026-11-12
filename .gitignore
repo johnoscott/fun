@@ -3,3 +3,6 @@
 **/.deck/ai/
 _site/
 node_modules/
+# Remotion samples: sandbox relay state and rendered videos stay local.
+remotion/.agent-relay/
+remotion/*/out/

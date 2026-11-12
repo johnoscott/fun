@@ -1,0 +1,16 @@
+{
+  "name": "video-1-agent-pop",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "render": "remotion render src/index.ts AgentPop out/video.mp4 --browser-executable=/usr/bin/chromium"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.543",
+    "@types/react": "^18.3.31",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.543",
+    "typescript": "^7.0.2"
+  }
+}

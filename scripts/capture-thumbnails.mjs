@@ -24,9 +24,11 @@ try { heroes = new Set(JSON.parse(await readFile(join(root, '_site/catalogue.jso
 catch { console.warn('No _site/catalogue.json, so no carousel images. Run npm run build first.'); }
 const chrome = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 // Seconds to wait before capturing. Most artefacts look substantial by 10s; these need longer.
-const waits = { 'blazing-peak/artifacts/calendar': 15, 'spirograph-v2': 30, 'warp-wave/cyber-rain.html': 20, 'one-minute-of-light-v2': 35, 'one-minute-of-light-v3': 20 };
-// Artefacts with nothing worth showing; the gallery keeps its generated artwork for these.
-const skip = ['experiments/antigravity-smoke1/empty.html'];
+// The Remotion animations loop every 10s, so they are caught mid-animation instead.
+const waits = { 'remotion/agent-pop': 3, 'remotion/bar-chart': 6, 'remotion/countdown': 4.3, 'blazing-peak/artifacts/calendar': 15, 'spirograph-v2': 30, 'warp-wave/cyber-rain.html': 20, 'one-minute-of-light-v2': 35, 'one-minute-of-light-v3': 20 };
+// The gallery keeps its generated artwork for these: one has nothing worth showing, and Space News
+// shows live news photos that aren't ours to republish.
+const skip = ['experiments/antigravity-smoke1/empty.html', 'html-screensaver/space-news-billboards/space-news-billboards.html'];
 const DEFAULT_WAIT = 10;
 
 // Same discovery and playability rules as build-pages.mjs: no server templates, no missing local assets.
@@ -44,7 +46,7 @@ async function walk(dir) {
 async function playable(file) {
  const html = await readFile(file, 'utf8');
  if (/\{\{|\{%|(?:src|href)=["']\/(?:src|static)\//i.test(html)) return false;
- for (const [, url] of html.matchAll(/(?:src|href)=["']([^"'#]+)["']/gi)) {
+ for (const [, url] of html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script>/gi, '$1</script>').matchAll(/(?:src|href)=["']([^"'#]+)["']/gi)) {
   if (/^(?:https?:|data:|mailto:|javascript:|\/\/)/i.test(url)) continue;
   if (url.startsWith('/')) return false;
   try { await stat(resolve(dirname(file), decodeURIComponent(url.split(/[?#]/)[0]))); } catch { return false; }
@@ -52,7 +54,7 @@ async function playable(file) {
  return true;
 }
 let targets = [];
-for (const category of ['html-screensaver', 'experiments'])
+for (const category of ['html-screensaver', 'remotion', 'experiments'])
  for (const file of await walk(join(root, category))) {
   const path = relative(root, file).split('\\').join('/');
   if (!skip.includes(path) && (!args.only || path.includes(args.only)) && await playable(file)) targets.push(path);

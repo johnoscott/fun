@@ -4,8 +4,8 @@ Guidance for Claude Code in this repository. Read `README.md` for the full layou
 
 ## What this is
 
-This is a public repo of self-contained single-file HTML artefacts in `html-screensaver/`, `design/`,
-`write-ups/` and `experiments/`. Each one is published to a GitHub Pages gallery.
+This is a public repo of self-contained single-file HTML artefacts in `html-screensaver/`, `remotion/`,
+`design/`, `write-ups/` and `experiments/`. Each one is published to a GitHub Pages gallery.
 
 - **Pushing to `main` publishes.** The Pages workflow (`.github/workflows/pages.yml`) builds and
   deploys on every push. Confirm before pushing, and never commit client or internal work material.
@@ -22,6 +22,19 @@ This is a public repo of self-contained single-file HTML artefacts in `html-scre
 - **Featured** = the main edition has a screenshot and the slug isn't in `notFeatured`. The carousel shows
   the 8 most recently added featured projects, dated from Git (`git log --diff-filter=A`). CI needs
   `fetch-depth: 0` for this, so don't remove it from the workflow.
+
+## Remotion animations
+
+- `remotion/<slug>/` holds a Remotion project and its built page `<slug>.html` (the "Animations" shelf).
+  `npm run animations` (`scripts/build-remotion.mjs`, esbuild) bundles each composition with
+  `@remotion/player` into that one file. Run it locally and commit the HTML.
+- When adding a sample, add it to `samples` in the script, with settings matching its `src/Root.tsx`,
+  and give it a name and description in `build-pages.mjs`. Its own `node_modules` aren't used: the
+  React, Remotion and Player versions are aliased to the root `package.json`, so they're the same everywhere.
+- `remotion/.agent-relay/` is sandbox relay state and `remotion/*/out/` holds rendered videos. Both are
+  gitignored and must never be published.
+- Gallery playability checks ignore text inside `<script>` tags, because bundled runtimes contain
+  `src="…"` strings that aren't real links.
 
 ## Thumbnails
 

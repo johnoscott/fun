@@ -10,7 +10,7 @@ The gallery is published automatically on every push to `main` by
 [Publish artefact gallery](.github/workflows/pages.yml). It can also be run manually
 from the Actions tab. The repository's Pages publishing source is **GitHub Actions**.
 
-The build discovers HTML artefacts in `html-screensaver/`, `design/`, `write-ups/` and `experiments/`, groups
+The build discovers HTML artefacts in `html-screensaver/`, `remotion/`, `design/`, `write-ups/` and `experiments/`, groups
 versions into project cards with an edition picker, and copies the artefacts and their supporting files.
 New HTML files appear automatically. Experiments with server templates or missing
 assets link to their source instead of offering a broken launch button.
@@ -59,7 +59,7 @@ npm run thumbnails -- --out /tmp/shots                # write somewhere else to 
 
 How capturing works (`scripts/capture-thumbnails.mjs`):
 
-- It covers `html-screensaver/` and `experiments/`, using the same playability rules as the build.
+- It covers `html-screensaver/`, `remotion/` and `experiments/`, using the same playability rules as the build.
   Design and write-up cards keep their generated artwork.
 - It serves the repository on a temporary local port and opens each page in headless Chrome with the
   real GPU (Metal) so WebGL renders.
@@ -105,6 +105,27 @@ with the artefact.
 | sputnik-ground-track | [sputnik-ground-track.html](html-screensaver/sputnik-ground-track/sputnik-ground-track.html) ([changelog](html-screensaver/sputnik-ground-track/CHANGELOG.md)) |
 | swiss-station-clock | [swiss-station-clock.html](html-screensaver/swiss-station-clock/swiss-station-clock.html) ([changelog](html-screensaver/swiss-station-clock/CHANGELOG.md)) |
 | vector-combat-screensaver | [vector-combat-screensaver.html](html-screensaver/vector-combat-screensaver/vector-combat-screensaver.html) ([changelog](html-screensaver/vector-combat-screensaver/CHANGELOG.md)) |
+
+## `remotion/`
+
+Short animations written in React with [Remotion](https://www.remotion.dev/). Each folder holds the Remotion
+project (`src/`, `package.json`) and a self-contained page that plays the composition live with
+`@remotion/player`. The pages are bundled locally and committed:
+
+```sh
+npm install
+npm run animations      # rebuilds remotion/<slug>/<slug>.html from each project's src/
+```
+
+`scripts/build-remotion.mjs` lists each sample's composition settings, which must match its `src/Root.tsx`.
+Each page bundles the React, Remotion and Player versions pinned in the root `package.json`. To render a
+sample as an MP4 instead, run `npm install` and `npm run render` inside its folder.
+
+| Project | Files |
+|---|---|
+| agent-pop | [agent-pop.html](remotion/agent-pop/agent-pop.html) ([changelog](remotion/agent-pop/CHANGELOG.md)) |
+| bar-chart | [bar-chart.html](remotion/bar-chart/bar-chart.html) ([changelog](remotion/bar-chart/CHANGELOG.md)) |
+| countdown | [countdown.html](remotion/countdown/countdown.html) ([changelog](remotion/countdown/CHANGELOG.md)) |
 
 ## `design/`
 

@@ -41,7 +41,7 @@ for(let i=0;i<16;i++)shapes+=`<circle cx="${(i*131)%580}" cy="${(i*67)%310}" r="
 }else{for(let i=0;i<14;i++){const x=(hash+i*97)%600,y=35+(i*79)%310,r=14+(i*13)%65;shapes+=`<${i%2?'circle':'rect'} ${i%2?`cx="${x}" cy="${y}" r="${r}"`:`x="${x}" y="${y}" width="${r}" height="${r}" rx="6" transform="rotate(${i*13} ${x} ${y})"`} fill="${i%3?fg:hi}" opacity="${.15+i%4*.15}"/>`;}}
 return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 380" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path fill="${bg}" d="M0 0h600v380H0z"/>${shapes}</svg>`;
 }
-const verbs={Screensavers:'Launch escape ↗',Experiments:'Launch escape ↗'};
+const verbs={Screensavers:'Launch escape ↗',Animations:'Play animation ↗',Experiments:'Launch escape ↗'};
 const shot=(f,slug)=>f.thumb?`<img src="${esc(href(f.thumb))}" alt="" loading="lazy" decoding="async">`:artwork(slug);
 // Carousel of the newest featured projects. Advances every 7s unless paused, hovered, focused or reduced motion is on.
 const NEW_DAYS=21,isNew=p=>Date.now()-Date.parse(p.added)<NEW_DAYS*864e5;

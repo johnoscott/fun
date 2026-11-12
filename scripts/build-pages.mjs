@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, '_site');
 const ignored = new Set(['.git', '.DS_Store', '.idea', 'node_modules', 'ai', '__pycache__']);
-const categories = { 'html-screensaver': 'Screensavers', design: 'Design', 'write-ups': 'Write-ups', experiments: 'Experiments' };
+const categories = { 'html-screensaver': 'Screensavers', remotion: 'Animations', design: 'Design', 'write-ups': 'Write-ups', experiments: 'Experiments' };
 const descriptions = {
  'crt-weather-pong': 'Pong on a black-and-white CRT, played through a full day of weather. The score is the clock.',
  'khamsin-attract-mode': 'A 198X desert-assault arcade cabinet left running in attract mode, with its own day, weather and high scores.',
@@ -35,7 +35,10 @@ const descriptions = {
  'sputnik-ground-track': 'Follow an orbit around the blue planet.',
  'swiss-station-clock': 'A beautifully precise moment of stillness.',
  'vector-combat-screensaver': 'Neon vectors and an old-school arcade atmosphere.',
- 'warp-wave': 'Digital rain falling down the screen, in a choice of styles.'
+ 'warp-wave': 'Digital rain falling down the screen, in a choice of styles.',
+ 'agent-pop': 'A title card that springs in letter by letter over pulsing rings. Made with Remotion.',
+ 'bar-chart': 'Five bars grow into place with springy easing and counting labels. Made with Remotion.',
+ 'countdown': 'Five to one, each number arriving a different way, then a burst of Go! Made with Remotion.'
 };
 // Projects with a screenshot are featured: tagged in the grid and eligible for the carousel. These
 // screenshots don't fill the frame (a faint drawing, or a widget on a plain background), so they aren't.
@@ -51,7 +54,7 @@ try {
  for (const line of log.split('\n')) if (line.startsWith('@')) date = line.slice(1); else if (line) added.set(line, date);
 } catch (e) { console.warn(`No Git history, so the carousel won't be ordered by date: ${e.message}`); }
 const now = new Date().toISOString();
-const names = { 'crt-weather-pong': 'CRT Weather Pong', 'chat-surface-streamline': 'Chat Surface Streamline', 'one-minute-of-light': 'One Minute of Light', 'accounts-redesign': 'Accounts Redesign', 'fuji-screensaver': 'Mt. Fuji 24 Hours', 'lemonade-stand-screensaver': 'Lemonade Stand', aquarium: 'Aquarium', cmatrix: 'cmatrix', 'paper-savanna': 'Paper Savanna', 'paper-savanna-rainbow': 'Paper Savanna Rainbow', 'paper-savanna-pov': 'Paper Savanna POV', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
+const names = { 'agent-pop': 'Agent Pop', 'bar-chart': 'Animated Bar Chart', countdown: 'Countdown', 'crt-weather-pong': 'CRT Weather Pong', 'chat-surface-streamline': 'Chat Surface Streamline', 'one-minute-of-light': 'One Minute of Light', 'accounts-redesign': 'Accounts Redesign', 'fuji-screensaver': 'Mt. Fuji 24 Hours', 'lemonade-stand-screensaver': 'Lemonade Stand', aquarium: 'Aquarium', cmatrix: 'cmatrix', 'paper-savanna': 'Paper Savanna', 'paper-savanna-rainbow': 'Paper Savanna Rainbow', 'paper-savanna-pov': 'Paper Savanna POV', 'origami-fps': 'Origami FPS', 'dna-screensaver': 'DNA', 'mandelbrot-screensaver': 'Mandelbrot', 'evolution-screensaver': 'Evolution', 'lawnmower-screensaver': 'Lawnmower', 'retro-80s-video-games-screensaver': 'Retro arcade', 'vector-combat-screensaver': 'Vector combat' };
 const titleCase = s => s.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 async function walk(dir) {
  let files = [];
@@ -83,7 +86,8 @@ for (const category of Object.keys(categories)) {
   const title = rawTitle.replace(/\s+/g, ' ');
   let playable = !/\{\{|\{%|(?:src|href)=["']\/(?:src|static)\//i.test(html);
   // Don't offer launch links for checked-in frontend shells with missing bundles.
-  for (const match of html.matchAll(/(?:src|href)=["']([^"'#]+)["']/gi)) {
+  // Only check markup: bundled inline scripts contain src="…" strings that aren't links.
+  for (const match of html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script>/gi, '$1</script>').matchAll(/(?:src|href)=["']([^"'#]+)["']/gi)) {
    const url = match[1];
    if (/^(?:https?:|data:|mailto:|javascript:|\/\/)/i.test(url)) continue;
    if (url.startsWith('/')) { playable = false; continue; }

@@ -4,9 +4,15 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-pages.mjs",
+    "animations": "node scripts/build-remotion.mjs",
     "thumbnails": "node scripts/build-pages.mjs && node scripts/capture-thumbnails.mjs"
   },
   "devDependencies": {
-    "puppeteer-core": "23.11.1"
+    "@remotion/player": "4.0.543",
+    "esbuild": "0.28.1",
+    "puppeteer-core": "23.11.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.543"
   }
 }
